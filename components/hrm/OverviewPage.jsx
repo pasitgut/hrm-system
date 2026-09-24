@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
+import CostBreakdown from "@/components/hrm/payroll/CostBreakdown";
 import { cx } from "@/utils/cx";
 
 const requests = [
@@ -147,7 +148,19 @@ export default function OverviewPage() {
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">วันจันทร์ 21 กันยายน 2569</p><h1 className="mt-2 text-2xl font-semibold tracking-tight leading-tight text-foreground sm:text-3xl">สวัสดีตอนเช้า, นภัสสร</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">จัดการเวลาทำงาน วันลา และคำขอของทีมได้จากที่เดียว</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" leadingIcon={RiFileChartLine} onClick={() => router.push("/reports")}>ดูรายงาน</Button><Button leadingIcon={RiTimerLine} onClick={() => router.push("/ot")}>สร้างคำขอ OT</Button></div></section>
       {role === "manager" ? <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="hrm-soft-icon"><RiUserSharedLine className="size-5" aria-hidden /></div><div><strong className="block text-sm font-medium leading-5 text-foreground">มีคำขอรออนุมัติ 4 รายการ</strong><span className="text-xs leading-4 text-muted-foreground">ตรวจสอบคำขอลาของทีมคุณให้เสร็จภายในวันนี้</span></div></div><Button variant="ghost" trailingIcon={RiArrowRightLine} onClick={() => router.push("/approvals")}>ตรวจสอบรายการ</Button></div> : null}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric icon={RiCalendarCheckLine} label="วันลาคงเหลือ" value="12.5" unit="วัน" hint="จากสิทธิ์ทั้งหมด 18 วัน" color="bg-chart-1" progress={69} /><Metric icon={RiTimerLine} label="ชั่วโมง OT เดือนนี้" value="8.5" unit="ชม." hint="เป้าหมายไม่เกิน 20 ชั่วโมง" color="bg-chart-2" progress={43} /><Metric icon={RiTimeLine} label="เวลาทำงานเดือนนี้" value="152" unit="ชม." hint="เฉลี่ย 8.4 ชม. / วัน" color="bg-chart-3" progress={76} /><Metric icon={RiCalendarTodoLine} label="Shift ถัดไป" value="09:00" unit="น." hint="อังคาร 22 ก.ย. · ออฟฟิศ" color="bg-chart-4" progress={100} /></section>
-      <section><div className="mb-3 flex items-end justify-between"><div><p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ภาพรวมของคุณ</p><h2 className="mt-1 text-lg font-semibold tracking-tight leading-6 text-foreground">งานที่กำลังดำเนินการ</h2></div><span className="text-xs leading-4 text-muted-foreground">อัปเดตล่าสุดเมื่อสักครู่นี้</span></div><div className="grid gap-4 xl:grid-cols-[1.08fr_.92fr]"><Calendar /><ApprovalList /></div></section>
+      <section>
+        <div className="mb-3 flex items-end justify-between">
+          <div><p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ภาพรวมของคุณ</p><h2 className="mt-1 text-lg font-semibold tracking-tight leading-6 text-foreground">งานที่กำลังดำเนินการ</h2></div>
+          <span className="text-xs leading-4 text-muted-foreground">อัปเดตล่าสุดเมื่อสักครู่นี้</span>
+        </div>
+        <div className={cx("grid gap-4", role === "ceo" && "2xl:grid-cols-[minmax(0,1fr)_19rem]")}>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[1.08fr_.92fr]">
+            <Calendar />
+            <ApprovalList />
+          </div>
+          {role === "ceo" ? <CostBreakdown /> : null}
+        </div>
+      </section>
     </div>
   );
 }
