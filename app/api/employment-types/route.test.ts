@@ -5,8 +5,9 @@ import { POST } from "@/app/api/employment-types/route";
 import { DELETE, PATCH } from "@/app/api/employment-types/[id]/route";
 import { closeDb, db, resetDb } from "@/tests/setup/db";
 import { createUser } from "@/tests/setup/factories";
-import { employmentTypes } from "@/lib/db/schema";
+import { employees, employmentTypes } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
+import { createEmployee } from "@/tests/setup/factories";
 
 function sessionFor(user: { id: string; employeeId: string; email: string; role: SessionPayload["role"] }): SessionPayload {
   return { sub: user.id, employeeId: user.employeeId, email: user.email, role: user.role };
@@ -43,12 +44,17 @@ describe("employment-types settings CRUD", () => {
 
     const supervisorToken = await tokenFor("supervisor");
     const created = await POST(
-      apiRequest("http://localhost/api/employment-types", { method: "POST", token: supervisorToken, body: { code: "intern", name: "ฝึกงาน" } }),
+      apiRequest("http://localhost/api/employment-types", { method: "POST", token: supervisorToken, body: { code: " intern ", name: " ฝึกงาน " } }),
     );
     const payload = await created.json();
     expect(created.status).toBe(201);
     expect(payload.item.code).toBe("intern");
     expect(payload.item.name).toBe("ฝึกงาน");
+
+    const duplicateCode = await POST(
+      apiRequest("http://localhost/api/employment-types", { method: "POST", token: supervisorToken, body: { code: "intern", name: "ฝึกงานพิเศษ" } }),
+    );
+    expect(duplicateCode.status).toBe(409);
   });
 
   it("rejects a missing code with 400", async () => {
@@ -57,8 +63,9 @@ describe("employment-types settings CRUD", () => {
     expect(response.status).toBe(400);
   });
 
-  it("PATCH edits the name and DELETE soft-deactivates", async () => {
+  it("PATCH edits the name, then DELETE removes the type and clears employee references", async () => {
     const [type] = await db.insert(employmentTypes).values({ code: "part_time", name: "พาร์ทไทม์" }).returning();
+    const employee = await createEmployee({ employmentTypeId: type.id });
     const token = await tokenFor("ceo");
 
     const edited = await PATCH(
@@ -67,15 +74,17 @@ describe("employment-types settings CRUD", () => {
     );
     expect(edited.status).toBe(200);
 
-    const deactivated = await DELETE(
+    const deleted = await DELETE(
       apiRequest(`http://localhost/api/employment-types/${type.id}`, { method: "DELETE", token }),
       { params: Promise.resolve({ id: String(type.id) }) },
     );
-    const deactivatedPayload = await deactivated.json();
-    expect(deactivated.status).toBe(200);
-    expect(deactivatedPayload.item.isActive).toBe(false);
+    const deletedPayload = await deleted.json();
+    expect(deleted.status).toBe(200);
+    expect(deletedPayload.item.id).toBe(type.id);
 
     const [row] = await db.select().from(employmentTypes).where(eq(employmentTypes.id, type.id));
-    expect(row.isActive).toBe(false);
+    const [updatedEmployee] = await db.select().from(employees).where(eq(employees.id, employee.id));
+    expect(row).toBeUndefined();
+    expect(updatedEmployee.employmentTypeId).toBeNull();
   });
 });

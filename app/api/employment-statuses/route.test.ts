@@ -5,8 +5,9 @@ import { POST } from "@/app/api/employment-statuses/route";
 import { DELETE, PATCH } from "@/app/api/employment-statuses/[id]/route";
 import { closeDb, db, resetDb } from "@/tests/setup/db";
 import { createUser } from "@/tests/setup/factories";
-import { employmentStatuses } from "@/lib/db/schema";
+import { employees, employmentStatuses } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
+import { createEmployee } from "@/tests/setup/factories";
 
 function sessionFor(user: { id: string; employeeId: string; email: string; role: SessionPayload["role"] }): SessionPayload {
   return { sub: user.id, employeeId: user.employeeId, email: user.email, role: user.role };
@@ -46,8 +47,9 @@ describe("employment-statuses settings CRUD", () => {
     expect(payload.item.name).toBe("พักงาน");
   });
 
-  it("PATCH edits the name and DELETE soft-deactivates", async () => {
+  it("PATCH edits the name, then DELETE removes the status and clears employee references", async () => {
     const [status] = await db.insert(employmentStatuses).values({ name: "ทดลองงาน" }).returning();
+    const employee = await createEmployee({ employmentStatusId: status.id });
     const token = await tokenFor("ceo");
 
     const edited = await PATCH(
@@ -56,15 +58,17 @@ describe("employment-statuses settings CRUD", () => {
     );
     expect(edited.status).toBe(200);
 
-    const deactivated = await DELETE(
+    const deleted = await DELETE(
       apiRequest(`http://localhost/api/employment-statuses/${status.id}`, { method: "DELETE", token }),
       { params: Promise.resolve({ id: String(status.id) }) },
     );
-    const deactivatedPayload = await deactivated.json();
-    expect(deactivated.status).toBe(200);
-    expect(deactivatedPayload.item.isActive).toBe(false);
+    const deletedPayload = await deleted.json();
+    expect(deleted.status).toBe(200);
+    expect(deletedPayload.item.id).toBe(status.id);
 
     const [row] = await db.select().from(employmentStatuses).where(eq(employmentStatuses.id, status.id));
-    expect(row.isActive).toBe(false);
+    const [updatedEmployee] = await db.select().from(employees).where(eq(employees.id, employee.id));
+    expect(row).toBeUndefined();
+    expect(updatedEmployee.employmentStatusId).toBeNull();
   });
 });

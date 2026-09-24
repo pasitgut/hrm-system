@@ -4,8 +4,9 @@ import { eq } from "drizzle-orm";
 import { DELETE, PATCH } from "@/app/api/departments/[id]/route";
 import { closeDb, db, resetDb } from "@/tests/setup/db";
 import { createUser } from "@/tests/setup/factories";
-import { departments } from "@/lib/db/schema";
+import { departments, employees } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
+import { createEmployee } from "@/tests/setup/factories";
 
 function sessionFor(user: { id: string; employeeId: string; email: string; role: SessionPayload["role"] }): SessionPayload {
   return { sub: user.id, employeeId: user.employeeId, email: user.email, role: user.role };
@@ -94,8 +95,9 @@ describe("DELETE /api/departments/[id]", () => {
     expect(response.status).toBe(403);
   });
 
-  it("soft-deactivates (isActive: false) instead of removing the row", async () => {
+  it("deletes the department and clears employee department references", async () => {
     const department = await seedDepartment();
+    const employee = await createEmployee({ departmentId: department.id });
     const token = await tokenFor("supervisor");
     const response = await DELETE(
       apiRequest(`http://localhost/api/departments/${department.id}`, { method: "DELETE", token }),
@@ -103,10 +105,11 @@ describe("DELETE /api/departments/[id]", () => {
     );
     const payload = await response.json();
     expect(response.status).toBe(200);
-    expect(payload.item.isActive).toBe(false);
+    expect(payload.item.id).toBe(department.id);
 
     const [row] = await db.select().from(departments).where(eq(departments.id, department.id));
-    expect(row).toBeDefined();
-    expect(row.isActive).toBe(false);
+    const [updatedEmployee] = await db.select().from(employees).where(eq(employees.id, employee.id));
+    expect(row).toBeUndefined();
+    expect(updatedEmployee.departmentId).toBeNull();
   });
 });

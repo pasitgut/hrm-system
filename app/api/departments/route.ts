@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { departments } from "@/lib/db/schema";
 import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { readMasterDataBody, trimmedString, withUniqueConflict } from "@/lib/master-data/write-policy";
 
 // Read-only lookup endpoint: any authenticated role may list departments
 // (needed for dropdowns across the app). Write access (add/edit/delete)
@@ -17,42 +18,15 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 // --- Settings module: create (supervisor/ceo only). Edit/delete live in
 // ./[id]/route.ts. DELETE removes the lookup row and clears employee refs. ---
 
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  // drizzle-orm wraps the original postgres error in a DrizzleQueryError,
-  // exposing the real code via .cause, not directly on the caught error.
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === "23505") return true;
-  const cause = (error as { cause?: unknown } | null)?.cause;
-  return typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "23505";
-}
-
 export const POST = withApiAuth(async (request: NextRequest) => {
   await requireApiRole(request, "supervisor", "ceo");
+  const parsed = await readMasterDataBody(request);
+  if (!parsed.ok) return parsed.response;
+  const name = trimmedString(parsed.body.name, "name is required");
+  if (!name.ok) return name.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "Invalid JSON body");
-  }
-  if (typeof body !== "object" || body === null) {
-    return jsonError(400, "Invalid request body");
-  }
-
-  const { name } = body as Record<string, unknown>;
-  if (typeof name !== "string" || !name.trim()) {
-    return jsonError(400, "name is required");
-  }
-
-  try {
-    const [item] = await db.insert(departments).values({ name: name.trim(), isActive: true }).returning();
+  return withUniqueConflict(async () => {
+    const [item] = await db.insert(departments).values({ name: name.value, isActive: true }).returning();
     return NextResponse.json({ item }, { status: 201 });
-  } catch (error) {
-    if (isUniqueViolation(error)) return jsonError(409, "A department with this name already exists");
-    throw error;
-  }
+  }, "A department with this name already exists");
 });

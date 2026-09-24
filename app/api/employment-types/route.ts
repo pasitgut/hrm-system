@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employmentTypes } from "@/lib/db/schema";
 import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { readMasterDataBody, trimmedString, withUniqueConflict } from "@/lib/master-data/write-policy";
 
 // Read-only lookup endpoint: any authenticated role may list employment
 // types (needed for dropdowns across the app). Write access lives in the
@@ -17,48 +18,20 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 // --- Settings module: create (supervisor/ceo only). Edit/delete live in
 // ./[id]/route.ts. DELETE removes the lookup row and clears employee refs. ---
 
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  // drizzle-orm wraps the original postgres error in a DrizzleQueryError,
-  // exposing the real code via .cause, not directly on the caught error.
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === "23505") return true;
-  const cause = (error as { cause?: unknown } | null)?.cause;
-  return typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "23505";
-}
-
 export const POST = withApiAuth(async (request: NextRequest) => {
   await requireApiRole(request, "supervisor", "ceo");
+  const parsed = await readMasterDataBody(request);
+  if (!parsed.ok) return parsed.response;
+  const code = trimmedString(parsed.body.code, "code is required");
+  if (!code.ok) return code.response;
+  const name = trimmedString(parsed.body.name, "name is required");
+  if (!name.ok) return name.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError(400, "Invalid JSON body");
-  }
-  if (typeof body !== "object" || body === null) {
-    return jsonError(400, "Invalid request body");
-  }
-
-  const { code, name } = body as Record<string, unknown>;
-  if (typeof code !== "string" || !code.trim()) {
-    return jsonError(400, "code is required");
-  }
-  if (typeof name !== "string" || !name.trim()) {
-    return jsonError(400, "name is required");
-  }
-
-  try {
+  return withUniqueConflict(async () => {
     const [item] = await db
       .insert(employmentTypes)
-      .values({ code: code.trim(), name: name.trim(), isActive: true })
+      .values({ code: code.value, name: name.value, isActive: true })
       .returning();
     return NextResponse.json({ item }, { status: 201 });
-  } catch (error) {
-    if (isUniqueViolation(error)) return jsonError(409, "An employment type with this code or name already exists");
-    throw error;
-  }
+  }, "An employment type with this code or name already exists");
 });

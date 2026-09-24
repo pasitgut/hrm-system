@@ -50,6 +50,9 @@ function stubFetch(mutationResponse?: (url: string, options: RequestInit) => { o
     if (options?.method) {
       if (mutationResponse) return Promise.resolve(mutationResponse(url, options));
       const body = options.body ? JSON.parse(String(options.body)) : {};
+      if (/^\/api\/(departments|positions|employment-types|employment-statuses)(\/|$)/.test(url)) {
+        return Promise.resolve({ ok: true, json: async () => ({ item: { id: 99, ...body } }) });
+      }
       const item = options.method === "DELETE"
         ? { ...employeeItem, ...body, isActive: false, employmentStatus: { id: 2, name: "พ้นสภาพ" } }
         : { ...employeeItem, ...body };
@@ -91,6 +94,23 @@ describe("EmployeeModule", () => {
     render(<EmployeeModule />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "เพิ่มพนักงาน" })).toBeInTheDocument());
+  });
+
+  it("saves a lookup through the shared master-data workflow", async () => {
+    const fetchMock = stubFetch();
+    render(<EmployeeModule />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "จัดการรายการ" }));
+    fireEvent.click(screen.getByRole("button", { name: "เพิ่มประเภทการจ้าง" }));
+    fireEvent.change(screen.getByLabelText("รหัสประเภท *"), { target: { value: " consultant " } });
+    fireEvent.change(screen.getByLabelText("ประเภทการจ้าง *"), { target: { value: " ที่ปรึกษา " } });
+    fireEvent.click(screen.getByRole("button", { name: "เพิ่มรายการ" }));
+
+    expect(await screen.findByText(/เพิ่มประเภทการจ้าง “ที่ปรึกษา” สำเร็จ/)).toBeInTheDocument();
+    const createCall = fetchMock.mock.calls.find(([url, options]) => url === "/api/employment-types" && options?.method === "POST");
+    expect(createCall).toBeDefined();
+    expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({ code: "consultant", name: "ที่ปรึกษา" });
+    await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === "/api/employees?includeDeleted=true")).toHaveLength(2));
   });
 
   it("filters the rendered list by the search query, client-side", async () => {

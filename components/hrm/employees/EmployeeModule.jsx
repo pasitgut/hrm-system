@@ -20,7 +20,9 @@ import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { canManageEmployees } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
-import { explainFailure, formatThaiDate, readJsonSafe, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
+import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
+import { formatThaiDate, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
+import { useMasterDataWorkflow } from "@/components/hrm/employees/master-data-workflow";
 
 const MASTER_ITEMS = [
   { key: "employmentTypes", label: "ประเภทการจ้าง", endpoint: "/api/employment-types", hasCode: true },
@@ -166,12 +168,8 @@ export default function EmployeeModule() {
   const [masterEditorOpen, setMasterEditorOpen] = useState(false);
   const [editingMaster, setEditingMaster] = useState(null);
   const [masterDraft, setMasterDraft] = useState({ name: "", code: "" });
-  const [masterSaving, setMasterSaving] = useState(false);
-  const [masterError, setMasterError] = useState("");
-  const [masterNotice, setMasterNotice] = useState("");
   const [masterDeleteTarget, setMasterDeleteTarget] = useState(null);
-  const [masterDeleting, setMasterDeleting] = useState(false);
-  const [masterDeleteError, setMasterDeleteError] = useState("");
+  const masterWorkflow = useMasterDataWorkflow();
 
   const employeeWorkflow = useEmployeeWorkflow({
     onEmployeesChanged: () => {
@@ -312,16 +310,14 @@ export default function EmployeeModule() {
   function beginMasterEdit(item) {
     setEditingMaster(item);
     setMasterDraft({ name: item.name || "", code: item.code || "" });
-    setMasterError("");
-    setMasterNotice("");
+    masterWorkflow.clearFeedback();
     setMasterEditorOpen(true);
   }
 
   function beginMasterCreate() {
     setEditingMaster(null);
     setMasterDraft({ name: "", code: "" });
-    setMasterError("");
-    setMasterNotice("");
+    masterWorkflow.clearFeedback();
     setMasterEditorOpen(true);
   }
 
@@ -329,76 +325,44 @@ export default function EmployeeModule() {
     event.preventDefault();
     const config = MASTER_ITEMS.find((item) => item.key === masterTab);
     if (!config) return;
-    if (!masterDraft.name.trim()) {
-      setMasterError("กรุณากรอกชื่อรายการ");
-      return;
-    }
-    if (config.hasCode && !masterDraft.code.trim()) {
-      setMasterError("กรุณากรอกรหัสประเภทการจ้าง");
-      return;
-    }
-    setMasterSaving(true);
-    setMasterError("");
-    try {
-      const response = await fetch(editingMaster ? `${config.endpoint}/${editingMaster.id}` : config.endpoint, {
-        method: editingMaster ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config.hasCode
-          ? { name: masterDraft.name.trim(), code: masterDraft.code.trim() }
-          : { name: masterDraft.name.trim() }),
-      });
-      const payload = await readJsonSafe(response);
-      if (!response.ok) {
-        setMasterError(explainFailure(payload.error, "บันทึกรายการไม่สำเร็จ"));
-        return;
-      }
-      const item = payload.item;
-      setLookups((current) => ({
-        ...current,
-        [masterTab]: [...current[masterTab].filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name, "th")),
-      }));
-      setMasterNotice(`${editingMaster ? "แก้ไข" : "เพิ่ม"}${config.label} “${item.name}” สำเร็จ`);
-      setMasterEditorOpen(false);
-      setEditingMaster(null);
-      setMasterDraft({ name: "", code: "" });
-      setPage(1);
-      setRefreshKey((current) => current + 1);
-    } catch {
-      setMasterError("บันทึกรายการไม่สำเร็จ เพราะเชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่");
-    } finally {
-      setMasterSaving(false);
-    }
+    await masterWorkflow.saveMaster({
+      config,
+      draft: masterDraft,
+      editing: editingMaster,
+      onSaved: (item) => {
+        setLookups((current) => ({
+          ...current,
+          [masterTab]: [...current[masterTab].filter((entry) => entry.id !== item.id), item].sort((a, b) => a.name.localeCompare(b.name, "th")),
+        }));
+        setMasterEditorOpen(false);
+        setEditingMaster(null);
+        setMasterDraft({ name: "", code: "" });
+        setPage(1);
+        setRefreshKey((current) => current + 1);
+      },
+    });
   }
 
   async function confirmMasterDelete() {
     if (!masterDeleteTarget) return;
     const config = MASTER_ITEMS.find((item) => item.key === masterTab);
     if (!config) return;
-    setMasterDeleting(true);
-    setMasterDeleteError("");
-    try {
-      const response = await fetch(`${config.endpoint}/${masterDeleteTarget.id}`, { method: "DELETE" });
-      const payload = await readJsonSafe(response);
-      if (!response.ok) {
-        setMasterDeleteError(explainFailure(payload.error, `ลบ${config.label}ไม่สำเร็จ`));
-        return;
-      }
-      setLookups((current) => ({
-        ...current,
-        [masterTab]: current[masterTab].filter((entry) => entry.id !== masterDeleteTarget.id),
-      }));
-      setMasterNotice(`ลบ${config.label} “${masterDeleteTarget.name}” สำเร็จ และล้างข้อมูลที่พนักงานอ้างอิงแล้ว`);
-      setMasterDeleteTarget(null);
-      setMasterEditorOpen(false);
-      setEditingMaster(null);
-      setSelected(null);
-      setLookupRefresh((current) => current + 1);
-      setRefreshKey((current) => current + 1);
-    } catch {
-      setMasterDeleteError(`ลบ${config.label}ไม่สำเร็จ เพราะเชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่`);
-    } finally {
-      setMasterDeleting(false);
-    }
+    await masterWorkflow.deleteMaster({
+      config,
+      item: masterDeleteTarget,
+      onDeleted: () => {
+        setLookups((current) => ({
+          ...current,
+          [masterTab]: current[masterTab].filter((entry) => entry.id !== masterDeleteTarget.id),
+        }));
+        setMasterDeleteTarget(null);
+        setMasterEditorOpen(false);
+        setEditingMaster(null);
+        setSelected(null);
+        setLookupRefresh((current) => current + 1);
+        setRefreshKey((current) => current + 1);
+      },
+    });
   }
 
   const currentMaster = MASTER_ITEMS.find((item) => item.key === masterTab) || MASTER_ITEMS[0];
@@ -659,7 +623,7 @@ export default function EmployeeModule() {
 
       <HrmDialog
         open={masterOpen}
-        onClose={() => { if (!masterSaving && !masterDeleting) { setMasterOpen(false); setMasterEditorOpen(false); setMasterError(""); } }}
+        onClose={() => { if (!masterWorkflow.saving && !masterWorkflow.deleting) { setMasterOpen(false); setMasterEditorOpen(false); masterWorkflow.clearFeedback(); } }}
         title="จัดการรายการพนักงาน"
         description="เพิ่ม แก้ไข หรือลบประเภทการจ้าง สถานะพนักงาน แผนก และตำแหน่ง"
         size="lg"
@@ -675,14 +639,14 @@ export default function EmployeeModule() {
                 aria-selected={masterTab === item.key}
                 aria-controls="master-panel"
                 key={item.key}
-                onClick={() => { setMasterTab(item.key); setMasterEditorOpen(false); setMasterError(""); setMasterNotice(""); }}
+                onClick={() => { setMasterTab(item.key); setMasterEditorOpen(false); masterWorkflow.clearFeedback(); }}
                 className={cn("min-h-10 rounded-md border px-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", masterTab === item.key ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-foreground hover:bg-muted")}
               >
                 {item.label}
               </button>
             ))}
           </div>
-          {masterNotice ? <div role="status" aria-live="polite" className="rounded-md border border-status-success/30 bg-status-success/5 px-3 py-2 text-sm text-foreground">{masterNotice}</div> : null}
+          {masterWorkflow.notice ? <div role="status" aria-live="polite" className="rounded-md border border-status-success/30 bg-status-success/5 px-3 py-2 text-sm text-foreground">{masterWorkflow.notice}</div> : null}
           <section id="master-panel" role="tabpanel" aria-labelledby={`master-tab-${masterTab}`} className="min-w-0">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
               <div><h3 className="text-sm font-semibold text-foreground">{currentMaster.label}</h3><p className="mt-1 text-xs text-muted-foreground">{currentMasterItems.length} รายการ</p></div>
@@ -694,10 +658,10 @@ export default function EmployeeModule() {
                 {currentMaster.hasCode ? <Input label="รหัสประเภท *" value={masterDraft.code} onChange={(value) => setMasterDraft((current) => ({ ...current, code: value }))} isRequired /> : null}
                 <Input label={`${currentMaster.label} *`} value={masterDraft.name} onChange={(value) => setMasterDraft((current) => ({ ...current, name: value }))} isRequired />
                 <div className="flex flex-wrap gap-2 sm:col-span-2">
-                  <Button type="submit" size="small" disabled={masterSaving}>{masterSaving ? "กำลังบันทึก..." : editingMaster ? "บันทึกการแก้ไข" : "เพิ่มรายการ"}</Button>
-                  <Button type="button" size="small" variant="secondary" disabled={masterSaving} onClick={() => { setMasterEditorOpen(false); setMasterError(""); }}>ยกเลิก</Button>
+                  <Button type="submit" size="small" disabled={masterWorkflow.saving}>{masterWorkflow.saving ? "กำลังบันทึก..." : editingMaster ? "บันทึกการแก้ไข" : "เพิ่มรายการ"}</Button>
+                  <Button type="button" size="small" variant="secondary" disabled={masterWorkflow.saving} onClick={() => { setMasterEditorOpen(false); masterWorkflow.clearFeedback(); }}>ยกเลิก</Button>
                 </div>
-                {masterError ? <p role="alert" className="sm:col-span-2 text-sm text-status-danger">{masterError}</p> : null}
+                {masterWorkflow.error ? <p role="alert" className="sm:col-span-2 text-sm text-status-danger">{masterWorkflow.error}</p> : null}
               </form>
             ) : null}
 
@@ -711,7 +675,7 @@ export default function EmployeeModule() {
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <Button type="button" size="small" variant="outline" leadingIcon={RiEditLine} onClick={() => beginMasterEdit(item)}>แก้ไข</Button>
-                    <Button type="button" size="small" variant="danger" leadingIcon={RiDeleteBinLine} onClick={() => { setMasterDeleteTarget(item); setMasterDeleteError(""); }}>ลบ</Button>
+                    <Button type="button" size="small" variant="danger" leadingIcon={RiDeleteBinLine} onClick={() => { setMasterDeleteTarget(item); masterWorkflow.clearFeedback(); }}>ลบ</Button>
                   </div>
                 </div>
               )) : (
@@ -724,14 +688,14 @@ export default function EmployeeModule() {
 
       <HrmDialog
         open={Boolean(masterDeleteTarget)}
-        onClose={() => { if (!masterDeleting) { setMasterDeleteTarget(null); setMasterDeleteError(""); } }}
+        onClose={() => { if (!masterWorkflow.deleting) { setMasterDeleteTarget(null); masterWorkflow.clearFeedback(); } }}
         title={`ยืนยันการลบ${currentMaster.label}`}
         description="ข้อมูลพนักงานเดิมจะยังอยู่ แต่ช่องที่อ้างอิงรายการนี้จะถูกล้างเป็นค่าว่าง"
         size="sm"
-        footer={<><Button type="button" variant="secondary" onClick={() => setMasterDeleteTarget(null)} disabled={masterDeleting}>ยกเลิก</Button><Button type="button" variant="danger" onClick={confirmMasterDelete} disabled={masterDeleting}>{masterDeleting ? "กำลังลบ..." : "ยืนยันลบ"}</Button></>}
+        footer={<><Button type="button" variant="secondary" onClick={() => setMasterDeleteTarget(null)} disabled={masterWorkflow.deleting}>ยกเลิก</Button><Button type="button" variant="danger" onClick={confirmMasterDelete} disabled={masterWorkflow.deleting}>{masterWorkflow.deleting ? "กำลังลบ..." : "ยืนยันลบ"}</Button></>}
       >
         <p className="text-sm text-foreground">ต้องการลบ <strong>{masterDeleteTarget?.name}</strong> ใช่หรือไม่</p>
-        {masterDeleteError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{masterDeleteError}</p> : null}
+        {masterWorkflow.deleteError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{masterWorkflow.deleteError}</p> : null}
       </HrmDialog>
     </div>
   );

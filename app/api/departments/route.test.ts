@@ -50,7 +50,7 @@ describe("POST /api/departments", () => {
   it("returns 403 for an employee", async () => {
     const { user, employee } = await createUser({ role: "employee" });
     const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "employee" }));
-    const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Legal" } }));
+    const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: " Legal " } }));
     expect(response.status).toBe(403);
   });
 
@@ -81,7 +81,7 @@ describe("POST /api/departments", () => {
   it("returns a clean 409 (not a raw DB error) on a duplicate name", async () => {
     const { user, employee } = await createUser({ role: "supervisor" });
     const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
-    await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Legal" } }));
+    await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: " Legal " } }));
     const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Legal" } }));
     const payload = await response.json();
     expect(response.status).toBe(409);
