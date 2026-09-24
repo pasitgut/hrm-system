@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RiAddLine, RiCalendarCheckLine, RiFileList3Line } from "@remixicon/react";
+import { RiAddLine, RiFileList3Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { LeaveCalendarView } from "@/components/hrm/leave/LeaveCalendarView";
 import { LeaveInsightsView } from "@/components/hrm/leave/LeaveInsightsView";
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";
@@ -18,7 +17,6 @@ export default function LeaveModule() {
   const { role } = useHrmRole();
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [policyOpen, setPolicyOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +69,6 @@ export default function LeaveModule() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-1 text-xs text-muted-foreground">{ROLE_LABELS[role] || role}</span>
-          <Button variant="outline" leadingIcon={RiCalendarCheckLine} onClick={() => setPolicyOpen(true)}>นโยบายการลา</Button>
           <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>
         </div>
       </section>
@@ -131,19 +128,6 @@ export default function LeaveModule() {
         onClose={() => setEditTarget(null)}
         onSaved={() => { bump(); setNotice("บันทึกการแก้ไขคำขอลาเรียบร้อยแล้ว"); setEditTarget(null); }}
       />
-      <HrmDialog
-        open={policyOpen}
-        onClose={() => setPolicyOpen(false)}
-        title="นโยบายการลา"
-        description="ประเภทการลาและขั้นตอนการยื่นคำขอ"
-        footer={<Button onClick={() => setPolicyOpen(false)}>เข้าใจแล้ว</Button>}
-      >
-        <div className="space-y-3 text-xs leading-5 text-muted-foreground">
-          <p>ระบบรองรับการลา 3 ประเภท: ลากิจ ลาป่วย และลาวันเกิด โดยแสดงสิทธิ์คงเหลือตามโควต้าที่ตั้งไว้</p>
-          <p>เลือกประเภท ระบุช่วงวันที่และเหตุผล แล้วส่งคำขอเพื่อให้หัวหน้างานพิจารณา</p>
-          <p>ตรวจสอบโควต้าคงเหลือและสถานะคำขอได้จากหน้าแดชบอร์ดนี้</p>
-        </div>
-      </HrmDialog>
     </div>
   );
 }
