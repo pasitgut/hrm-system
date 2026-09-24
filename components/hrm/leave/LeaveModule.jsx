@@ -9,11 +9,13 @@ import { LeaveInsightsView } from "@/components/hrm/leave/LeaveInsightsView";
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";
 import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
 import { LeaveRequestPanel } from "@/components/hrm/leave/LeaveRequestPanel";
+import { LeaveQuotaDialog } from "@/components/hrm/leave/LeaveQuotaDialog";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 
 export default function LeaveModule() {
   const { role } = useHrmRole();
   const [addOpen, setAddOpen] = useState(false);
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [items, setItems] = useState([]);
@@ -84,7 +86,10 @@ export default function LeaveModule() {
             <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">โควต้าประจำปี</p>
             <h2 id="leave-balance-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สิทธิ์วันลาคงเหลือของฉัน</h2>
           </div>
-          <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
+            {isTeamView ? <Button size="small" variant="outline" className="min-h-10" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
+          </div>
         </div>
         <LeaveSummaryView refreshKey={refreshKey} />
       </section>
@@ -124,6 +129,11 @@ export default function LeaveModule() {
         initialValues={editTarget}
         onClose={() => setEditTarget(null)}
         onSaved={() => { bump(); setNotice("บันทึกการแก้ไขคำขอลาเรียบร้อยแล้ว"); setEditTarget(null); }}
+      />
+      <LeaveQuotaDialog
+        open={quotaOpen}
+        onClose={() => setQuotaOpen(false)}
+        onSaved={() => { bump(); setNotice("บันทึกโควต้าวันลาเรียบร้อยแล้ว"); }}
       />
     </div>
   );
