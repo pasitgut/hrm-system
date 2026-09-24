@@ -120,100 +120,122 @@ export function OtCalendarView({ refreshKey = 0 }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-center gap-2">
-        <IconButton icon={RiArrowLeftSLine} aria-label="เดือนก่อนหน้า" onClick={() => setMonth((current) => shiftMonth(current, -1))} className="size-10" />
-        <div className="relative" ref={monthPickerRef}>
-          <Button
-            ref={monthPickerTriggerRef}
-            type="button"
+    <section className="relative min-w-0 rounded-xl border border-border bg-card shadow-sm" aria-labelledby="ot-calendar-heading">
+      <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+        <div>
+          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ตารางเวลาทำงาน</p>
+          <h2 id="ot-calendar-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">ปฏิทิน OT</h2>
+        </div>
+        <div className="flex min-h-10 items-center gap-2">
+          <IconButton
+            icon={RiArrowLeftSLine}
+            aria-label="เดือนก่อนหน้า"
             variant="outline"
-            aria-label="เลือกเดือนและปี"
-            aria-haspopup="dialog"
-            aria-expanded={monthPickerOpen}
-            onClick={toggleMonthPicker}
-            className="min-h-10 min-w-40 justify-center border-border bg-card px-4 text-sm font-semibold text-foreground shadow-xs"
-          >
-            {formatMonthLabel(month)}
-          </Button>
-          {monthPickerOpen ? (
-            <div
-              role="dialog"
+            onClick={() => setMonth((current) => shiftMonth(current, -1))}
+            className="size-10"
+          />
+          <div className="relative" ref={monthPickerRef}>
+            <Button
+              ref={monthPickerTriggerRef}
+              type="button"
+              variant="outline"
               aria-label="เลือกเดือนและปี"
-              className="absolute left-1/2 top-full z-20 mt-2 w-72 -translate-x-1/2 rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-lg"
+              aria-haspopup="dialog"
+              aria-expanded={monthPickerOpen}
+              onClick={toggleMonthPicker}
+              className="min-h-10 min-w-40 justify-center border-border bg-card px-4 text-sm font-semibold text-foreground shadow-xs"
             >
-              <div className="grid grid-cols-2 gap-3">
-                <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
-                  <span>เดือน</span>
-                  <Select aria-label="เดือน" selectedKey={draftMonth} onSelectionChange={setDraftMonth}>
-                    {MONTH_OPTIONS.map((name, index) => {
-                      const value = String(index + 1).padStart(2, "0");
-                      return <SelectItem id={value} key={value}>{name}</SelectItem>;
-                    })}
-                  </Select>
-                </label>
-                <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
-                  <span>ปี พ.ศ.</span>
-                  <Select aria-label="ปี พ.ศ." selectedKey={draftYear} onSelectionChange={setDraftYear}>
-                    {YEAR_OPTIONS.map((year) => <SelectItem id={String(year)} key={year}>{year + 543}</SelectItem>)}
-                  </Select>
-                </label>
-              </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setMonthPickerOpen(false);
-                    monthPickerTriggerRef.current?.focus();
-                  }}
-                >
-                  ยกเลิก
-                </Button>
-                <Button type="button" onClick={applyMonthSelection}>แสดงเดือน</Button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-        <IconButton icon={RiArrowRightSLine} aria-label="เดือนถัดไป" onClick={() => setMonth((current) => shiftMonth(current, 1))} className="size-10" />
-      </div>
-      {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="grid grid-cols-7 border-b border-border bg-muted text-center text-[11px] font-semibold leading-4 text-muted-foreground">
-          {WEEKDAY_LABELS.map((label) => (
-            <div className="py-2" key={label}>{label}</div>
-          ))}
-        </div>
-        <div className="divide-y divide-border">
-          {weeks.map((week, weekIndex) => (
-            <div className="grid grid-cols-7 divide-x divide-border" key={weekIndex}>
-              {week.map((cellDate, dayIndex) => {
-                if (!cellDate) return <div className="min-h-20 bg-muted/30" key={dayIndex} />;
-                const dayKey = cellDate.toString();
-                const dayItems = itemsByDate.get(dayKey) || [];
-                return (
-                  <button
+              {formatMonthLabel(month)}
+            </Button>
+            {monthPickerOpen ? (
+              <div
+                role="dialog"
+                aria-label="เลือกเดือนและปี"
+                className="absolute left-1/2 top-full z-20 mt-2 w-72 -translate-x-1/2 rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-lg"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+                    <span>เดือน</span>
+                    <Select aria-label="เดือน" selectedKey={draftMonth} onSelectionChange={setDraftMonth}>
+                      {MONTH_OPTIONS.map((name, index) => {
+                        const value = String(index + 1).padStart(2, "0");
+                        return <SelectItem id={value} key={value}>{name}</SelectItem>;
+                      })}
+                    </Select>
+                  </label>
+                  <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+                    <span>ปี พ.ศ.</span>
+                    <Select aria-label="ปี พ.ศ." selectedKey={draftYear} onSelectionChange={setDraftYear}>
+                      {YEAR_OPTIONS.map((year) => <SelectItem id={String(year)} key={year}>{year + 543}</SelectItem>)}
+                    </Select>
+                  </label>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button
                     type="button"
-                    key={dayKey}
-                    disabled={dayItems.length === 0}
-                    onClick={() => setSelectedDate(cellDate)}
-                    className="flex min-h-20 flex-col items-start gap-1 p-1.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+                    variant="ghost"
+                    onClick={() => {
+                      setMonthPickerOpen(false);
+                      monthPickerTriggerRef.current?.focus();
+                    }}
                   >
-                    <span className="text-[11px] leading-4 text-muted-foreground">{cellDate.day}</span>
-                    <div className="flex flex-wrap gap-1">
-                      {dayItems.slice(0, 2).map((item) => (
-                        <Chip key={item.id} variant="caption" color={statusColor(item.statusCode)}>{item.startTime}</Chip>
-                      ))}
-                      {dayItems.length > 2 ? <span className="text-[10px] leading-4 text-muted-foreground">+{dayItems.length - 2}</span> : null}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+                    ยกเลิก
+                  </Button>
+                  <Button type="button" onClick={applyMonthSelection}>แสดงเดือน</Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          <IconButton
+            icon={RiArrowRightSLine}
+            aria-label="เดือนถัดไป"
+            variant="outline"
+            onClick={() => setMonth((current) => shiftMonth(current, 1))}
+            className="size-10"
+          />
         </div>
       </div>
-      {loading ? <p className="text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
+      {error ? <p className="px-4 pt-3 text-xs leading-5 text-status-danger sm:px-5">{error}</p> : null}
+      <div className="overflow-x-auto p-3 sm:p-4">
+        <div className="min-w-[490px] overflow-hidden rounded-b-xl">
+          <div role="group" aria-label={`ปฏิทินเดือน${formatMonthLabel(month)}`}>
+            <div className="grid grid-cols-7 border-b border-border bg-muted text-center text-[11px] font-semibold leading-4 text-muted-foreground">
+              {WEEKDAY_LABELS.map((label) => (
+                <div className="py-2" key={label}>{label}</div>
+              ))}
+            </div>
+            <div className="divide-y divide-border">
+              {weeks.map((week, weekIndex) => (
+                <div className="grid grid-cols-7 divide-x divide-border" key={weekIndex}>
+                  {week.map((cellDate, dayIndex) => {
+                    if (!cellDate) return <div className="min-h-20 bg-muted/30" key={dayIndex} />;
+                    const dayKey = cellDate.toString();
+                    const dayItems = itemsByDate.get(dayKey) || [];
+                    return (
+                      <button
+                        type="button"
+                        key={dayKey}
+                        disabled={dayItems.length === 0}
+                        onClick={() => setSelectedDate(cellDate)}
+                        className="flex min-h-20 flex-col items-start gap-1 p-1.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+                      >
+                        <span className="text-[11px] leading-4 text-muted-foreground">{cellDate.day}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {dayItems.slice(0, 2).map((item) => (
+                            <Chip key={item.id} variant="caption" color={statusColor(item.statusCode)}>{item.startTime}</Chip>
+                          ))}
+                          {dayItems.length > 2 ? <span className="text-[10px] leading-4 text-muted-foreground">+{dayItems.length - 2}</span> : null}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      {loading ? <p className="px-4 pb-4 text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
       <HrmDialog
         open={Boolean(selectedDate)}
         onClose={() => setSelectedDate(null)}
@@ -234,7 +256,7 @@ export function OtCalendarView({ refreshKey = 0 }) {
           ))}
         </div>
       </HrmDialog>
-    </div>
+    </section>
   );
 }
 

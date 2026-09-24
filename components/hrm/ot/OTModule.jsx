@@ -42,14 +42,8 @@ export default function OTModule() {
         </div>
       ) : null}
 
-      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
-        <section aria-labelledby="ot-calendar-heading" className="min-w-0">
-          <div className="mb-3">
-            <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ตารางเวลาทำงาน</p>
-            <h2 id="ot-calendar-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">ปฏิทิน OT</h2>
-          </div>
-          <OtCalendarView refreshKey={refreshKey} />
-        </section>
+      <section className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
+        <OtCalendarView refreshKey={refreshKey} />
         <OtRequestPanel refreshKey={refreshKey} role={role} onUpdated={() => announce("บันทึกผลการพิจารณาคำขอ OT แล้ว")} />
       </section>
 
