@@ -29,6 +29,7 @@ async function individualSummary(employeeId: string, year = new Date().getFullYe
     .select({ firstName: employees.firstName, lastName: employees.lastName })
     .from(employees)
     .where(eq(employees.id, employeeId));
+  if (!employee) return null;
 
   const types = await db
     .select({ code: leaveTypes.code, name: leaveTypes.name, annualQuotaDays: leaveTypes.annualQuotaDays })
@@ -79,7 +80,7 @@ async function individualSummary(employeeId: string, year = new Date().getFullYe
   return {
     scope: "individual" as const,
     employeeId,
-    employeeName: employee ? `${employee.firstName} ${employee.lastName}`.trim() : "",
+    employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
     quotas,
   };
 }
@@ -153,12 +154,16 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {
       return jsonError(403, "Forbidden");
     }
-    return NextResponse.json(await individualSummary(user.employeeId, year));
+    const summary = await individualSummary(user.employeeId, year);
+    if (!summary) return jsonError(409, "บัญชีผู้ใช้ไม่ตรงกับข้อมูลพนักงาน กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่");
+    return NextResponse.json(summary);
   }
 
   // supervisor / ceo
   if (employeeIdParam) {
-    return NextResponse.json(await individualSummary(employeeIdParam, year));
+    const summary = await individualSummary(employeeIdParam, year);
+    if (!summary) return jsonError(404, "Employee not found");
+    return NextResponse.json(summary);
   }
 
   // Company scope — gated directly on role (no canViewCompanyLeave export;

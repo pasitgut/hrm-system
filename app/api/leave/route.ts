@@ -89,7 +89,17 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   const result = await db.transaction(async (tx) => {
     // Serialize quota checks for one employee so concurrent submissions
     // cannot both spend the same remaining balance.
-    await tx.select({ id: employees.id }).from(employees).where(eq(employees.id, user.employeeId)).for("update");
+    const [employee] = await tx
+      .select({ id: employees.id })
+      .from(employees)
+      .where(eq(employees.id, user.employeeId))
+      .for("update");
+    if (!employee) {
+      return {
+        error: "บัญชีผู้ใช้ไม่ตรงกับข้อมูลพนักงาน กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่",
+        status: 409 as const,
+      };
+    }
 
     const [leaveType] = await tx
       .select({ name: leaveTypes.name, annualQuotaDays: leaveTypes.annualQuotaDays, isActive: leaveTypes.isActive })
