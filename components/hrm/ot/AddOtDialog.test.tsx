@@ -54,7 +54,7 @@ describe("AddOtDialog", () => {
 
     fireEvent.change(getStartTimeInput(), { target: { value: "18:00" } });
     fireEvent.change(getEndTimeInput(), { target: { value: "20:30" } });
-    fireEvent.change(screen.getByLabelText("รายละเอียดการทำ OT"), { target: { value: "ปิดงาน release" } });
+    fireEvent.change(screen.getByLabelText("รายละเอียดงานที่ทำ"), { target: { value: "ปิดงาน release" } });
 
     const form = document.getElementById("add-ot-form");
     expect(form).not.toBeNull();

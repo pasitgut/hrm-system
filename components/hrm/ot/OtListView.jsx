@@ -102,7 +102,7 @@ function OtCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
 // available to any caller that already has a list to filter. Without it the
 // view fetches GET /api/ot?month=...&status=all itself and filters the 4
 // tabs client-side, so switching tabs never re-hits the network.
-export function OtListView({ items: itemsProp, refreshKey = 0, onEdit, onCancelled }) {
+export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}, onCancelled = () => {} }) {
   const { role, employeeId } = useHrmRole();
   const [month, setMonth] = useState(() => currentMonthInBangkok());
   const [items, setItems] = useState(itemsProp || []);
@@ -211,7 +211,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit, onCancell
                 <th className="px-3 py-3">เวลา</th>
                 <th className="px-3 py-3">ระยะเวลา</th>
                 {showEmployeeColumn ? <th className="px-3 py-3">พนักงาน</th> : null}
-                <th className="px-3 py-3">เหตุผล</th>
+                <th className="px-3 py-3">รายละเอียดงานที่ทำ</th>
                 <th className="px-3 py-3">สถานะ</th>
                 <th className="px-3 py-3">การดำเนินการ</th>
               </tr>

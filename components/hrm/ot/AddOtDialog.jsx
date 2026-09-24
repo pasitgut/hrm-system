@@ -124,8 +124,8 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
     <HrmDialog
       open={open}
       onClose={handleClose}
-      title={isEditing ? "แก้ไขคำขอ OT" : "เพิ่มคำขอ OT"}
-      description={isEditing ? "แก้ไขข้อมูลคำขอ OT ที่ยังรอการอนุมัติ" : "กรอกข้อมูลเวลาที่เริ่มและสิ้นสุด ระบบจะคำนวณระยะเวลาให้โดยอัตโนมัติ"}
+      title={isEditing ? "แก้ไขคำขอ OT" : "ยื่นคำขอ OT"}
+      description={isEditing ? "แก้ไขข้อมูลคำขอ OT ที่ยังรอจัดการ" : "กรอกวันที่และเวลา ระบบจะคำนวณระยะเวลาทำ OT ให้โดยอัตโนมัติ"}
       size="lg"
       footer={
         <>
@@ -152,8 +152,8 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
           <strong className="text-lg font-semibold tracking-tight leading-6 text-primary">{durationLabel}</strong>
         </div>
         <Textarea
-          label="รายละเอียดการทำ OT"
-          placeholder="อธิบายงานที่ต้องทำและเหตุผล"
+          label="รายละเอียดงานที่ทำ"
+          placeholder="ระบุงานที่ทำในช่วงเวลา OT"
           rows={4}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
