@@ -4,10 +4,12 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
+  RiAddLine,
   RiCalendarTodoLine,
   RiDashboardLine,
   RiFileChartLine,
   RiLogoutBoxRLine,
+  RiMoneyDollarCircleLine,
   RiMoonLine,
   RiNotification3Line,
   RiSettings4Line,
@@ -39,6 +41,7 @@ const sharedItems = [
   { key: "overview", label: "ภาพรวม", icon: RiDashboardLine, href: "/" },
   { key: "employees", label: "ข้อมูลพนักงาน", icon: RiUserLine, href: "/employees" },
   { key: "ot", label: "ระบบ OT", icon: RiTimerLine, href: "/ot" },
+  { key: "payroll", label: "เงินเดือน", icon: RiMoneyDollarCircleLine, href: "/payroll" },
   { key: "leave", label: "ระบบวันลา", icon: RiCalendarTodoLine, href: "/leave" },
   { key: "reports", label: "รายงาน", icon: RiFileChartLine, href: "/reports" },
 ];
@@ -47,6 +50,7 @@ const titles = {
   "/": "ภาพรวม",
   "/employees": "ข้อมูลพนักงาน",
   "/ot": "ระบบ OT",
+  "/payroll": "เงินเดือน",
   "/leave": "ระบบวันลา",
   "/approvals": "ระบบอนุมัติกลาง",
   "/reports": "รายงาน HR",
@@ -91,7 +95,9 @@ function Header({ user, displayName, initials }) {
   const pathname = usePathname();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [payrollDialogOpen, setPayrollDialogOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  const isPayrollPage = pathname === "/payroll";
   const title = titles[pathname] || "ภาพรวม";
 
   useEffect(() => {
@@ -128,12 +134,25 @@ function Header({ user, displayName, initials }) {
           <IconButton icon={RiSettings4Line} aria-label="ตั้งค่าระบบ" onClick={() => setSettingsOpen(true)} />
           <IconButton icon={RiNotification3Line} aria-label="การแจ้งเตือน" onClick={() => setNotificationsOpen(true)} />
           <Avatar initials={initials} color="lime" size="sm" aria-label={displayName} className="hidden sm:flex" />
-          <Button asChild size="sm" className="hidden sm:inline-flex">
-            <Link href="/ot"><RiTimerLine aria-hidden="true" />สร้างคำขอ OT</Link>
-          </Button>
-          <Button asChild size="icon" className="sm:hidden">
-            <Link href="/ot" aria-label="สร้างคำขอ OT"><RiTimerLine aria-hidden="true" /></Link>
-          </Button>
+          {isPayrollPage ? (
+            <>
+              <Button className="hidden sm:inline-flex" onClick={() => setPayrollDialogOpen(true)} size="sm">
+                <RiAddLine aria-hidden="true" />สร้างรายการ
+              </Button>
+              <Button className="sm:hidden" onClick={() => setPayrollDialogOpen(true)} size="icon" aria-label="สร้างรายการเงินเดือน">
+                <RiAddLine aria-hidden="true" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button asChild size="sm" className="hidden sm:inline-flex">
+                <Link href="/ot"><RiTimerLine aria-hidden="true" />สร้างคำขอ OT</Link>
+              </Button>
+              <Button asChild size="icon" className="sm:hidden">
+                <Link href="/ot" aria-label="สร้างคำขอ OT"><RiTimerLine aria-hidden="true" /></Link>
+              </Button>
+            </>
+          )}
           <form action={logoutAction}>
             <IconButton icon={RiLogoutBoxRLine} aria-label="ออกจากระบบ" type="submit" />
           </form>
@@ -158,6 +177,15 @@ function Header({ user, displayName, initials }) {
         </div>
       </HrmDialog>
       <HrmSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <HrmDialog
+        open={payrollDialogOpen}
+        onClose={() => setPayrollDialogOpen(false)}
+        title="สร้างรายการเงินเดือน"
+        description="ตัวอย่างหน้าจอสำหรับเริ่มรอบเงินเดือน"
+        footer={<Button onClick={() => setPayrollDialogOpen(false)}>รับทราบ</Button>}
+      >
+        <p className="text-sm leading-6 text-muted-foreground">รอบเงินเดือนนี้เป็น Mockup และยังไม่บันทึกหรือส่งข้อมูลจริง</p>
+      </HrmDialog>
     </>
   );
 }
@@ -165,7 +193,7 @@ function Header({ user, displayName, initials }) {
 export default function HrmShell({ children, user = null, employeeName = null }) {
   const pathname = usePathname();
   const role = user?.role ?? null;
-  const active = pathname === "/ot" ? "ot" : pathname === "/leave" ? "leave" : pathname === "/employees" ? "employees" : pathname === "/approvals" ? "approvals" : pathname === "/reports" ? "reports" : pathname === "/settings" ? "settings" : "overview";
+  const active = pathname === "/ot" ? "ot" : pathname === "/payroll" ? "payroll" : pathname === "/leave" ? "leave" : pathname === "/employees" ? "employees" : pathname === "/approvals" ? "approvals" : pathname === "/reports" ? "reports" : pathname === "/settings" ? "settings" : "overview";
   const items = useMemo(() => {
     const list = role && canApproveOT(role)
       ? [{ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals", badge: 4 }, ...sharedItems]
