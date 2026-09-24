@@ -20,6 +20,7 @@ import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { canManageEmployees } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
+import { explainFailure, formatThaiDate, readJsonSafe, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
 
 const MASTER_ITEMS = [
   { key: "employmentTypes", label: "ประเภทการจ้าง", endpoint: "/api/employment-types", hasCode: true },
@@ -61,40 +62,6 @@ function todayStr() {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
-}
-
-async function readJsonSafe(response) {
-  try {
-    return await response.json();
-  } catch {
-    return {};
-  }
-}
-
-function explainFailure(raw, fallback) {
-  if (!raw || typeof raw !== "string") return fallback;
-  if (/รหัสพนักงาน .*ซ้ำกับ|รหัสพนักงาน .*ถูกใช้แล้ว/.test(raw)) return raw;
-  if (/email is required for an employee with a login account/i.test(raw)) return "พนักงานที่มีบัญชีเข้าสู่ระบบต้องมีอีเมล";
-  if (/^email is required/i.test(raw)) return "กรุณากรอกอีเมลเพื่อใช้เป็นชื่อเข้าสู่ระบบของพนักงาน";
-  if (/invalid email/i.test(raw)) return "รูปแบบอีเมลไม่ถูกต้อง";
-  if (/endDate cannot be before startDate/i.test(raw)) return "วันที่สิ้นสุดการทำงานต้องไม่อยู่ก่อนวันที่เริ่มงาน";
-  if (/endDate must be a YYYY-MM-DD date/i.test(raw)) return "รูปแบบวันที่สิ้นสุดการทำงานไม่ถูกต้อง";
-  if (/former employees must have an end date/i.test(raw)) return "กรุณาระบุวันที่สิ้นสุดการทำงานของพนักงานพ้นสภาพ";
-  if (/already exists|already in use|unique field/i.test(raw)) return "มีข้อมูลชื่อนี้หรือรหัสนี้อยู่แล้ว กรุณาตรวจสอบก่อนบันทึก";
-  if (/ยังมีข้อมูลอ้างอิง|still referenced|still in use/i.test(raw)) return raw;
-  if (/foreign key|referenced ids|does not exist/i.test(raw)) return "รายการที่เลือกไม่มีอยู่ในระบบ กรุณาโหลดรายการใหม่แล้วลองอีกครั้ง";
-  if (/not found/i.test(raw)) return "ไม่พบข้อมูลที่ต้องการ กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง";
-  if (/invalid|is required|must be|no fields to update/i.test(raw)) return "ข้อมูลไม่ครบหรือรูปแบบไม่ถูกต้อง กรุณาตรวจสอบข้อมูลในแบบฟอร์ม";
-  if (/forbidden|unauthorized/i.test(raw)) return "บัญชีนี้ไม่มีสิทธิ์ทำรายการดังกล่าว";
-  if (/off-boarded/i.test(raw)) return "พนักงานพ้นสภาพแล้ว จึงทำรายการนี้ซ้ำไม่ได้";
-  return `ระบบแจ้งว่า: ${raw}`;
-}
-
-function formatThaiDate(value) {
-  if (!value) return "-";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("th-TH", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
 function initialsFor(employee) {
@@ -189,13 +156,9 @@ export default function EmployeeModule() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [offboardingEndDate, setOffboardingEndDate] = useState(todayStr());
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
   const [notice, setNotice] = useState(null);
 
   const [masterOpen, setMasterOpen] = useState(false);
@@ -209,6 +172,18 @@ export default function EmployeeModule() {
   const [masterDeleteTarget, setMasterDeleteTarget] = useState(null);
   const [masterDeleting, setMasterDeleting] = useState(false);
   const [masterDeleteError, setMasterDeleteError] = useState("");
+
+  const employeeWorkflow = useEmployeeWorkflow({
+    onEmployeesChanged: () => {
+      setPage(1);
+      setRefreshKey((current) => current + 1);
+    },
+    onEmployeeChanged: (employeeId, item) => {
+      setSelected((current) => current?.id === employeeId ? item : current);
+    },
+    onSuccess: (message) => setNotice({ type: "success", message }),
+  });
+  const { saving, formError, setFormError, offboarding, offboardError, setOffboardError } = employeeWorkflow;
 
   useEffect(() => {
     let cancelled = false;
@@ -315,115 +290,23 @@ export default function EmployeeModule() {
 
   async function saveEmployee(event) {
     event.preventDefault();
-    if (!form.firstName.trim() || !form.lastName.trim()) {
-      setFormError("กรุณากรอกชื่อและนามสกุล");
-      return;
-    }
-    if (!/^\d{4}$/.test(form.code.trim())) {
-      setFormError("กรุณากำหนดรหัสพนักงานเป็นตัวเลข 4 หลัก เช่น 2603");
-      return;
-    }
-    if (!editing && !form.email.trim()) {
-      setFormError("กรุณากรอกอีเมลเพื่อใช้เป็นชื่อเข้าสู่ระบบของพนักงาน");
-      return;
-    }
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setFormError("รูปแบบอีเมลไม่ถูกต้อง");
-      return;
-    }
-    if (!form.startDate) {
-      setFormError("กรุณากรอกวันที่เริ่มงาน");
-      return;
-    }
-    if (editing && !editing.isActive && !form.endDate) {
-      setFormError("กรุณาระบุวันที่สิ้นสุดการทำงาน");
-      return;
-    }
-    const operationalStatus = lookups.employmentStatuses.find((item) => item.name === "ปฏิบัติงาน" && item.isActive !== false)
-      || lookups.employmentStatuses.find((item) => item.name !== "พ้นสภาพ" && item.isActive !== false);
-    const body = {
-      code: form.code.trim(),
-      prefix: form.prefix || null,
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      nickname: form.nickname || null,
-      firstNameEn: form.firstNameEn || null,
-      lastNameEn: form.lastNameEn || null,
-      citizenId: form.citizenId || null,
-      birthDate: form.birthDate || null,
-      email: form.email || null,
-      phone: form.phone || null,
-      avatarUrl: form.avatarUrl || null,
-      startDate: form.startDate,
-      ...(editing ? { endDate: form.endDate || null } : {}),
-      departmentId: form.departmentId ? Number(form.departmentId) : null,
-      positionId: form.positionId ? Number(form.positionId) : null,
-      employmentTypeId: form.employmentTypeId ? Number(form.employmentTypeId) : null,
-      ...(!editing ? { employmentStatusId: operationalStatus?.id ?? null } : {}),
-    };
-
-    setSaving(true);
-    setFormError("");
-    try {
-      const response = await fetch(editing ? `/api/employees/${editing.id}` : "/api/employees", {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = await readJsonSafe(response);
-      if (!response.ok) {
-        setFormError(explainFailure(payload.error, "บันทึกข้อมูลพนักงานไม่สำเร็จ"));
-        return;
-      }
-      const name = `${payload.item.firstName} ${payload.item.lastName}`;
-      setNotice({ type: "success", message: editing ? `บันทึกข้อมูล ${name} สำเร็จ` : `เพิ่มพนักงาน ${name} สำเร็จ รหัส ${payload.item.code} · รหัสผ่านเริ่มต้นคือ ${payload.item.code} และต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก` });
-      if (selected?.id === payload.item.id) setSelected(payload.item);
-      setFormOpen(false);
-      setEditing(null);
-      setPage(1);
-      setRefreshKey((current) => current + 1);
-    } catch {
-      setFormError("บันทึกข้อมูลพนักงานไม่สำเร็จ เพราะเชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่");
-    } finally {
-      setSaving(false);
-    }
+    const saved = await employeeWorkflow.saveEmployee({ employee: editing, form, lookups });
+    if (!saved) return;
+    setFormOpen(false);
+    setEditing(null);
   }
 
   function beginOffboard(employee) {
     setDeleteTarget(employee);
     setOffboardingEndDate(todayStr());
-    setDeleteError("");
+    setOffboardError("");
   }
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    if (!offboardingEndDate) {
-      setDeleteError("กรุณาระบุวันที่สิ้นสุดการทำงาน");
-      return;
-    }
-    setDeleting(true);
-    setDeleteError("");
-    try {
-      const response = await fetch(`/api/employees/${deleteTarget.id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endDate: offboardingEndDate }),
-      });
-      const payload = await readJsonSafe(response);
-      if (!response.ok) {
-        setDeleteError(explainFailure(payload.error, "เปลี่ยนสถานะพนักงานเป็นพ้นสภาพไม่สำเร็จ"));
-        return;
-      }
-      setNotice({ type: "success", message: `เปลี่ยนสถานะ ${deleteTarget.firstName} ${deleteTarget.lastName} เป็นพ้นสภาพสำเร็จ วันที่สิ้นสุดงาน ${formatThaiDate(payload.item?.endDate || offboardingEndDate)}` });
-      if (selected?.id === deleteTarget.id) setSelected(payload.item || null);
-      setDeleteTarget(null);
-      setPage(1);
-      setRefreshKey((current) => current + 1);
-    } catch {
-      setDeleteError("เปลี่ยนสถานะพนักงานเป็นพ้นสภาพไม่สำเร็จ เพราะเชื่อมต่อระบบไม่ได้ กรุณาตรวจสอบเครือข่ายแล้วลองใหม่");
-    } finally {
-      setDeleting(false);
-    }
+    const completed = await employeeWorkflow.offboardEmployee({ employee: deleteTarget, endDate: offboardingEndDate });
+    if (!completed) return;
+    setDeleteTarget(null);
   }
 
   function beginMasterEdit(item) {
@@ -732,15 +615,15 @@ export default function EmployeeModule() {
 
       <HrmDialog
         open={Boolean(deleteTarget)}
-        onClose={() => { if (!deleting) { setDeleteTarget(null); setDeleteError(""); } }}
+        onClose={() => { if (!offboarding) { setDeleteTarget(null); setOffboardError(""); } }}
         title="ยืนยันการเปลี่ยนสถานะพนักงาน"
         description="ระบบจะเก็บข้อมูลและประวัติของพนักงานไว้ พร้อมบันทึกวันที่สิ้นสุดการทำงาน"
         size="sm"
-        footer={<><Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleting}>ยกเลิก</Button><Button type="button" variant="danger" onClick={confirmDelete} disabled={deleting}>{deleting ? "กำลังดำเนินการ..." : "ยืนยันพ้นสภาพ"}</Button></>}
+        footer={<><Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={offboarding}>ยกเลิก</Button><Button type="button" variant="danger" onClick={confirmDelete} disabled={offboarding}>{offboarding ? "กำลังดำเนินการ..." : "ยืนยันพ้นสภาพ"}</Button></>}
       >
         <p className="text-sm text-foreground">เปลี่ยน <strong>{deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : ""}</strong> เป็นพ้นสภาพในวันที่</p>
-        <Input className="mt-3" label="วันที่สิ้นสุดการทำงาน" type="date" value={offboardingEndDate} onChange={(value) => { setOffboardingEndDate(value); setDeleteError(""); }} isRequired />
-        {deleteError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{deleteError}</p> : null}
+        <Input className="mt-3" label="วันที่สิ้นสุดการทำงาน" type="date" value={offboardingEndDate} onChange={(value) => { setOffboardingEndDate(value); setOffboardError(""); }} isRequired />
+        {offboardError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{offboardError}</p> : null}
       </HrmDialog>
 
       <HrmDialog
