@@ -14,9 +14,8 @@ import {
 
 const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
-// Leave isn't calendar-scoped like OT (no `month` param) — list everything
-// newest-first, capped to the most recent 200 rows.
-const LIST_LIMIT = 200;
+// Leave isn't calendar-scoped like OT (no `month` param), so the dashboard
+// needs the complete set for its calendar and year-to-date summaries.
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
@@ -51,8 +50,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     .innerJoin(leaveTypes, eq(leaveRequests.leaveTypeCode, leaveTypes.code))
     .innerJoin(requestStatuses, eq(leaveRequests.statusCode, requestStatuses.code))
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(desc(leaveRequests.createdAt))
-    .limit(LIST_LIMIT);
+    .orderBy(desc(leaveRequests.createdAt));
 
   return NextResponse.json({ items: rows.map((row) => ({ ...toLeaveItemDto(row), employeeDepartmentName: row.employeeDepartmentName })) });
 });
