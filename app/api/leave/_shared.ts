@@ -13,7 +13,12 @@ import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/
 // anywhere here, just "YYYY-MM-DD" string validation/comparison.
 
 export function isValidDateStr(value: unknown): value is string {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  try {
+    return new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+  } catch {
+    return false;
+  }
 }
 
 export const SESSION_VALUES = new Set(["full", "am", "pm"]);

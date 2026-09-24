@@ -46,6 +46,8 @@ function daySpan(start, end, session) {
 export function LeaveRequestDialog({ open, mode = "create", initialValues = null, onClose, onSaved = () => {} }) {
   const isEdit = mode === "edit";
   const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leaveTypesLoading, setLeaveTypesLoading] = useState(false);
+  const [leaveTypesError, setLeaveTypesError] = useState("");
   const [leaveTypeCode, setLeaveTypeCode] = useState("");
   const [startDate, setStartDate] = useState(defaultDate);
   const [endDate, setEndDate] = useState(defaultDate);
@@ -57,8 +59,13 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
   useEffect(() => {
     if (!open) return undefined;
     let cancelled = false;
+    setLeaveTypesLoading(true);
+    setLeaveTypesError("");
     fetch("/api/leave-types")
-      .then((response) => (response.ok ? response.json() : { items: [] }))
+      .then((response) => {
+        if (!response.ok) throw new Error("failed to load leave types");
+        return response.json();
+      })
       .then((payload) => {
         if (!cancelled) {
           const supportedTypes = (payload.items || []).filter((type) => type.isActive && LEAVE_TYPE_CODES.has(type.code));
@@ -67,10 +74,17 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
             const rightIndex = LEAVE_TYPE_PRESENTATION.findIndex((type) => type.code === right.code);
             return leftIndex - rightIndex;
           }));
+          if (supportedTypes.length === 0) setLeaveTypesError("ไม่พบประเภทการลาที่เปิดใช้งานในฐานข้อมูล");
         }
       })
       .catch(() => {
-        if (!cancelled) setLeaveTypes([]);
+        if (!cancelled) {
+          setLeaveTypes([]);
+          setLeaveTypesError("โหลดประเภทการลาไม่สำเร็จ กรุณาลองปิดแล้วเปิดหน้าต่างใหม่");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLeaveTypesLoading(false);
       });
     return () => {
       cancelled = true;
@@ -97,14 +111,16 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
 
   useEffect(() => {
     if (!open || isEdit) return;
-    if (!leaveTypeCode && leaveTypes.length > 0) setLeaveTypeCode(leaveTypes[0].code);
+    if (leaveTypes.length > 0 && !leaveTypes.some((type) => type.code === leaveTypeCode)) {
+      setLeaveTypeCode(leaveTypes[0].code);
+    }
   }, [open, isEdit, leaveTypes, leaveTypeCode]);
 
   const isSingleDay = startDate && endDate && startDate.toString() === endDate.toString();
   const days = useMemo(() => daySpan(startDate, endDate, session), [startDate, endDate, session]);
   const isValidRange = Boolean(startDate) && Boolean(endDate) && startDate.compare(endDate) <= 0;
   const isValidSession = isSingleDay || session === "full";
-  const canSubmit = Boolean(leaveTypeCode) && isValidRange && isValidSession && !submitting;
+  const canSubmit = leaveTypes.some((type) => type.code === leaveTypeCode) && isValidRange && isValidSession && !leaveTypesLoading && !submitting;
 
   function resetForm() {
     setLeaveTypeCode("");
@@ -180,7 +196,7 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
     <HrmDialog
       open={open}
       onClose={handleClose}
-      title={isEdit ? "แก้ไขคำขอลา" : "สร้างคำขอลา"}
+      title={isEdit ? "แก้ไขคำขอลา" : "เพิ่มข้อมูลการลา"}
       description="ระบุประเภท ช่วงวันที่ และเหตุผลของการลาให้ครบถ้วน"
       size="lg"
       footer={
@@ -204,11 +220,14 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
               aria-label="ประเภทการลา"
               selectedKey={leaveTypeCode}
               onSelectionChange={(value) => setLeaveTypeCode(String(value))}
+              isDisabled={leaveTypesLoading || leaveTypes.length === 0}
             >
               {leaveTypes.map((type) => (
                 <SelectItem id={type.code} key={type.code}>{type.name}</SelectItem>
               ))}
             </Select>
+            {leaveTypesLoading ? <p role="status" className="text-xs leading-5 text-muted-foreground">กำลังโหลดประเภทการลา...</p> : null}
+            {leaveTypesError ? <p role="alert" className="text-xs leading-5 text-status-danger">{leaveTypesError}</p> : null}
           </div>
           <div className="space-y-1">
             <span className="text-xs font-medium leading-5 text-muted-foreground">ช่วงที่ลา</span>

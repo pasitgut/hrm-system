@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveRequests } from "@/lib/db/schema";
@@ -46,16 +46,23 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 
   const decisionNote: string | null = typeof note === "string" ? note : null;
 
-  await db
+  const decidedAt = new Date();
+  const [updated] = await db
     .update(leaveRequests)
     .set({
       statusCode: decision,
       decidedByEmployeeId: user.employeeId,
-      decidedAt: new Date(),
+      decidedAt,
       decisionNote,
-      updatedAt: new Date(),
+      updatedAt: decidedAt,
     })
-    .where(eq(leaveRequests.id, id));
+    .where(and(
+      eq(leaveRequests.id, id),
+      eq(leaveRequests.statusCode, "pending"),
+    ))
+    .returning({ id: leaveRequests.id });
+
+  if (!updated) return jsonError(409, "Request has already been decided");
 
   const item = await fetchLeaveItemById(id);
   return NextResponse.json({ item });
