@@ -11,8 +11,6 @@ import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
 import { LeaveRequestPanel } from "@/components/hrm/leave/LeaveRequestPanel";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 
-const ROLE_LABELS = { employee: "พนักงาน", supervisor: "หัวหน้างาน", ceo: "ผู้บริหาร" };
-
 export default function LeaveModule() {
   const { role } = useHrmRole();
   const [addOpen, setAddOpen] = useState(false);
@@ -68,7 +66,6 @@ export default function LeaveModule() {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ{isTeamView ? "และทีม" : ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs text-muted-foreground">{ROLE_LABELS[role] || role}</span>
           <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>
         </div>
       </section>
@@ -92,7 +89,7 @@ export default function LeaveModule() {
         <LeaveSummaryView refreshKey={refreshKey} />
       </section>
 
-      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
+      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
         <LeaveCalendarView items={items} isTeamView={isTeamView} />
         <LeaveRequestPanel items={items} loading={loading} role={role} onUpdated={handleDecision} />
       </section>
