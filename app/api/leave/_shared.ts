@@ -38,6 +38,11 @@ export function leaveDaySpan(startOn: string, endOn: string, session: string): n
   return Math.round((end - start) / 86_400_000) + 1;
 }
 
+export function leaveQuotaExceededMessage(leaveTypeName: string, requestedDays: number, remainingDays: number): string {
+  const formatDays = (value: number) => new Intl.NumberFormat("th-TH", { maximumFractionDigits: 1 }).format(value);
+  return `จำนวนวันที่ขอ (${formatDays(requestedDays)} วัน) เกินโควต้าคงเหลือของ${leaveTypeName} (${formatDays(Math.max(0, remainingDays))} วัน)`;
+}
+
 export function jsonError(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
 }
@@ -87,11 +92,6 @@ export function parseLeaveInput(body: Record<string, unknown>): LeaveInputResult
       reason: typeof reason === "string" ? reason.trim() || null : null,
     },
   };
-}
-
-export async function isActiveLeaveType(code: string): Promise<boolean> {
-  const [row] = await db.select({ isActive: leaveTypes.isActive }).from(leaveTypes).where(eq(leaveTypes.code, code));
-  return Boolean(row?.isActive);
 }
 
 // Columns for the standard employee/leave-type/status join used by every

@@ -9,6 +9,7 @@ import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
+import { useHrmRole } from "@/components/hrm/HrmShell";
 import { formatDays } from "@/components/hrm/leave/leaveStatus";
 import { LEAVE_TYPE_CODES, LEAVE_TYPE_PRESENTATION } from "@/components/hrm/leave/leaveTypes";
 
@@ -45,9 +46,14 @@ function daySpan(start, end, session) {
 // the form.
 export function LeaveRequestDialog({ open, mode = "create", initialValues = null, onClose, onSaved = () => {} }) {
   const isEdit = mode === "edit";
+  const employeeId = useHrmRole()?.employeeId;
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveTypesLoading, setLeaveTypesLoading] = useState(false);
   const [leaveTypesError, setLeaveTypesError] = useState("");
+  const [quotaRows, setQuotaRows] = useState([]);
+  const [quotaLoadedFor, setQuotaLoadedFor] = useState("");
+  const [quotaLoading, setQuotaLoading] = useState(false);
+  const [quotaError, setQuotaError] = useState("");
   const [leaveTypeCode, setLeaveTypeCode] = useState("");
   const [startDate, setStartDate] = useState(defaultDate);
   const [endDate, setEndDate] = useState(defaultDate);
@@ -55,6 +61,59 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const quotaYear = startDate?.year;
+
+  useEffect(() => {
+    if (!open) {
+      setQuotaRows([]);
+      setQuotaLoadedFor("");
+      setQuotaLoading(false);
+      return undefined;
+    }
+    if (!employeeId) {
+      setQuotaRows([]);
+      setQuotaLoadedFor("");
+      setQuotaLoading(false);
+      setQuotaError("ไม่พบข้อมูลพนักงาน จึงตรวจสอบโควต้าการลาไม่ได้");
+      return undefined;
+    }
+
+    let cancelled = false;
+    setQuotaLoading(true);
+    setQuotaError("");
+    setQuotaRows([]);
+    setQuotaLoadedFor("");
+    fetch(`/api/leave/summary?employeeId=${encodeURIComponent(employeeId)}&year=${quotaYear}`)
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "โหลดโควต้าการลาไม่สำเร็จ");
+        if (payload.scope !== "individual" || payload.employeeId !== employeeId || !Array.isArray(payload.quotas)) {
+          throw new Error("ไม่พบข้อมูลโควต้าการลาของพนักงาน");
+        }
+        return payload.quotas;
+      })
+      .then((quotas) => {
+        if (!cancelled) {
+          setQuotaRows(quotas);
+          setQuotaLoadedFor(`${employeeId}:${quotaYear}`);
+        }
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setQuotaRows([]);
+          setQuotaLoadedFor("");
+          setQuotaError(cause instanceof Error ? cause.message : "โหลดโควต้าการลาไม่สำเร็จ กรุณาลองใหม่");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuotaLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, employeeId, quotaYear]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -120,7 +179,16 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
   const days = useMemo(() => daySpan(startDate, endDate, session), [startDate, endDate, session]);
   const isValidRange = Boolean(startDate) && Boolean(endDate) && startDate.compare(endDate) <= 0;
   const isValidSession = isSingleDay || session === "full";
-  const canSubmit = leaveTypes.some((type) => type.code === leaveTypeCode) && isValidRange && isValidSession && !leaveTypesLoading && !submitting;
+  const selectedQuota = quotaRows.find((quota) => quota.code === leaveTypeCode);
+  const ownPendingDays = isEdit && initialValues?.leaveTypeCode === leaveTypeCode && initialValues.startOn?.slice(0, 4) === String(quotaYear)
+    ? daySpan(parseDate(initialValues.startOn), parseDate(initialValues.endOn), initialValues.session || "full")
+    : 0;
+  const availableDays = selectedQuota?.annualQuotaDays == null
+    ? null
+    : Math.max(0, (selectedQuota.availableDays ?? selectedQuota.remainingDays) + ownPendingDays);
+  const quotaExceeded = selectedQuota?.annualQuotaDays != null && days > availableDays;
+  const quotaReady = !quotaLoading && !quotaError && quotaLoadedFor === `${employeeId}:${quotaYear}` && Boolean(selectedQuota);
+  const canSubmit = leaveTypes.some((type) => type.code === leaveTypeCode) && isValidRange && isValidSession && quotaReady && !quotaExceeded && !leaveTypesLoading && !submitting;
 
   function resetForm() {
     setLeaveTypeCode("");
@@ -252,6 +320,24 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
           </div>
           <strong className="text-lg font-semibold tracking-tight leading-6 text-primary">{formatDays(days)}</strong>
         </div>
+        {quotaLoading ? (
+          <p role="status" className="text-xs leading-5 text-muted-foreground">กำลังตรวจสอบโควต้าคงเหลือสำหรับปี {quotaYear}...</p>
+        ) : quotaError ? (
+          <p role="alert" className="text-xs leading-5 text-status-danger">{quotaError}</p>
+        ) : !selectedQuota ? (
+          <p role="alert" className="text-xs leading-5 text-status-danger">ไม่พบข้อมูลโควต้าสำหรับประเภทการลานี้ จึงยังส่งคำขอไม่ได้</p>
+        ) : selectedQuota.annualQuotaDays == null ? (
+          <p className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs leading-5 text-muted-foreground">ประเภทนี้ไม่มีการจำกัดโควต้ารายปี</p>
+        ) : quotaExceeded ? (
+          <div role="alert" className="rounded-xl border border-status-danger/30 bg-status-danger/5 px-4 py-3 text-xs leading-5 text-status-danger">
+            จำนวนวันที่ขอ ({formatDays(days)} วัน) เกินโควต้าคงเหลือของประเภทนี้ ({formatDays(availableDays)} วัน) กรุณาปรับช่วงวันลา
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-muted/40 px-4 py-3 text-xs leading-5">
+            <span className="text-muted-foreground">โควต้าปี {quotaYear}: ใช้แล้ว {formatDays(selectedQuota.usedDays)} วัน · รออนุมัติ {formatDays(Math.max(0, selectedQuota.pendingDays - ownPendingDays))} วัน · ทั้งหมด {formatDays(selectedQuota.annualQuotaDays)} วัน</span>
+            <span className="font-medium text-foreground">คงเหลือ {formatDays(availableDays)} วัน</span>
+          </div>
+        )}
         <Textarea
           label="สาเหตุการลา"
           hint="ไม่บังคับ แต่ช่วยให้หัวหน้างานพิจารณาได้เร็วขึ้น"

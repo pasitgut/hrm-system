@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
@@ -6,21 +6,24 @@ import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { jsonError, leaveDaySpan } from "@/app/api/leave/_shared";
 
 // Leave quotas are annual, not monthly (no `month` param like OT's
-// summary) — always scoped to the current calendar year via
-// `new Date().getFullYear()`. Date-only columns, so no Bangkok-offset
-// concerns anywhere here.
+// summary). They default to the current calendar year and accept an
+// explicit year for requests that begin outside it. Date-only columns,
+// so no Bangkok-offset concerns anywhere here.
 //
 // A request that spans a year boundary (e.g. Dec 30 -> Jan 2) is counted
 // entirely in the year its startOn falls in — a documented simplification,
 // consistent with how leave is booked/decided as a single request.
 
-function currentYearBounds(): { start: string; end: string } {
-  const year = new Date().getFullYear();
+function yearBounds(year: number): { start: string; end: string } {
   return { start: `${year}-01-01`, end: `${year}-12-31` };
 }
 
-async function individualSummary(employeeId: string) {
-  const { start, end } = currentYearBounds();
+function currentYearBounds(): { start: string; end: string } {
+  return yearBounds(new Date().getFullYear());
+}
+
+async function individualSummary(employeeId: string, year = new Date().getFullYear()) {
+  const { start, end } = yearBounds(year);
 
   const [employee] = await db
     .select({ firstName: employees.firstName, lastName: employees.lastName })
@@ -33,9 +36,10 @@ async function individualSummary(employeeId: string) {
     .where(eq(leaveTypes.isActive, true))
     .orderBy(asc(leaveTypes.name));
 
-  const approvedRows = await db
+  const requestRows = await db
     .select({
       leaveTypeCode: leaveRequests.leaveTypeCode,
+      statusCode: leaveRequests.statusCode,
       startOn: leaveRequests.startOn,
       endOn: leaveRequests.endOn,
       session: leaveRequests.session,
@@ -44,26 +48,31 @@ async function individualSummary(employeeId: string) {
     .where(
       and(
         eq(leaveRequests.employeeId, employeeId),
-        eq(leaveRequests.statusCode, "approved"),
+        inArray(leaveRequests.statusCode, ["approved", "pending"]),
         gte(leaveRequests.startOn, start),
         lte(leaveRequests.startOn, end),
       ),
     );
 
   const usedByType = new Map<string, number>();
-  for (const row of approvedRows) {
+  const pendingByType = new Map<string, number>();
+  for (const row of requestRows) {
     const span = leaveDaySpan(row.startOn, row.endOn, row.session);
-    usedByType.set(row.leaveTypeCode, (usedByType.get(row.leaveTypeCode) ?? 0) + span);
+    const totals = row.statusCode === "approved" ? usedByType : pendingByType;
+    totals.set(row.leaveTypeCode, (totals.get(row.leaveTypeCode) ?? 0) + span);
   }
 
   const quotas = types.map((type) => {
     const usedDays = usedByType.get(type.code) ?? 0;
+    const pendingDays = pendingByType.get(type.code) ?? 0;
     return {
       code: type.code,
       name: type.name,
       annualQuotaDays: type.annualQuotaDays,
       usedDays,
+      pendingDays,
       remainingDays: type.annualQuotaDays == null ? null : type.annualQuotaDays - usedDays,
+      availableDays: type.annualQuotaDays == null ? null : type.annualQuotaDays - usedDays - pendingDays,
     };
   });
 
@@ -134,17 +143,22 @@ async function companySummary() {
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
   const employeeIdParam = request.nextUrl.searchParams.get("employeeId");
+  const yearParam = request.nextUrl.searchParams.get("year");
+  const year = yearParam == null ? new Date().getFullYear() : Number(yearParam);
+  if (yearParam != null && (!/^\d{4}$/.test(yearParam) || !Number.isInteger(year) || year < 1 || year > 9999)) {
+    return jsonError(400, "Invalid year");
+  }
 
   if (user.role === "employee") {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {
       return jsonError(403, "Forbidden");
     }
-    return NextResponse.json(await individualSummary(user.employeeId));
+    return NextResponse.json(await individualSummary(user.employeeId, year));
   }
 
   // supervisor / ceo
   if (employeeIdParam) {
-    return NextResponse.json(await individualSummary(employeeIdParam));
+    return NextResponse.json(await individualSummary(employeeIdParam, year));
   }
 
   // Company scope — gated directly on role (no canViewCompanyLeave export;
