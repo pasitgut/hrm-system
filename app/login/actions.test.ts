@@ -1,0 +1,55 @@
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { closeDb, resetDb } from "@/tests/setup/db";
+import { createUser } from "@/tests/setup/factories";
+import { authenticate } from "@/app/login/actions";
+
+beforeEach(resetDb);
+afterAll(closeDb);
+
+describe("authenticate", () => {
+  it("succeeds for a matching email + password", async () => {
+    const { user, plainPassword } = await createUser({ email: "authtest@peopleos.co", role: "employee" });
+
+    const result = await authenticate("authtest@peopleos.co", plainPassword);
+
+    expect(result?.id).toBe(user.id);
+  });
+
+  it("is case-insensitive on the email", async () => {
+    const { user, plainPassword } = await createUser({ email: "mixedcase@peopleos.co", role: "supervisor" });
+
+    const result = await authenticate("MixedCase@PeopleOS.co", plainPassword);
+
+    expect(result?.id).toBe(user.id);
+  });
+
+  it("accepts an employee code as the login identifier", async () => {
+    const { user, employee, plainPassword } = await createUser({ email: "code-login@peopleos.co" });
+
+    const result = await authenticate(employee!.code, plainPassword);
+
+    expect(result?.id).toBe(user.id);
+  });
+
+  it("fails for the wrong password", async () => {
+    await createUser({ email: "wrongpass@peopleos.co", plainPassword: "Password123!" });
+
+    const result = await authenticate("wrongpass@peopleos.co", "TotallyWrong1!");
+
+    expect(result).toBeNull();
+  });
+
+  it("fails for an unknown email", async () => {
+    const result = await authenticate("nobody@peopleos.co", "Password123!");
+
+    expect(result).toBeNull();
+  });
+
+  it("fails for a deactivated user even with the correct password", async () => {
+    const { plainPassword } = await createUser({ email: "inactive@peopleos.co", isActive: false });
+
+    const result = await authenticate("inactive@peopleos.co", plainPassword);
+
+    expect(result).toBeNull();
+  });
+});
