@@ -32,11 +32,6 @@ function overlapsYear(item, year) {
   return item.startOn <= `${year}-12-31` && item.endOn >= `${year}-01-01`;
 }
 
-function daysInYearForRequest(item, year) {
-  return Array.from({ length: 12 }, (_, month) => daysInMonthForRequest(item, year, month))
-    .reduce((total, days) => total + days, 0);
-}
-
 function monthLabel(year, month) {
   return new Intl.DateTimeFormat("th-TH", { month: "short" }).format(new Date(year, month, 1));
 }
@@ -99,47 +94,6 @@ function MonthlyLeaveChart({ year, items }) {
   );
 }
 
-function SickLeaveByDepartment({ items, year }) {
-  const daysByDepartment = new Map();
-  for (const item of items) {
-    if (item.leaveTypeCode !== "sick" || !item.employeeDepartmentName) continue;
-    daysByDepartment.set(
-      item.employeeDepartmentName,
-      (daysByDepartment.get(item.employeeDepartmentName) || 0) + daysInYearForRequest(item, year),
-    );
-  }
-  const departments = Array.from(daysByDepartment, ([name, days]) => ({ name, days }))
-    .toSorted((left, right) => right.days - left.days)
-    .slice(0, 5);
-  const maxDays = Math.max(1, ...departments.map((department) => department.days));
-
-  return (
-    <section className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5" aria-labelledby="leave-department-heading">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="leave-department-heading" className="text-base font-semibold leading-6 text-foreground">หน่วยงานที่ลาป่วยสูง</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">รวมวันลาป่วยที่อนุมัติและรออนุมัติในปีนี้</p>
-        </div>
-        <span className="text-xs text-muted-foreground">5 อันดับ</span>
-      </div>
-      <div className="mt-5 space-y-5">
-        {departments.map((department) => (
-          <div key={department.name}>
-            <div className="mb-2 flex items-center justify-between gap-3 text-xs">
-              <span className="truncate font-medium text-foreground">{department.name}</span>
-              <span className="shrink-0 text-muted-foreground">{formatDays(department.days)}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted" role="meter" aria-label={`${department.name} ลาป่วย ${formatDays(department.days)}`} aria-valuemin={0} aria-valuemax={maxDays} aria-valuenow={department.days}>
-              <div className="h-full rounded-full bg-status-danger" style={{ width: `${Math.round((department.days / maxDays) * 100)}%` }} />
-            </div>
-          </div>
-        ))}
-        {departments.length === 0 ? <p className="py-8 text-center text-xs leading-5 text-muted-foreground">ยังไม่มีข้อมูลลาป่วยของหน่วยงาน</p> : null}
-      </div>
-    </section>
-  );
-}
-
 function RequestStatusSummary({ items }) {
   const counts = REQUEST_STATUSES.map((status) => ({
     ...status,
@@ -171,9 +125,9 @@ export function LeaveInsightsView({ items = [], isTeamView = false }) {
   const countableItems = overlappingYearItems.filter((item) => item.statusCode === "approved" || item.statusCode === "pending");
 
   return (
-    <div className="grid min-w-0 gap-4 xl:grid-cols-2">
+    <div className={cn("grid min-w-0 gap-4", !isTeamView && "xl:grid-cols-2")}>
       <MonthlyLeaveChart year={year} items={countableItems} />
-      {isTeamView ? <SickLeaveByDepartment items={countableItems} year={year} /> : <RequestStatusSummary items={yearItems} />}
+      {!isTeamView ? <RequestStatusSummary items={yearItems} /> : null}
     </div>
   );
 }
