@@ -2,7 +2,8 @@ import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { departments, employees, employmentStatuses, employmentTypes, positions } from "@/lib/db/schema";
+import { hashPassword } from "@/lib/auth/password";
+import { departments, employees, employmentStatuses, employmentTypes, positions, users } from "@/lib/db/schema";
 
 // Shared helpers for the app/api/employees/** Route Handlers: the joined
 // select used by every read, the GET response DTO, employee-code conflicts,
@@ -77,6 +78,24 @@ type EmployeeRow = {
 
 export type EmployeeItemDto = ReturnType<typeof toEmployeeItemDto>;
 
+export type EmployeeLifecycleFailure = {
+  ok: false;
+  kind: "invalid" | "not-found" | "conflict";
+  message: string;
+};
+
+export type EmployeeLifecycleOutcome<T> = { ok: true; value: T } | EmployeeLifecycleFailure;
+
+function lifecycleFailure(kind: EmployeeLifecycleFailure["kind"], message: string): EmployeeLifecycleFailure {
+  return { ok: false, kind, message };
+}
+
+export function employeeLifecycleResponse<T>(outcome: EmployeeLifecycleOutcome<T>, status = 200) {
+  if (outcome.ok === true) return NextResponse.json({ item: outcome.value }, { status });
+  const statusByKind = { invalid: 400, "not-found": 404, conflict: 409 } as const;
+  return jsonError(statusByKind[outcome.kind], outcome.message);
+}
+
 // Nested department/position/employmentStatus/employmentType (each an
 // {id, name} — employmentType also carries `code`) rather than flat
 // `departmentId`+`departmentName` pairs: the UI's lookup <Select>s bind
@@ -125,6 +144,11 @@ export function employeeBaseSelect() {
 export async function fetchEmployeeItemById(id: string): Promise<EmployeeItemDto | null> {
   const [row] = await employeeBaseSelect().where(eq(employees.id, id));
   return row ? toEmployeeItemDto(row) : null;
+}
+
+export async function employeeExists(id: string): Promise<boolean> {
+  const [employee] = await db.select({ id: employees.id }).from(employees).where(eq(employees.id, id)).limit(1);
+  return employee !== undefined;
 }
 
 export async function fetchActiveEmployeeItems(): Promise<EmployeeItemDto[]> {
@@ -208,4 +232,319 @@ export function constraintName(error: unknown): string | undefined {
 
 export function jsonError(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function uniqueViolationMessage(error: unknown): string {
+  const name = constraintName(error) ?? "";
+  if (name.includes("email")) return "Email is already in use";
+  if (name.includes("citizen_id")) return "Citizen ID is already in use";
+  if (name.includes("code")) return "Employee code is already in use";
+  if (name.includes("line_uid")) return "LINE UID is already in use";
+  return "A unique field conflicts with an existing employee";
+}
+
+async function hasRows<T>(query: PromiseLike<T[]> | null): Promise<boolean> {
+  return query ? (await query).length > 0 : true;
+}
+
+type EmployeeLookupIds = Partial<{
+  departmentId: number | null;
+  positionId: number | null;
+  employmentStatusId: number | null;
+  employmentTypeId: number | null;
+  managerId: string | null;
+}>;
+
+async function missingEmployeeLookup(ids: EmployeeLookupIds): Promise<keyof EmployeeLookupIds | null> {
+  const [departmentExists, positionExists, statusExists, typeExists, managerExists] = await Promise.all([
+    hasRows(ids.departmentId == null ? null : db.select({ id: departments.id }).from(departments).where(eq(departments.id, ids.departmentId)).limit(1)),
+    hasRows(ids.positionId == null ? null : db.select({ id: positions.id }).from(positions).where(eq(positions.id, ids.positionId)).limit(1)),
+    hasRows(ids.employmentStatusId == null ? null : db.select({ id: employmentStatuses.id }).from(employmentStatuses).where(eq(employmentStatuses.id, ids.employmentStatusId)).limit(1)),
+    hasRows(ids.employmentTypeId == null ? null : db.select({ id: employmentTypes.id }).from(employmentTypes).where(eq(employmentTypes.id, ids.employmentTypeId)).limit(1)),
+    hasRows(ids.managerId == null ? null : db.select({ id: employees.id }).from(employees).where(eq(employees.id, ids.managerId)).limit(1)),
+  ]);
+
+  if (ids.departmentId !== undefined && !departmentExists) return "departmentId";
+  if (ids.positionId !== undefined && !positionExists) return "positionId";
+  if (ids.employmentStatusId !== undefined && !statusExists) return "employmentStatusId";
+  if (ids.employmentTypeId !== undefined && !typeExists) return "employmentTypeId";
+  if (ids.managerId && !managerExists) return "managerId";
+  return null;
+}
+
+// Employee creation and its first-login account are one lifecycle operation.
+export async function createEmployee(input: unknown): Promise<EmployeeLifecycleOutcome<EmployeeItemDto | null>> {
+  if (typeof input !== "object" || input === null) {
+    return lifecycleFailure("invalid", "Invalid request body");
+  }
+
+  const {
+    code: codeInput,
+    prefix,
+    firstName,
+    lastName,
+    nickname,
+    citizenId,
+    firstNameEn,
+    lastNameEn,
+    birthDate,
+    email,
+    phone,
+    avatarUrl,
+    startDate,
+    endDate,
+    departmentId,
+    positionId,
+    employmentStatusId,
+    employmentTypeId,
+    managerId,
+  } = input as Record<string, unknown>;
+
+  if (typeof firstName !== "string" || !firstName.trim()) return lifecycleFailure("invalid", "firstName is required");
+  if (typeof lastName !== "string" || !lastName.trim()) return lifecycleFailure("invalid", "lastName is required");
+  if (!isValidDateStr(startDate)) return lifecycleFailure("invalid", "startDate must be a YYYY-MM-DD date");
+  if (endDate != null && endDate !== "" && !isValidDateStr(endDate)) return lifecycleFailure("invalid", "endDate must be a YYYY-MM-DD date");
+  if (typeof endDate === "string" && endDate && endDate < startDate) return lifecycleFailure("invalid", "endDate cannot be before startDate");
+  const departmentIdValue = parseOptionalLookupId(departmentId);
+  const positionIdValue = parseOptionalLookupId(positionId);
+  const employmentStatusIdValue = parseOptionalLookupId(employmentStatusId);
+  const employmentTypeIdValue = parseOptionalLookupId(employmentTypeId);
+  if (departmentIdValue === undefined) return lifecycleFailure("invalid", "Invalid departmentId");
+  if (positionIdValue === undefined) return lifecycleFailure("invalid", "Invalid positionId");
+  if (employmentStatusIdValue === undefined) return lifecycleFailure("invalid", "Invalid employmentStatusId");
+  if (employmentTypeIdValue === undefined) return lifecycleFailure("invalid", "Invalid employmentTypeId");
+  if (typeof email !== "string" || !email.trim()) return lifecycleFailure("invalid", "email is required");
+  if (!isValidEmail(email.trim())) return lifecycleFailure("invalid", "Invalid email");
+  if (birthDate != null && birthDate !== "" && !isValidDateStr(birthDate)) return lifecycleFailure("invalid", "birthDate must be a YYYY-MM-DD date");
+  if (managerId != null && managerId !== "" && !isValidUuid(managerId)) return lifecycleFailure("invalid", "Invalid managerId");
+  if (typeof codeInput !== "string" || !/^\d{4}$/.test(codeInput.trim())) {
+    return lifecycleFailure("invalid", "code must be exactly 4 digits");
+  }
+
+  const employeeCode = codeInput.trim();
+  const employeeEmail = email.trim().toLowerCase();
+  const managerIdValue = managerId != null && managerId !== "" ? managerId as string : null;
+
+  const [codeConflict, missingLookup] = await Promise.all([
+    findEmployeeCodeConflict(employeeCode),
+    missingEmployeeLookup({
+      departmentId: departmentIdValue,
+      positionId: positionIdValue,
+      employmentStatusId: employmentStatusIdValue,
+      employmentTypeId: employmentTypeIdValue,
+      managerId: managerIdValue,
+    }),
+  ]);
+
+  if (codeConflict) return lifecycleFailure("conflict", codeConflict);
+  if (missingLookup) return lifecycleFailure("invalid", `${missingLookup} does not exist`);
+
+  const values = {
+    code: employeeCode,
+    prefix: (prefix as string) || null,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    nickname: (nickname as string) || null,
+    citizenId: (citizenId as string) || null,
+    firstNameEn: (firstNameEn as string) || null,
+    lastNameEn: (lastNameEn as string) || null,
+    birthDate: (birthDate as string) || null,
+    email: employeeEmail,
+    phone: (phone as string) || null,
+    avatarUrl: (avatarUrl as string) || null,
+    startDate,
+    endDate: (endDate as string) || null,
+    departmentId: departmentIdValue,
+    positionId: positionIdValue,
+    employmentStatusId: employmentStatusIdValue,
+    employmentTypeId: employmentTypeIdValue,
+    managerId: managerIdValue,
+  };
+
+  try {
+    const passwordHash = await hashPassword(employeeCode);
+    const employeeId = await db.transaction(async (tx) => {
+      const [inserted] = await tx.insert(employees).values(values).returning({ id: employees.id });
+      await tx.insert(users).values({
+        employeeId: inserted.id,
+        email: employeeEmail,
+        passwordHash,
+        role: "employee",
+        mustChangePassword: true,
+      });
+      return inserted.id;
+    });
+    return { ok: true, value: await fetchEmployeeItemById(employeeId) };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const conflict = await findEmployeeCodeConflict(employeeCode);
+      return lifecycleFailure("conflict", conflict ?? uniqueViolationMessage(error));
+    }
+    if (isForeignKeyViolation(error)) {
+      return lifecycleFailure("invalid", "One of the referenced ids does not exist");
+    }
+    throw error;
+  }
+}
+
+const WRITABLE_STRING_FIELDS = ["prefix", "nickname", "citizenId", "firstNameEn", "lastNameEn", "email", "phone", "avatarUrl"] as const;
+
+// Employee edits and linked account email changes share one validation and
+// transaction boundary.
+export async function updateEmployee(id: string, input: unknown): Promise<EmployeeLifecycleOutcome<EmployeeItemDto | null>> {
+  const [existing] = await db.select({
+    id: employees.id,
+    startDate: employees.startDate,
+    endDate: employees.endDate,
+    deletedAt: employees.deletedAt,
+  }).from(employees).where(eq(employees.id, id)).limit(1);
+  if (!existing) return lifecycleFailure("not-found", "Not found");
+  if (typeof input !== "object" || input === null) return lifecycleFailure("invalid", "Invalid request body");
+  const body = input as Record<string, unknown>;
+
+  const values: Record<string, unknown> = {};
+  if ("firstName" in body) {
+    if (typeof body.firstName !== "string" || !body.firstName.trim()) return lifecycleFailure("invalid", "firstName cannot be empty");
+    values.firstName = body.firstName.trim();
+  }
+  if ("lastName" in body) {
+    if (typeof body.lastName !== "string" || !body.lastName.trim()) return lifecycleFailure("invalid", "lastName cannot be empty");
+    values.lastName = body.lastName.trim();
+  }
+  if ("startDate" in body) {
+    if (!isValidDateStr(body.startDate)) return lifecycleFailure("invalid", "startDate must be a YYYY-MM-DD date");
+    const endDate = "endDate" in body ? body.endDate : existing.endDate;
+    if (typeof endDate === "string" && endDate && endDate < body.startDate) return lifecycleFailure("invalid", "endDate cannot be before startDate");
+    values.startDate = body.startDate;
+  }
+  if ("endDate" in body) {
+    if (body.endDate != null && body.endDate !== "" && !isValidDateStr(body.endDate)) return lifecycleFailure("invalid", "endDate must be a YYYY-MM-DD date");
+    const endDate = body.endDate == null || body.endDate === "" ? null : body.endDate;
+    const startDate = typeof body.startDate === "string" ? body.startDate : existing.startDate;
+    if (endDate && endDate < startDate) return lifecycleFailure("invalid", "endDate cannot be before startDate");
+    values.endDate = endDate;
+  }
+  const resultingEndDate = "endDate" in body
+    ? (body.endDate == null || body.endDate === "" ? null : body.endDate)
+    : existing.endDate;
+  if (existing.deletedAt !== null && !resultingEndDate) {
+    return lifecycleFailure("invalid", "Former employees must have an end date");
+  }
+  if ("birthDate" in body) {
+    if (body.birthDate != null && body.birthDate !== "" && !isValidDateStr(body.birthDate)) return lifecycleFailure("invalid", "birthDate must be a YYYY-MM-DD date");
+    values.birthDate = body.birthDate || null;
+  }
+
+  let requiresLinkedAccount = false;
+  if ("email" in body) {
+    if (body.email != null && body.email !== "" && !isValidEmail(body.email)) return lifecycleFailure("invalid", "Invalid email");
+    const normalizedEmail = body.email == null || body.email === "" ? null : (body.email as string).trim().toLowerCase();
+    requiresLinkedAccount = normalizedEmail === null;
+    values.email = normalizedEmail;
+  }
+  if ("code" in body) {
+    if (typeof body.code !== "string" || !/^\d{4}$/.test(body.code.trim())) {
+      return lifecycleFailure("invalid", "code must be exactly 4 digits");
+    }
+    values.code = body.code.trim();
+  }
+  for (const field of WRITABLE_STRING_FIELDS) {
+    if (field === "email") continue;
+    if (field in body) {
+      const raw = body[field];
+      values[field] = raw == null || raw === "" ? null : raw;
+    }
+  }
+
+  const lookupIds: EmployeeLookupIds = {};
+  for (const field of ["departmentId", "positionId", "employmentStatusId", "employmentTypeId"] as const) {
+    if (!(field in body)) continue;
+    const lookupId = parseOptionalLookupId(body[field]);
+    if (lookupId === undefined) return lifecycleFailure("invalid", `Invalid ${field}`);
+    lookupIds[field] = lookupId;
+    values[field] = lookupId;
+  }
+
+  let managerIdValue: string | null | undefined;
+  if ("managerId" in body) {
+    const managerId = body.managerId;
+    if (managerId == null || managerId === "") {
+      managerIdValue = null;
+    } else {
+      if (!isValidUuid(managerId)) return lifecycleFailure("invalid", "Invalid managerId");
+      if (managerId === id) return lifecycleFailure("invalid", "An employee cannot be their own manager");
+      managerIdValue = managerId;
+    }
+    values.managerId = managerIdValue;
+    lookupIds.managerId = managerIdValue;
+  }
+
+  const [codeConflict, missingLookup, linkedAccountExists] = await Promise.all([
+    typeof values.code === "string" ? findEmployeeCodeConflict(values.code, id) : Promise.resolve(null),
+    missingEmployeeLookup(lookupIds),
+    requiresLinkedAccount ? hasRows(db.select({ id: users.id }).from(users).where(eq(users.employeeId, id)).limit(1)) : Promise.resolve(false),
+  ]);
+
+  if (linkedAccountExists) return lifecycleFailure("invalid", "Email is required for an employee with a login account");
+  if (codeConflict) return lifecycleFailure("conflict", codeConflict);
+  if (missingLookup) return lifecycleFailure("invalid", `${missingLookup} does not exist`);
+
+  if (Object.keys(values).length === 0) {
+    return { ok: true, value: await fetchEmployeeItemById(id) };
+  }
+
+  const updatedAt = new Date();
+  values.updatedAt = updatedAt;
+  try {
+    await db.transaction(async (tx) => {
+      await tx.update(employees).set(values).where(eq(employees.id, id));
+      if (typeof values.email === "string") {
+        await tx.update(users).set({ email: values.email, updatedAt }).where(eq(users.employeeId, id));
+      }
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const conflict = typeof values.code === "string" ? await findEmployeeCodeConflict(values.code, id) : null;
+      return lifecycleFailure("conflict", conflict ?? uniqueViolationMessage(error));
+    }
+    if (isForeignKeyViolation(error)) return lifecycleFailure("invalid", "One of the referenced ids does not exist");
+    throw error;
+  }
+
+  return { ok: true, value: await fetchEmployeeItemById(id) };
+}
+
+// Offboarding preserves employee history while disabling the associated login.
+export async function offboardEmployee(id: string, input: unknown): Promise<EmployeeLifecycleOutcome<EmployeeItemDto | null>> {
+  const [existing] = await db.select({
+    id: employees.id,
+    deletedAt: employees.deletedAt,
+    startDate: employees.startDate,
+  }).from(employees).where(eq(employees.id, id)).limit(1);
+  if (!existing) return lifecycleFailure("not-found", "Not found");
+  if (existing.deletedAt !== null) return lifecycleFailure("conflict", "Employee is already off-boarded");
+
+  let endDate = new Date().toISOString().slice(0, 10);
+  if (typeof input === "object" && input !== null && "endDate" in input) {
+    const requestedEndDate = (input as Record<string, unknown>).endDate;
+    if (!isValidDateStr(requestedEndDate)) return lifecycleFailure("invalid", "endDate must be a YYYY-MM-DD date");
+    endDate = requestedEndDate;
+  }
+  if (endDate < existing.startDate) return lifecycleFailure("invalid", "endDate cannot be before startDate");
+
+  const deletedAt = new Date();
+  const [formerStatus] = await db
+    .select({ id: employmentStatuses.id })
+    .from(employmentStatuses)
+    .where(eq(employmentStatuses.name, "พ้นสภาพ"))
+    .limit(1);
+
+  await db.transaction(async (tx) => {
+    await tx.update(employees)
+      .set({ deletedAt, endDate, updatedAt: deletedAt, employmentStatusId: formerStatus?.id ?? null })
+      .where(eq(employees.id, id));
+    await tx.update(users).set({ isActive: false, updatedAt: deletedAt }).where(eq(users.employeeId, id));
+  });
+
+  return { ok: true, value: await fetchEmployeeItemById(id) };
 }

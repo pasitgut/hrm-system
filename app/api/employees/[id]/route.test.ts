@@ -6,6 +6,7 @@ import { closeDb, resetDb, db } from "@/tests/setup/db";
 import { createEmployee, createUser } from "@/tests/setup/factories";
 import { employees, users } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
+import { authenticate } from "@/app/login/actions";
 
 async function cookieFor(payload: SessionPayload): Promise<string> {
   return createSessionToken(payload);
@@ -97,6 +98,34 @@ describe("PATCH /api/employees/[id]", () => {
     expect(payload.item.firstName).toBe(employee.firstName);
   });
 
+  it("updates the linked login email with the employee email", async () => {
+    const { token } = await tokenFor("supervisor");
+    const employee = await createEmployee({ email: "old.employee@example.com" });
+    const { user } = await createUser({
+      employeeId: employee.id,
+      email: "old.employee@example.com",
+      plainPassword: "Password123!",
+    });
+
+    const response = await PATCH(
+      employeeRequest(`http://localhost/api/employees/${employee.id}`, {
+        method: "PATCH",
+        token,
+        body: { email: "New.Employee@example.com" },
+      }),
+      ctx(employee.id),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.item.email).toBe("new.employee@example.com");
+    await expect(authenticate("old.employee@example.com", "Password123!")).resolves.toBeNull();
+    await expect(authenticate("new.employee@example.com", "Password123!")).resolves.toMatchObject({
+      id: user.id,
+      employeeId: employee.id,
+    });
+  });
+
   it("returns 400 for a managerId equal to the employee's own id", async () => {
     const { token } = await tokenFor("supervisor");
     const employee = await createEmployee();
@@ -114,6 +143,23 @@ describe("PATCH /api/employees/[id]", () => {
       employeeRequest("http://localhost/api/employees/00000000-0000-0000-0000-000000000000", { method: "PATCH", token, body: { nickname: "x" } }),
       ctx("00000000-0000-0000-0000-000000000000"),
     );
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 before parsing malformed JSON for an unknown id", async () => {
+    const { token } = await tokenFor("supervisor");
+    const id = "00000000-0000-0000-0000-000000000000";
+    const request = new NextRequest(`http://localhost/api/employees/${id}`, {
+      method: "PATCH",
+      headers: {
+        cookie: `${COOKIE_NAME}=${token}`,
+        "content-type": "application/json",
+      },
+      body: "{",
+    });
+
+    const response = await PATCH(request, ctx(id));
+
     expect(response.status).toBe(404);
   });
 });
