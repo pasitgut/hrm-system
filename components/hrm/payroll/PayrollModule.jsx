@@ -262,7 +262,7 @@ function ExportCenter({ onDownload }) {
 
 export default function PayrollModule() {
   const [search, setSearch] = useState("");
-  const [onlyReview, setOnlyReview] = useState(false);
+  const [onlyReview, setOnlyReview] = useState(true);
   const [notice, setNotice] = useState("");
   const normalizedSearch = search.trim().toLocaleLowerCase("th-TH");
   const visibleRows = payrollRows.filter((row) => {
