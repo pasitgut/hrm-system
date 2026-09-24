@@ -10,6 +10,7 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { formatDays } from "@/components/hrm/leave/leaveStatus";
+import { LEAVE_TYPE_CODES, LEAVE_TYPE_PRESENTATION } from "@/components/hrm/leave/leaveTypes";
 
 function defaultDate() {
   try {
@@ -59,7 +60,14 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
     fetch("/api/leave-types")
       .then((response) => (response.ok ? response.json() : { items: [] }))
       .then((payload) => {
-        if (!cancelled) setLeaveTypes((payload.items || []).filter((type) => type.isActive));
+        if (!cancelled) {
+          const supportedTypes = (payload.items || []).filter((type) => type.isActive && LEAVE_TYPE_CODES.has(type.code));
+          setLeaveTypes(supportedTypes.toSorted((left, right) => {
+            const leftIndex = LEAVE_TYPE_PRESENTATION.findIndex((type) => type.code === left.code);
+            const rightIndex = LEAVE_TYPE_PRESENTATION.findIndex((type) => type.code === right.code);
+            return leftIndex - rightIndex;
+          }));
+        }
       })
       .catch(() => {
         if (!cancelled) setLeaveTypes([]);

@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
-import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
+import { departments, employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import {
   fetchLeaveItemById,
@@ -44,16 +44,17 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   if (scopedEmployeeId) conditions.push(eq(leaveRequests.employeeId, scopedEmployeeId));
 
   const rows = await db
-    .select(leaveSelectColumns)
+    .select({ ...leaveSelectColumns, employeeDepartmentName: departments.name })
     .from(leaveRequests)
     .innerJoin(employees, eq(leaveRequests.employeeId, employees.id))
+    .leftJoin(departments, eq(employees.departmentId, departments.id))
     .innerJoin(leaveTypes, eq(leaveRequests.leaveTypeCode, leaveTypes.code))
     .innerJoin(requestStatuses, eq(leaveRequests.statusCode, requestStatuses.code))
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(leaveRequests.createdAt))
     .limit(LIST_LIMIT);
 
-  return NextResponse.json({ items: rows.map(toLeaveItemDto) });
+  return NextResponse.json({ items: rows.map((row) => ({ ...toLeaveItemDto(row), employeeDepartmentName: row.employeeDepartmentName })) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {

@@ -136,7 +136,7 @@ COMMENT ON COLUMN "employee_skills"."skill_level" IS 'Allowed values: 1-5';
 
 COMMENT ON TABLE "request_statuses" IS 'pending, approved, rejected, cancelled';
 
-COMMENT ON TABLE "leave_types" IS 'e.g. sick, annual, personal, unpaid';
+COMMENT ON TABLE "leave_types" IS 'Supported codes: personal, sick, birthday';
 
 COMMENT ON TABLE "overtime_requests" IS 'start_at must be earlier than end_at';
 

@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RiAddLine, RiCalendarCheckLine, RiFileList3Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
+import { LeaveCalendarView } from "@/components/hrm/leave/LeaveCalendarView";
+import { LeaveInsightsView } from "@/components/hrm/leave/LeaveInsightsView";
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";
 import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
+import { LeaveRequestPanel } from "@/components/hrm/leave/LeaveRequestPanel";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 
 const ROLE_LABELS = { employee: "พนักงาน", supervisor: "หัวหน้างาน", ceo: "ผู้บริหาร" };
@@ -18,50 +20,104 @@ export default function LeaveModule() {
   const [editTarget, setEditTarget] = useState(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
+  const isTeamView = role === "supervisor" || role === "ceo";
 
   function bump() {
     setRefreshKey((current) => current + 1);
   }
 
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError("");
+
+    fetch("/api/leave?status=all")
+      .then((response) => {
+        if (!response.ok) throw new Error("failed to load");
+        return response.json();
+      })
+      .then((payload) => {
+        if (!cancelled) setItems(payload.items || []);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("ไม่สามารถโหลดรายการวันลาได้ กรุณาลองใหม่");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  function handleDecision(updatedItem) {
+    setItems((current) => current.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
+    setNotice(updatedItem.statusCode === "approved" ? "อนุมัติคำขอลาเรียบร้อยแล้ว" : "ไม่อนุมัติคำขอลาเรียบร้อยแล้ว");
+    bump();
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">People operations · Leave</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight leading-tight text-foreground sm:text-3xl">ระบบวันลา</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">ตรวจสอบโควตา ยื่นคำขอ และติดตามสถานะวันลาของคุณ</p>
+          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">HRM · Leave management</p>
+          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">การลา</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ{isTeamView ? "และทีม" : ""}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Chip color="cyan" variant="caption">บทบาท: {ROLE_LABELS[role] || role}</Chip>
-          <Button leadingIcon={RiCalendarCheckLine} variant="secondary" onClick={() => setPolicyOpen(true)}>นโยบายการลา</Button>
-          <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ขอลา</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs text-muted-foreground">{ROLE_LABELS[role] || role}</span>
+          <Button variant="outline" leadingIcon={RiCalendarCheckLine} onClick={() => setPolicyOpen(true)}>นโยบายการลา</Button>
+          <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>
         </div>
       </section>
+
       {notice ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs font-medium leading-5 text-primary">
+        <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-status-success/25 bg-status-success/10 px-4 py-3 text-xs font-medium leading-5 text-status-success">
           <span>{notice}</span>
           <Button size="xs" variant="ghost" onClick={() => setNotice("")}>ปิด</Button>
         </div>
       ) : null}
-      <section>
-        <div className="mb-3">
-          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">โควต้าประจำปี</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight leading-6 text-foreground">โควต้าวันลาคงเหลือ</h2>
+      {loadError ? <p role="alert" className="rounded-xl border border-status-danger/25 bg-status-danger/10 px-4 py-3 text-xs leading-5 text-status-danger">{loadError}</p> : null}
+
+      <section aria-labelledby="leave-balance-heading">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">โควต้าประจำปี</p>
+            <h2 id="leave-balance-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สิทธิ์วันลาคงเหลือของฉัน</h2>
+          </div>
+          <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
         </div>
         <LeaveSummaryView refreshKey={refreshKey} />
       </section>
-      <section>
+
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
+        <LeaveCalendarView items={items} isTeamView={isTeamView} />
+        <LeaveRequestPanel items={items} loading={loading} role={role} onUpdated={handleDecision} />
+      </section>
+
+      <LeaveInsightsView items={items} isTeamView={isTeamView} />
+
+      <section aria-labelledby="leave-history-heading">
         <div className="mb-3 flex items-center gap-2">
-          <RiFileList3Line className="size-5 text-muted-foreground" aria-hidden />
-          <h2 className="text-lg font-semibold tracking-tight leading-6 text-foreground">ประวัติการลา</h2>
+          <RiFileList3Line className="size-5 text-muted-foreground" aria-hidden="true" />
+          <div>
+            <h2 id="leave-history-heading" className="text-base font-semibold leading-6 text-foreground sm:text-lg">ประวัติการลา</h2>
+            <p className="text-xs leading-5 text-muted-foreground">รายการคำขอทั้งหมดและสถานะล่าสุด</p>
+          </div>
         </div>
         <LeaveListView
-          refreshKey={refreshKey}
+          items={items}
+          loading={loading}
           onEdit={(item) => setEditTarget(item)}
           onCancelled={() => { bump(); setNotice("ยกเลิกคำขอลาเรียบร้อยแล้ว"); }}
         />
       </section>
+
       <LeaveRequestDialog
         open={addOpen}
         mode="create"
@@ -79,19 +135,13 @@ export default function LeaveModule() {
         open={policyOpen}
         onClose={() => setPolicyOpen(false)}
         title="นโยบายการลา"
-        description="ประเภทการลาและสิทธิ์การลาต่อปี"
+        description="ประเภทการลาและขั้นตอนการยื่นคำขอ"
         footer={<Button onClick={() => setPolicyOpen(false)}>เข้าใจแล้ว</Button>}
       >
         <div className="space-y-3 text-xs leading-5 text-muted-foreground">
-          <div className="rounded-xl border border-border p-4">
-            <strong className="text-sm font-medium leading-5 text-foreground">ลาป่วย</strong>
-            <p className="mt-1">ใช้ได้ตามโควต้าประจำปี แนบใบรับรองแพทย์เมื่อหยุดต่อเนื่องหลายวัน</p>
-          </div>
-          <div className="rounded-xl border border-border p-4">
-            <strong className="text-sm font-medium leading-5 text-foreground">ลาพักร้อน</strong>
-            <p className="mt-1">แจ้งล่วงหน้าและรอการอนุมัติจากหัวหน้างานก่อนวันที่ลา</p>
-          </div>
-          <p>ดูรายละเอียดประเภทการลาทั้งหมดและโควต้าคงเหลือได้ที่การ์ดโควต้าด้านบน</p>
+          <p>ระบบรองรับการลา 3 ประเภท: ลากิจ ลาป่วย และลาวันเกิด โดยแสดงสิทธิ์คงเหลือตามโควต้าที่ตั้งไว้</p>
+          <p>เลือกประเภท ระบุช่วงวันที่และเหตุผล แล้วส่งคำขอเพื่อให้หัวหน้างานพิจารณา</p>
+          <p>ตรวจสอบโควต้าคงเหลือและสถานะคำขอได้จากหน้าแดชบอร์ดนี้</p>
         </div>
       </HrmDialog>
     </div>

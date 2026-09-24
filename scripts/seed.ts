@@ -68,9 +68,8 @@ async function main() {
 
   await db.insert(leaveTypes).values([
     { code: "sick", name: "ลาป่วย", annualQuotaDays: 30 },
-    { code: "annual", name: "ลาพักร้อน", annualQuotaDays: 10 },
     { code: "personal", name: "ลากิจ", annualQuotaDays: 3 },
-    { code: "unpaid", name: "ลาโดยไม่รับค่าจ้าง", annualQuotaDays: null },
+    { code: "birthday", name: "ลาวันเกิด", annualQuotaDays: 1 },
   ]);
 
   const allDepartments = await db.select().from(departments);

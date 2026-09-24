@@ -7,7 +7,7 @@ import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { formatDateRange, formatDays, LEAVE_STATUS_TABS, statusColor } from "@/components/hrm/leave/leaveStatus";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 function StatusTabs({ selected, counts, onChange }) {
   return (
@@ -21,13 +21,13 @@ function StatusTabs({ selected, counts, onChange }) {
             aria-selected={isSelected}
             key={tab.key}
             onClick={() => onChange(tab.key)}
-            className={cx(
+            className={cn(
               "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-medium leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isSelected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             {tab.label}
-            <span className={cx("rounded-full px-1.5 py-0.5 text-xs font-medium leading-4", isSelected ? "bg-card/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
+            <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium leading-4", isSelected ? "bg-card/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
               {counts[tab.key] ?? 0}
             </span>
           </button>
@@ -96,10 +96,10 @@ function LeaveCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
 // available to any caller that already has a list to filter. Without it the
 // view fetches GET /api/leave?status=all itself and filters the 4 tabs
 // client-side, so switching tabs never re-hits the network.
-export function LeaveListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}, onCancelled = () => {} }) {
+export function LeaveListView({ items: itemsProp, loading: loadingProp = false, refreshKey = 0, onEdit = () => {}, onCancelled = () => {} }) {
   const { role, employeeId } = useHrmRole();
   const [items, setItems] = useState(itemsProp || []);
-  const [loading, setLoading] = useState(!itemsProp);
+  const [loading, setLoading] = useState(itemsProp === undefined);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -107,9 +107,9 @@ export function LeaveListView({ items: itemsProp, refreshKey = 0, onEdit = () =>
   const [cancelError, setCancelError] = useState("");
 
   useEffect(() => {
-    if (itemsProp) {
-      setItems(itemsProp);
-      setLoading(false);
+    if (itemsProp !== undefined) {
+      setItems(itemsProp || []);
+      setLoading(Boolean(loadingProp));
       return undefined;
     }
     let cancelled = false;
@@ -132,7 +132,7 @@ export function LeaveListView({ items: itemsProp, refreshKey = 0, onEdit = () =>
     return () => {
       cancelled = true;
     };
-  }, [itemsProp, refreshKey]);
+  }, [itemsProp, loadingProp, refreshKey]);
 
   const counts = useMemo(
     () => ({
