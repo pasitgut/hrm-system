@@ -203,8 +203,8 @@ export default function ReportsModule() {
   const [endYear, setEndYear] = useState(String(currentYear));
   const [scope, setScope] = useState("all");
   const [sortRules, setSortRules] = useState([{ id: 1, field: "position", direction: "desc" }]);
-  const [showTable, setShowTable] = useState(false);
-  const [newPageByMonth, setNewPageByMonth] = useState(false);
+  const [separateMonthColumns, setSeparateMonthColumns] = useState(false);
+  const [appendMonthlyDetails, setAppendMonthlyDetails] = useState(false);
   const [exportNotice, setExportNotice] = useState("");
   const nextSortId = useRef(2);
 
@@ -386,25 +386,25 @@ export default function ReportsModule() {
         <ReportSection
           id="report-display-title"
           icon={RiFileChartLine}
-          title="รูปแบบรายงาน · Display"
-          description="เลือกวิธีแสดงข้อมูลและจัดหน้าเอกสาร"
+          title={periodType === "yearly" ? "รูปแบบรายปี · Annual display" : "รายละเอียดรายเดือน"}
+          description={periodType === "yearly" ? "เลือกมุมมองตารางทั้งปีและหน้าแยกรายเดือน" : "แนบรายละเอียดรายเดือนต่อท้ายสรุป"}
         >
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className={cn("grid gap-3", periodType === "yearly" && "sm:grid-cols-2")}>
             {periodType === "yearly" ? (
               <ReportSwitchOption
-                id="report-table"
-                label="แสดงข้อมูลแบบตาราง"
-                description="จัดข้อมูลเป็นแถวและคอลัมน์"
-                isSelected={showTable}
-                onChange={setShowTable}
+                id="report-month-columns"
+                label="แยกคอลัมน์เดือน (Table View)"
+                description="แสดงตารางต่อเนื่องตลอดทั้งปี"
+                isSelected={separateMonthColumns}
+                onChange={setSeparateMonthColumns}
               />
             ) : null}
             <ReportSwitchOption
-              id="report-page-break"
-              label="แยกหน้าใหม่ตามเดือน"
-              description="เริ่มหน้าใหม่เมื่อเปลี่ยนเดือน"
-              isSelected={newPageByMonth}
-              onChange={setNewPageByMonth}
+              id="report-monthly-details"
+              label="แนบหน้ารายเดือน"
+              description="เพิ่มหน้าแยกรายละเอียดแต่ละเดือนต่อท้ายสรุป"
+              isSelected={appendMonthlyDetails}
+              onChange={setAppendMonthlyDetails}
             />
           </div>
         </ReportSection>
@@ -418,12 +418,12 @@ export default function ReportsModule() {
               {selectedReport?.label} · {periodLabel} · {scope === "all" ? "พนักงานทั้งหมด" : "แยกตามพนักงาน"}
             </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">เรียงตาม {sortingLabel}</p>
-            {(periodType === "yearly" && showTable) || (periodType !== "monthly" && newPageByMonth) ? (
+            {(periodType === "yearly" && separateMonthColumns) || (periodType !== "monthly" && appendMonthlyDetails) ? (
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 รูปแบบ: {
                   [
-                    periodType === "yearly" && showTable ? "ตาราง" : null,
-                    periodType !== "monthly" && newPageByMonth ? "แยกหน้าตามเดือน" : null,
+                    periodType === "yearly" && separateMonthColumns ? "แยกคอลัมน์เดือน" : null,
+                    periodType !== "monthly" && appendMonthlyDetails ? "แนบหน้ารายเดือน" : null,
                   ].filter(Boolean).join(" · ")
                 }
               </p>
@@ -474,17 +474,19 @@ export default function ReportsModule() {
       <Tabs selectedKey={reportType} onSelectionChange={(key) => setReportType(String(key))}>
         <TabList
           aria-label="หมวดรายงาน"
-          className="grid w-full grid-cols-3 gap-1 overflow-visible rounded-xl border border-border bg-card p-1 shadow-sm"
+          className="grid w-full grid-cols-1 gap-2 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none sm:grid-cols-3"
         >
           {reportTypes.map((item) => (
             <Tab
               key={item.id}
               id={item.id}
               icon={item.icon}
-              className="min-h-14 w-full flex-col items-start justify-center gap-1 whitespace-normal px-2 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm data-[state=inactive]:hover:bg-muted sm:min-h-16 sm:flex-row sm:items-center sm:gap-3 sm:px-4"
+              className="min-h-[4.5rem] w-full justify-start gap-3 whitespace-normal rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm data-[state=active]:border-primary data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:ring-1 data-[state=active]:ring-primary/20 data-[state=inactive]:hover:border-primary/40 data-[state=inactive]:hover:bg-muted/40 [&_svg]:size-5"
             >
-              <span className="text-xs font-semibold leading-4 sm:text-sm">{item.label}</span>
-              <span className="hidden text-[11px] font-normal leading-4 opacity-75 sm:inline">{item.description}</span>
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-semibold leading-5">{item.label}</span>
+                <span className="mt-0.5 block text-xs font-normal leading-4 text-muted-foreground">{item.description}</span>
+              </span>
             </Tab>
           ))}
         </TabList>
