@@ -1,268 +1,499 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  RiBarChart2Line,
+  RiAddLine,
   RiCalendarLine,
-  RiDownload2Line,
-  RiFileExcel2Line,
+  RiCloseLine,
+  RiFileChartLine,
   RiFilePdf2Line,
   RiInformationLine,
+  RiMoneyDollarCircleLine,
+  RiTimerLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectItem } from "@/components/ui/select";
-import { Tabs, TabList, Tab, TabPanel } from "@/components/ui/tabs";
-import { cx } from "@/utils/cx";
-import { HrmDialog } from "@/components/hrm/HrmDialog";
+import { Switch } from "@/components/ui/switch";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
-// Attendance/bonus reports reference a time-clock/attendance-tracking concept
-// that doesn't exist anywhere in the schema or any module — building that is
-// a separate feature, not "wire up existing data." Shown as an explicit
-// placeholder rather than fake numbers or a silently-removed tab.
-const unsupportedReports = {
-  attendance: { label: "รายงานการเข้างาน", description: "ดูสถิติการเข้างาน สาย ขาด และทำงานครบเวลา" },
-  bonus: { label: "รายงานเบี้ยขยัน", description: "ตรวจสอบสิทธิ์เบี้ยขยันจากการมาทำงานตรงเวลา" },
+const reportTypes = [
+  { id: "ot", label: "โอที", description: "ชั่วโมงทำงานล่วงเวลา", icon: RiTimerLine },
+  { id: "leave", label: "วันลา", description: "สิทธิ์และการใช้วันลา", icon: RiCalendarLine },
+  { id: "bonus", label: "เบี้ยขยัน", description: "สรุปเบี้ยขยันรายบุคคล", icon: RiMoneyDollarCircleLine },
+];
+
+const months = [
+  { id: "01", label: "มกราคม" },
+  { id: "02", label: "กุมภาพันธ์" },
+  { id: "03", label: "มีนาคม" },
+  { id: "04", label: "เมษายน" },
+  { id: "05", label: "พฤษภาคม" },
+  { id: "06", label: "มิถุนายน" },
+  { id: "07", label: "กรกฎาคม" },
+  { id: "08", label: "สิงหาคม" },
+  { id: "09", label: "กันยายน" },
+  { id: "10", label: "ตุลาคม" },
+  { id: "11", label: "พฤศจิกายน" },
+  { id: "12", label: "ธันวาคม" },
+];
+
+const sortingFields = {
+  ot: [
+    { id: "position", label: "ตำแหน่ง" },
+    { id: "metric", label: "ชั่วโมง OT" },
+    { id: "name", label: "ชื่อพนักงาน" },
+    { id: "department", label: "แผนก" },
+  ],
+  leave: [
+    { id: "position", label: "ตำแหน่ง" },
+    { id: "metric", label: "จำนวนวันลา" },
+    { id: "name", label: "ชื่อพนักงาน" },
+    { id: "department", label: "แผนก" },
+  ],
+  bonus: [
+    { id: "position", label: "ตำแหน่ง" },
+    { id: "metric", label: "เบี้ยขยัน" },
+    { id: "name", label: "ชื่อพนักงาน" },
+    { id: "department", label: "แผนก" },
+  ],
 };
 
-function currentMonthStr() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+const directions = [
+  { id: "desc", label: "มากไปน้อย · Z ไป A" },
+  { id: "asc", label: "น้อยไปมาก · A ไป Z" },
+];
+
+const periodTypes = [
+  { id: "monthly", label: "รายเดือน" },
+  { id: "yearly", label: "รายปี" },
+  { id: "custom", label: "กำหนดเอง" },
+];
+
+function getYearOptions(currentYear) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const value = String(currentYear + 1 - index);
+    return { id: value, label: value };
+  });
 }
 
-function SummaryCard({ label, value, detail, accent }) {
-  return (
-    <article className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <span className="text-xs leading-4 text-muted-foreground">{label}</span>
-      <p className={cx("mt-3 text-2xl font-semibold tracking-tight leading-tight", accent)}>{value}</p>
-      <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{detail}</p>
-    </article>
-  );
+function getCurrentPeriod() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  return {
+    year: parts.find((part) => part.type === "year")?.value || "2026",
+    month: parts.find((part) => part.type === "month")?.value || "01",
+  };
 }
 
-function ReportView({ data }) {
-  const [notice, setNotice] = useState("");
+function SelectField({ id, label, value, onChange, options, ariaLabel }) {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
-        <SummaryCard label={data.totalLabel} value={data.total} detail="ข้อมูลตามช่วงเวลาที่เลือก" accent="text-foreground" />
-        <SummaryCard label={data.secondaryLabel} value={data.secondary} detail="คำนวณจากข้อมูลจริงในระบบ" accent="text-primary" />
-        <SummaryCard label="สรุป" value={data.trend} detail={data.trend} accent="text-status-success" />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[.9fr_1.1fr]">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight leading-6 text-foreground">ภาพรวมตามหมวด</h2>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{data.description}</p>
-            </div>
-            <RiBarChart2Line className="size-5 text-muted-foreground" aria-hidden />
-          </div>
-          <div className="mt-6 space-y-4">
-            {data.bars.length === 0 ? (
-              <p className="text-xs leading-5 text-muted-foreground">ไม่มีข้อมูลในช่วงเวลานี้</p>
-            ) : (
-              data.bars.map((bar) => (
-                <div key={bar.label}>
-                  <div className="flex items-center justify-between gap-3 text-xs leading-5">
-                    <span className="text-muted-foreground">{bar.label}</span>
-                    <strong className="text-foreground">{bar.amount}</strong>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary/50" style={{ width: bar.value }} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-        <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="flex items-start justify-between gap-3 border-b border-border p-4 sm:p-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight leading-6 text-foreground">รายละเอียดรายบุคคล</h2>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">ข้อมูลจริงจากระบบ</p>
-            </div>
-            <Chip color="cyan" variant="caption">{data.rows.length} คน</Chip>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-[620px] w-full text-left">
-              <thead className="bg-muted">
-                <tr className="text-xs font-semibold leading-4 text-muted-foreground">
-                  <th className="px-4 py-3">พนักงาน</th>
-                  {data.columns.map((column) => <th className="px-4 py-3" key={column}>{column}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row) => (
-                  <tr key={row.join("-")} className="border-b border-border last:border-0">
-                    <td className="px-4 py-3 text-xs font-medium leading-5 text-foreground">{row[0]}</td>
-                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">{row[1]}</td>
-                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">{row[2]}</td>
-                    <td className="px-4 py-3 text-xs leading-5 text-muted-foreground">{row[3]}</td>
-                  </tr>
-                ))}
-                {data.rows.length === 0 ? (
-                  <tr><td className="px-4 py-6 text-center text-xs leading-5 text-muted-foreground" colSpan={4}>ไม่มีข้อมูลในช่วงเวลานี้</td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-      {notice ? <p className="flex items-center gap-2 text-xs leading-5 text-status-success"><RiInformationLine className="size-5" aria-hidden />{notice}</p> : null}
-      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
-        <Button variant="secondary" leadingIcon={RiFilePdf2Line} onClick={() => setNotice(`เตรียมไฟล์ PDF สำหรับ${data.label}แล้ว`)}>ดาวน์โหลด PDF</Button>
-        <Button variant="secondary" leadingIcon={RiFileExcel2Line} onClick={() => setNotice(`เตรียมไฟล์ Excel สำหรับ${data.label}แล้ว`)}>ดาวน์โหลด Excel</Button>
-        <Button leadingIcon={RiDownload2Line} onClick={() => setNotice("ส่งออกรายงานไปยังศูนย์ดาวน์โหลดแล้ว")}>ส่งออกทั้งหมด</Button>
-      </div>
+    <div className="grid min-w-0 gap-1.5">
+      <label htmlFor={id} className="text-xs font-medium leading-4 text-muted-foreground">{label}</label>
+      <Select
+        id={id}
+        aria-label={ariaLabel || label}
+        selectedKey={value}
+        onSelectionChange={(key) => onChange(String(key))}
+        className="min-w-0"
+      >
+        {options.map((option) => (
+          <SelectItem key={option.id} id={option.id}>{option.label}</SelectItem>
+        ))}
+      </Select>
     </div>
   );
 }
 
-function UnsupportedReportView({ label, description }) {
+function ReportSection({ id, icon: Icon, title, description, className, children }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
-      <RiInformationLine className="mx-auto size-6 text-muted-foreground" aria-hidden />
-      <h2 className="mt-3 text-lg font-semibold tracking-tight leading-6 text-foreground">{label}</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-      <p className="mt-4 text-xs leading-5 text-muted-foreground">
-        รายงานนี้ต้องอาศัยระบบบันทึกเวลาเข้า–ออกงาน ซึ่งยังไม่มีในระบบขณะนี้ — ยังไม่รองรับ
-      </p>
+    <section aria-labelledby={id} className={cn("min-w-0", className)}>
+      <Card className="h-full border-border/80 shadow-sm">
+        <CardHeader className="flex-row items-center gap-3 p-4 sm:p-5">
+          <div className="hrm-soft-icon rounded-lg">
+            <Icon className="size-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <CardTitle id={id} className="text-sm leading-5">{title}</CardTitle>
+            <CardDescription className="mt-1 text-xs leading-4">{description}</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">{children}</CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function SortRuleRow({ rule, index, fields, onChange, onRemove }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-lg border border-border bg-background p-2 sm:items-end sm:gap-3">
+      <span
+        className="mt-1 grid size-8 shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold text-muted-foreground sm:mb-1"
+        aria-hidden="true"
+      >
+        {String(index + 1).padStart(2, "0")}
+      </span>
+      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+        <SelectField
+          id={"sort-field-" + rule.id}
+          label={"เงื่อนไขที่ " + (index + 1)}
+          ariaLabel={"เงื่อนไขเรียงลำดับที่ " + (index + 1)}
+          value={rule.field}
+          options={fields}
+          onChange={(field) => onChange(rule.id, { field })}
+        />
+        <SelectField
+          id={"sort-direction-" + rule.id}
+          label="ทิศทาง"
+          ariaLabel={"ทิศทางการเรียงลำดับที่ " + (index + 1)}
+          value={rule.direction}
+          options={directions}
+          onChange={(direction) => onChange(rule.id, { direction })}
+        />
+      </div>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        aria-label={"ลบเงื่อนไขเรียงลำดับที่ " + (index + 1)}
+        onClick={() => onRemove(rule.id)}
+        className="mt-5 size-10 shrink-0 sm:mt-0"
+      >
+        <RiCloseLine aria-hidden="true" />
+      </Button>
     </div>
   );
 }
 
-function otSummaryToReportData(summary) {
-  if (!summary) return null;
-  if (summary.scope === "individual") {
-    return {
-      label: "รายงาน OT",
-      description: "สรุปชั่วโมง OT ของคุณในเดือนนี้",
-      total: `${summary.totalApprovedHours}`,
-      totalLabel: "ชั่วโมง OT (อนุมัติแล้ว)",
-      secondary: `${summary.totalPendingHours}`,
-      secondaryLabel: "ชั่วโมงรออนุมัติ",
-      trend: `${summary.requestCount} รายการทั้งหมด`,
-      columns: ["ชั่วโมงอนุมัติ", "ชั่วโมงรออนุมัติ", "รายการ"],
-      bars: [{ label: summary.employeeName, value: "100%", amount: `${summary.totalApprovedHours} ชม.` }],
-      rows: [[summary.employeeName, `${summary.totalApprovedHours}`, `${summary.totalPendingHours}`, `${summary.requestCount} รายการ`]],
-    };
-  }
-  const max = Math.max(1, ...summary.byEmployee.map((e) => e.approvedHours));
-  return {
-    label: "รายงาน OT",
-    description: "สรุปชั่วโมง OT แยกตามพนักงานในเดือนนี้",
-    total: `${summary.totalApprovedHours}`,
-    totalLabel: "ชั่วโมง OT (อนุมัติแล้ว)",
-    secondary: `${summary.totalPendingHours}`,
-    secondaryLabel: "ชั่วโมงรออนุมัติ",
-    trend: `${summary.requestCount} รายการทั้งหมด`,
-    columns: ["ชั่วโมงอนุมัติ", "ชั่วโมงรออนุมัติ", "รายการ"],
-    bars: summary.byEmployee.map((e) => ({ label: e.employeeName, value: `${Math.round((e.approvedHours / max) * 100)}%`, amount: `${e.approvedHours} ชม.` })),
-    rows: summary.byEmployee.map((e) => [e.employeeName, `${e.approvedHours}`, `${e.pendingHours}`, `${e.requestCount} รายการ`]),
-  };
-}
-
-function leaveSummaryToReportData(summary) {
-  if (!summary) return null;
-  if (summary.scope === "individual") {
-    const totalApproved = summary.quotas.reduce((sum, q) => sum + q.usedDays, 0);
-    return {
-      label: "รายงานวันลา",
-      description: "สรุปวันลาที่ใช้ไปในปีนี้ แยกตามประเภท",
-      total: `${totalApproved}`,
-      totalLabel: "วันลาที่ใช้ (อนุมัติแล้ว)",
-      secondary: `${summary.quotas.length}`,
-      secondaryLabel: "ประเภทวันลา",
-      trend: "ข้อมูลปีปัจจุบัน",
-      columns: ["วันลาที่ใช้", "คงเหลือ", "โควตา"],
-      bars: summary.quotas.map((q) => ({ label: q.name, value: q.annualQuotaDays ? `${Math.min(100, Math.round((q.usedDays / q.annualQuotaDays) * 100))}%` : "0%", amount: `${q.usedDays} วัน` })),
-      rows: summary.quotas.map((q) => [q.name, `${q.usedDays}`, q.remainingDays == null ? "ไม่จำกัด" : `${q.remainingDays}`, q.annualQuotaDays == null ? "ไม่จำกัด" : `${q.annualQuotaDays} วัน`]),
-    };
-  }
-  const totalApproved = summary.byEmployee.reduce((sum, e) => sum + e.approvedDays, 0);
-  const totalPending = summary.byEmployee.reduce((sum, e) => sum + e.pendingDays, 0);
-  const max = Math.max(1, ...summary.byEmployee.map((e) => e.approvedDays));
-  return {
-    label: "รายงานวันลา",
-    description: "สรุปจำนวนวันลาของทีมในปีนี้",
-    total: `${totalApproved}`,
-    totalLabel: "วันลาที่อนุมัติ",
-    secondary: `${totalPending}`,
-    secondaryLabel: "วันลารออนุมัติ",
-    trend: `${summary.byEmployee.length} คนมีการลาในปีนี้`,
-    columns: ["วันลาอนุมัติ", "วันลารออนุมัติ", "รายการ"],
-    bars: summary.byEmployee.map((e) => ({ label: e.employeeName, value: `${Math.round((e.approvedDays / max) * 100)}%`, amount: `${e.approvedDays} วัน` })),
-    rows: summary.byEmployee.map((e) => [e.employeeName, `${e.approvedDays}`, `${e.pendingDays}`, `${e.requestCount} รายการ`]),
-  };
+function ReportSwitchOption({ id, label, description, isSelected, onChange }) {
+  return (
+    <div className="flex min-h-14 items-center justify-between gap-4 rounded-lg border border-border bg-background px-3 py-2.5">
+      <div className="min-w-0">
+        <p id={id + "-label"} className="text-sm font-medium leading-5 text-foreground">{label}</p>
+        <p className="mt-0.5 text-xs leading-4 text-muted-foreground">{description}</p>
+      </div>
+      <Switch
+        id={id}
+        aria-labelledby={id + "-label"}
+        isSelected={isSelected}
+        onChange={onChange}
+        className="shrink-0"
+      />
+    </div>
+  );
 }
 
 export default function ReportsModule() {
-  const [period, setPeriod] = useState("เดือนนี้");
-  const [periodOpen, setPeriodOpen] = useState(false);
-  const [otData, setOtData] = useState(null);
-  const [leaveData, setLeaveData] = useState(null);
-  const [loadError, setLoadError] = useState("");
+  const currentPeriod = getCurrentPeriod();
+  const currentYear = Number(currentPeriod.year);
+  const years = getYearOptions(currentYear);
+  const currentMonth = currentPeriod.month;
 
-  useEffect(() => {
-    let cancelled = false;
-    const month = currentMonthStr();
-    Promise.all([
-      fetch(`/api/ot/summary?month=${month}`).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/leave/summary").then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([ot, leave]) => {
-        if (cancelled) return;
-        setOtData(otSummaryToReportData(ot));
-        setLeaveData(leaveSummaryToReportData(leave));
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError("ไม่สามารถโหลดข้อมูลรายงานได้ กรุณาลองใหม่");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [reportType, setReportType] = useState("ot");
+  const [periodType, setPeriodType] = useState("monthly");
+  const [month, setMonth] = useState(currentMonth);
+  const [year, setYear] = useState(String(currentYear));
+  const [startMonth, setStartMonth] = useState("01");
+  const [startYear, setStartYear] = useState(String(currentYear));
+  const [endMonth, setEndMonth] = useState(currentMonth);
+  const [endYear, setEndYear] = useState(String(currentYear));
+  const [scope, setScope] = useState("all");
+  const [sortRules, setSortRules] = useState([{ id: 1, field: "position", direction: "desc" }]);
+  const [showTable, setShowTable] = useState(false);
+  const [newPageByMonth, setNewPageByMonth] = useState(false);
+  const [exportNotice, setExportNotice] = useState("");
+  const nextSortId = useRef(2);
+
+  const fields = sortingFields[reportType];
+  const startValue = Number(startYear) * 12 + Number(startMonth);
+  const endValue = Number(endYear) * 12 + Number(endMonth);
+  const customPeriodInvalid = periodType === "custom" && startValue > endValue;
+  const selectedReport = reportTypes.find((item) => item.id === reportType);
+
+  function updateSortRule(id, updates) {
+    setSortRules((current) => current.map((rule) => (rule.id === id ? { ...rule, ...updates } : rule)));
+  }
+
+  function addSortRule() {
+    const id = nextSortId.current;
+    nextSortId.current += 1;
+    setSortRules((current) => [...current, { id, field: "name", direction: "asc" }]);
+  }
+
+  function removeSortRule(id) {
+    setSortRules((current) => current.filter((rule) => rule.id !== id));
+  }
+
+  const monthLabel = (value) => months.find((item) => item.id === value)?.label || "";
+  const periodLabel = periodType === "monthly"
+    ? monthLabel(month) + " " + year
+    : periodType === "yearly"
+      ? "ปี " + year
+      : monthLabel(startMonth) + " " + startYear + " – " + monthLabel(endMonth) + " " + endYear;
+  const sortingLabel = sortRules.length
+    ? sortRules.map((rule) => {
+        const field = fields.find((item) => item.id === rule.field)?.label || "ลำดับเริ่มต้น";
+        const direction = rule.direction === "desc" ? "มากไปน้อย" : "น้อยไปมาก";
+        return field + " " + direction;
+      }).join(" · ")
+    : "ลำดับเริ่มต้น";
+
+  const settingsPanel = (
+    <div className="mt-4 space-y-4">
+      <ReportSection
+        id="report-period-title"
+        icon={RiCalendarLine}
+        title="ช่วงเวลา · Time period"
+        description="เลือกรอบเวลาที่ต้องการนำไปใช้กับรายงาน"
+      >
+        <div role="group" aria-label="รูปแบบช่วงเวลา" className="flex flex-wrap gap-2">
+          {periodTypes.map((item) => (
+            <Button
+              key={item.id}
+              type="button"
+              size="sm"
+              variant={periodType === item.id ? "default" : "outline"}
+              aria-pressed={periodType === item.id}
+              onClick={() => {
+                setPeriodType(item.id);
+                setExportNotice("");
+              }}
+              className="min-h-10 px-4"
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+
+        {periodType === "monthly" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SelectField id="report-month" label="เดือน" value={month} onChange={setMonth} options={months} />
+            <SelectField id="report-year" label="ปี" value={year} onChange={setYear} options={years} />
+          </div>
+        ) : null}
+
+        {periodType === "yearly" ? (
+          <div className="max-w-sm">
+            <SelectField id="report-yearly-year" label="ปี" value={year} onChange={setYear} options={years} />
+          </div>
+        ) : null}
+
+        {periodType === "custom" ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <fieldset className="min-w-0 rounded-lg border border-border bg-muted/30 p-3">
+                <legend className="px-1 text-xs font-medium text-muted-foreground">เริ่มต้น</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SelectField id="report-start-month" label="เดือน" value={startMonth} onChange={setStartMonth} options={months} />
+                  <SelectField id="report-start-year" label="ปี" value={startYear} onChange={setStartYear} options={years} />
+                </div>
+              </fieldset>
+              <fieldset className="min-w-0 rounded-lg border border-border bg-muted/30 p-3">
+                <legend className="px-1 text-xs font-medium text-muted-foreground">สิ้นสุด</legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SelectField id="report-end-month" label="เดือน" value={endMonth} onChange={setEndMonth} options={months} />
+                  <SelectField id="report-end-year" label="ปี" value={endYear} onChange={setEndYear} options={years} />
+                </div>
+              </fieldset>
+            </div>
+            {customPeriodInvalid ? (
+              <p id="custom-period-error" role="alert" className="text-xs leading-5 text-status-danger">
+                เดือนเริ่มต้นต้องไม่อยู่หลังเดือนสิ้นสุด
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </ReportSection>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(17rem,0.8fr)_minmax(0,1.2fr)]">
+        <ReportSection
+          id="report-scope-title"
+          icon={RiFileChartLine}
+          title="ขอบเขตข้อมูล · Scope"
+          description="กำหนดการจัดกลุ่มข้อมูลในรายงาน"
+        >
+          <fieldset className="space-y-2">
+            <legend className="sr-only">รูปแบบการรวมพนักงาน</legend>
+            {[
+              { id: "all", title: "พนักงานทั้งหมด", detail: "รวมข้อมูลไว้ในรายงานฉบับเดียว" },
+              { id: "individual", title: "แยกตามพนักงาน", detail: "แสดงข้อมูลของแต่ละคนแยกจากกัน" },
+            ].map((option) => (
+              <label
+                key={option.id}
+                className={cn(
+                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-ring",
+                  scope === option.id ? "border-primary/50 bg-primary/5" : "border-border bg-background hover:bg-muted/50",
+                )}
+              >
+                <input
+                  type="radio"
+                  name="report-scope"
+                  value={option.id}
+                  checked={scope === option.id}
+                  onChange={() => setScope(option.id)}
+                  className="size-4 shrink-0 accent-primary"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium leading-5 text-foreground">{option.title}</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{option.detail}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </ReportSection>
+
+        <ReportSection
+          id="report-sorting-title"
+          icon={RiFileChartLine}
+          title="การเรียงลำดับ · Sorting"
+          description="เรียงข้อมูลตามลำดับความสำคัญที่กำหนด"
+        >
+          {sortRules.length ? (
+            <div className="space-y-2">
+              {sortRules.map((rule, index) => (
+                <SortRuleRow
+                  key={rule.id}
+                  rule={rule}
+                  index={index}
+                  fields={fields}
+                  onChange={updateSortRule}
+                  onRemove={removeSortRule}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-border px-3 py-4 text-xs leading-5 text-muted-foreground">
+              ยังไม่มีเงื่อนไข ระบบจะใช้ลำดับเริ่มต้นเมื่อสร้างรายงาน
+            </p>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            leadingIcon={RiAddLine}
+            onClick={addSortRule}
+            className="min-h-10 text-primary"
+          >
+            เพิ่มเงื่อนไขการเรียง
+          </Button>
+        </ReportSection>
+      </div>
+
+      {periodType !== "monthly" ? (
+        <ReportSection
+          id="report-display-title"
+          icon={RiFileChartLine}
+          title="รูปแบบรายงาน · Display"
+          description="เลือกวิธีแสดงข้อมูลและจัดหน้าเอกสาร"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {periodType === "yearly" ? (
+              <ReportSwitchOption
+                id="report-table"
+                label="แสดงข้อมูลแบบตาราง"
+                description="จัดข้อมูลเป็นแถวและคอลัมน์"
+                isSelected={showTable}
+                onChange={setShowTable}
+              />
+            ) : null}
+            <ReportSwitchOption
+              id="report-page-break"
+              label="แยกหน้าใหม่ตามเดือน"
+              description="เริ่มหน้าใหม่เมื่อเปลี่ยนเดือน"
+              isSelected={newPageByMonth}
+              onChange={setNewPageByMonth}
+            />
+          </div>
+        </ReportSection>
+      ) : null}
+
+      <Card className="border-border/80 shadow-sm">
+        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold leading-4 text-muted-foreground">สรุปการตั้งค่า</p>
+            <p className="mt-1 text-sm font-medium leading-5 text-foreground">
+              {selectedReport?.label} · {periodLabel} · {scope === "all" ? "พนักงานทั้งหมด" : "แยกตามพนักงาน"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">เรียงตาม {sortingLabel}</p>
+            {(periodType === "yearly" && showTable) || (periodType !== "monthly" && newPageByMonth) ? (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                รูปแบบ: {
+                  [
+                    periodType === "yearly" && showTable ? "ตาราง" : null,
+                    periodType !== "monthly" && newPageByMonth ? "แยกหน้าตามเดือน" : null,
+                  ].filter(Boolean).join(" · ")
+                }
+              </p>
+            ) : null}
+          </div>
+          <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+            <Button
+              type="button"
+              size="lg"
+              leadingIcon={RiFilePdf2Line}
+              onClick={() => setExportNotice("ตั้งค่ารายงานแล้ว ส่วนการดึงข้อมูลและสร้างไฟล์ PDF จะเชื่อมต่อในขั้นตอนถัดไป")}
+              disabled={customPeriodInvalid}
+              className="w-full sm:w-auto"
+            >
+              สร้างรายงาน PDF
+            </Button>
+            <p className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+              <RiInformationLine className="size-4 shrink-0" aria-hidden="true" />
+              ยังไม่ได้เชื่อมต่อการดึงข้อมูลและสร้าง PDF
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      {exportNotice ? (
+        <p role="status" className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-5 text-foreground">
+          {exportNotice}
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">People operations · Reports</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight leading-tight text-foreground sm:text-3xl">รายงาน HR</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">ออกรายงาน OT และวันลาจากข้อมูลจริงในระบบ</p>
+    <div className="space-y-5 sm:space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-primary">People operations · Reports</p>
+          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">สร้างรายงาน</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            เลือกหมวดและกำหนดรูปแบบรายงานก่อนส่งออก
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Select aria-label="ช่วงเวลารายงาน" selectedKey={period} onSelectionChange={(key) => setPeriod(String(key))} className="min-w-0">
-            <SelectItem id="เดือนนี้">เดือนนี้</SelectItem>
-          </Select>
-          <Button size="small" variant="secondary" leadingIcon={RiCalendarLine} onClick={() => setPeriodOpen(true)}>กำหนดช่วงเวลา</Button>
+        <div className="flex items-center gap-2 self-start rounded-lg border border-border bg-card px-3 py-2 sm:self-auto">
+          <RiFileChartLine className="size-4 text-primary" aria-hidden="true" />
+          <span className="text-xs font-medium text-muted-foreground">ตัวสร้างรายงาน</span>
         </div>
-      </section>
-      {loadError ? <p className="text-xs leading-5 text-status-danger">{loadError}</p> : null}
-      <Tabs defaultSelectedKey="ot">
-        <TabList aria-label="ประเภทรายงาน">
-          <Tab id="ot">OT</Tab>
-          <Tab id="leave">วันลา</Tab>
-          <Tab id="attendance">การเข้างาน</Tab>
-          <Tab id="bonus">เบี้ยขยัน</Tab>
+      </header>
+
+      <Tabs selectedKey={reportType} onSelectionChange={(key) => setReportType(String(key))}>
+        <TabList
+          aria-label="หมวดรายงาน"
+          className="grid w-full grid-cols-3 gap-1 overflow-visible rounded-xl border border-border bg-card p-1 shadow-sm"
+        >
+          {reportTypes.map((item) => (
+            <Tab
+              key={item.id}
+              id={item.id}
+              icon={item.icon}
+              className="min-h-14 w-full flex-col items-start justify-center gap-1 whitespace-normal px-2 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm data-[state=inactive]:hover:bg-muted sm:min-h-16 sm:flex-row sm:items-center sm:gap-3 sm:px-4"
+            >
+              <span className="text-xs font-semibold leading-4 sm:text-sm">{item.label}</span>
+              <span className="hidden text-[11px] font-normal leading-4 opacity-75 sm:inline">{item.description}</span>
+            </Tab>
+          ))}
         </TabList>
-        <TabPanel id="ot"><div className="mt-5">{otData ? <ReportView data={otData} /> : <p className="py-8 text-center text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p>}</div></TabPanel>
-        <TabPanel id="leave"><div className="mt-5">{leaveData ? <ReportView data={leaveData} /> : <p className="py-8 text-center text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p>}</div></TabPanel>
-        <TabPanel id="attendance"><div className="mt-5"><UnsupportedReportView {...unsupportedReports.attendance} /></div></TabPanel>
-        <TabPanel id="bonus"><div className="mt-5"><UnsupportedReportView {...unsupportedReports.bonus} /></div></TabPanel>
+        {reportTypes.map((item) => (
+          <TabPanel key={item.id} id={item.id} className="mt-0">
+            {settingsPanel}
+          </TabPanel>
+        ))}
       </Tabs>
-      <HrmDialog
-        open={periodOpen}
-        onClose={() => setPeriodOpen(false)}
-        title="กำหนดช่วงเวลารายงาน"
-        description="รายงาน OT และวันลาอ้างอิงเดือนปัจจุบัน/ปีปัจจุบันโดยอัตโนมัติ"
-        footer={<Button onClick={() => setPeriodOpen(false)}>ปิด</Button>}
-      >
-        <p className="text-xs leading-4 text-muted-foreground">
-          รายงาน OT อ้างอิงเดือนปัจจุบันเสมอ และรายงานวันลาอ้างอิงปีปัจจุบันเสมอ (ตามโควตาที่เป็นรายปี) — การเลือกช่วงเวลาแบบกำหนดเองยังไม่รองรับในเวอร์ชันนี้
-        </p>
-      </HrmDialog>
     </div>
   );
 }
