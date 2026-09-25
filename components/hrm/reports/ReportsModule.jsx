@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import {
   RiAddLine,
   RiCalendarLine,
+  RiCheckLine,
   RiCloseLine,
   RiFileChartLine,
   RiFilePdf2Line,
@@ -113,16 +114,16 @@ function ReportSection({ id, icon: Icon, title, description, className, children
   return (
     <section aria-labelledby={id} className={cn("min-w-0", className)}>
       <Card className="h-full border-border/80 shadow-sm">
-        <CardHeader className="flex-row items-center gap-3 p-4 sm:p-5">
-          <div className="hrm-soft-icon rounded-lg">
-            <Icon className="size-5" aria-hidden="true" />
+        <CardHeader className="flex-row items-center gap-2.5 p-3 sm:p-4">
+          <div className="hrm-soft-icon size-9 rounded-lg">
+            <Icon className="size-4" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <CardTitle id={id} className="text-sm leading-5">{title}</CardTitle>
-            <CardDescription className="mt-1 text-xs leading-4">{description}</CardDescription>
+            <CardDescription className="mt-0.5 text-[11px] leading-4">{description}</CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">{children}</CardContent>
+        <CardContent className="space-y-3 p-3 pt-0 sm:p-4 sm:pt-0">{children}</CardContent>
       </Card>
     </section>
   );
@@ -243,13 +244,14 @@ export default function ReportsModule() {
     : "ลำดับเริ่มต้น";
 
   const settingsPanel = (
-    <div className="mt-4 space-y-4">
-      <ReportSection
-        id="report-period-title"
-        icon={RiCalendarLine}
-        title="ช่วงเวลา · Time period"
-        description="เลือกรอบเวลาที่ต้องการนำไปใช้กับรายงาน"
-      >
+    <div className="mt-3 space-y-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+        <ReportSection
+          id="report-period-title"
+          icon={RiCalendarLine}
+          title="ช่วงเวลา · Time period"
+          description="เลือกรอบเวลาที่ต้องการนำไปใช้กับรายงาน"
+        >
         <div role="group" aria-label="รูปแบบช่วงเวลา" className="flex flex-wrap gap-2">
           {periodTypes.map((item) => (
             <Button
@@ -307,16 +309,15 @@ export default function ReportsModule() {
             ) : null}
           </div>
         ) : null}
-      </ReportSection>
+        </ReportSection>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(17rem,0.8fr)_minmax(0,1.2fr)]">
         <ReportSection
           id="report-scope-title"
           icon={RiFileChartLine}
           title="ขอบเขตข้อมูล · Scope"
           description="กำหนดการจัดกลุ่มข้อมูลในรายงาน"
         >
-          <fieldset className="space-y-2">
+          <fieldset className="grid gap-2 sm:grid-cols-2">
             <legend className="sr-only">รูปแบบการรวมพนักงาน</legend>
             {[
               { id: "all", title: "พนักงานทั้งหมด", detail: "รวมข้อมูลไว้ในรายงานฉบับเดียว" },
@@ -325,7 +326,7 @@ export default function ReportsModule() {
               <label
                 key={option.id}
                 className={cn(
-                  "flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors focus-within:ring-2 focus-within:ring-ring",
+                  "flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 transition-colors focus-within:ring-2 focus-within:ring-ring",
                   scope === option.id ? "border-primary/50 bg-primary/5" : "border-border bg-background hover:bg-muted/50",
                 )}
               >
@@ -338,14 +339,19 @@ export default function ReportsModule() {
                   className="size-4 shrink-0 accent-primary"
                 />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium leading-5 text-foreground">{option.title}</span>
-                  <span className="mt-0.5 block text-xs leading-4 text-muted-foreground">{option.detail}</span>
+                  <span className="block text-xs font-medium leading-4 text-foreground">{option.title}</span>
+                  <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{option.detail}</span>
                 </span>
               </label>
             ))}
           </fieldset>
         </ReportSection>
+      </div>
 
+      <div className={cn(
+        "grid gap-3",
+        periodType !== "monthly" && "xl:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]",
+      )}>
         <ReportSection
           id="report-sorting-title"
           icon={RiFileChartLine}
@@ -380,7 +386,6 @@ export default function ReportsModule() {
             เพิ่มเงื่อนไขการเรียง
           </Button>
         </ReportSection>
-      </div>
 
       {periodType !== "monthly" ? (
         <ReportSection
@@ -409,9 +414,10 @@ export default function ReportsModule() {
           </div>
         </ReportSection>
       ) : null}
+      </div>
 
       <Card className="border-border/80 shadow-sm">
-        <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+        <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold leading-4 text-muted-foreground">สรุปการตั้งค่า</p>
             <p className="mt-1 text-sm font-medium leading-5 text-foreground">
@@ -456,8 +462,8 @@ export default function ReportsModule() {
   );
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="space-y-4">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-primary">People operations · Reports</p>
           <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">สร้างรายงาน</h1>
@@ -474,19 +480,24 @@ export default function ReportsModule() {
       <Tabs selectedKey={reportType} onSelectionChange={(key) => setReportType(String(key))}>
         <TabList
           aria-label="หมวดรายงาน"
-          className="grid w-full grid-cols-1 gap-2 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none sm:grid-cols-3"
+          className="grid w-full grid-cols-3 gap-2 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none"
         >
           {reportTypes.map((item) => (
             <Tab
               key={item.id}
               id={item.id}
               icon={item.icon}
-              className="min-h-[4.5rem] w-full justify-start gap-3 whitespace-normal rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm data-[state=active]:border-primary data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:ring-1 data-[state=active]:ring-primary/20 data-[state=inactive]:hover:border-primary/40 data-[state=inactive]:hover:bg-muted/40 [&_svg]:size-5"
+              className="relative min-h-14 w-full justify-start gap-2 whitespace-normal rounded-lg border border-border bg-card px-2 py-2 text-left shadow-sm data-[state=active]:border-primary data-[state=active]:bg-primary/5 data-[state=active]:text-primary data-[state=active]:ring-1 data-[state=active]:ring-primary/20 data-[state=inactive]:hover:border-primary/40 data-[state=inactive]:hover:bg-muted/40 sm:gap-2.5 sm:px-3 [&_svg]:size-4"
             >
               <span className="min-w-0 text-left">
-                <span className="block text-sm font-semibold leading-5">{item.label}</span>
-                <span className="mt-0.5 block text-xs font-normal leading-4 text-muted-foreground">{item.description}</span>
+                <span className="block text-[11px] font-semibold leading-4 sm:text-sm">{item.label}</span>
+                <span className="mt-0.5 hidden text-[11px] font-normal leading-4 text-muted-foreground sm:block">{item.description}</span>
               </span>
+              {reportType === item.id ? (
+                <span aria-hidden="true" className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground">
+                  <RiCheckLine className="size-3" />
+                </span>
+              ) : null}
             </Tab>
           ))}
         </TabList>
