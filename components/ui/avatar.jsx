@@ -11,7 +11,7 @@ const colorClasses = {
   pink: "bg-status-danger/10 text-status-danger",
   rose: "bg-status-danger/10 text-status-danger",
   orange: "bg-status-warning/10 text-status-warning",
-  purple: "bg-status-violet/10 text-status-violet",
+  purple: "bg-status-neutral/10 text-status-neutral",
 };
 
 export function Avatar({ initials, color = "blue", size = "md", src, alt = "", className, ...props }) {

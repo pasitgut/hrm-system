@@ -1,35 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDate, endOfMonth, getDayOfWeek } from "@internationalized/date";
-import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
+import { Calendar, CalendarNavigation } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { IconButton } from "@/components/ui/icon-button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Chip } from "@/components/ui/badge";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { currentMonthInBangkok, formatMonthLabel, shiftMonth, statusColor } from "@/components/hrm/ot/otStatus";
+import { cn } from "@/lib/utils";
 
-const WEEKDAY_LABELS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
 const MONTH_OPTIONS = [
   "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
   "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 ];
 const YEAR_OPTIONS = Array.from({ length: 151 }, (_, index) => 1950 + index);
-
-function buildMonthCells(month) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const first = new CalendarDate(year, monthNumber, 1);
-  const daysInMonth = endOfMonth(first).day;
-  const leadingBlanks = getDayOfWeek(first, "en-US");
-  const cells = [];
-  for (let i = 0; i < leadingBlanks; i += 1) cells.push(null);
-  for (let day = 1; day <= daysInMonth; day += 1) cells.push(new CalendarDate(year, monthNumber, day));
-  while (cells.length % 7 !== 0) cells.push(null);
-  const weeks = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  return weeks;
-}
 
 export function OtCalendarView({ refreshKey = 0 }) {
   const [month, setMonth] = useState(() => currentMonthInBangkok());
@@ -100,7 +84,6 @@ export function OtCalendarView({ refreshKey = 0 }) {
     return map;
   }, [items]);
 
-  const weeks = useMemo(() => buildMonthCells(month), [month]);
   const selectedItems = selectedDate ? itemsByDate.get(selectedDate.toString()) || [] : [];
 
   function toggleMonthPicker() {
@@ -126,14 +109,11 @@ export function OtCalendarView({ refreshKey = 0 }) {
           <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ตารางเวลาทำงาน</p>
           <h2 id="ot-calendar-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">ปฏิทิน OT</h2>
         </div>
-        <div className="flex min-h-10 items-center gap-2">
-          <IconButton
-            icon={RiArrowLeftSLine}
-            aria-label="เดือนก่อนหน้า"
-            variant="outline"
-            onClick={() => setMonth((current) => shiftMonth(current, -1))}
-            className="size-10"
-          />
+        <CalendarNavigation
+          monthLabel={formatMonthLabel(month)}
+          onPreviousMonth={() => setMonth((current) => shiftMonth(current, -1))}
+          onNextMonth={() => setMonth((current) => shiftMonth(current, 1))}
+          monthControl={(
           <div className="relative" ref={monthPickerRef}>
             <Button
               ref={monthPickerTriggerRef}
@@ -186,54 +166,42 @@ export function OtCalendarView({ refreshKey = 0 }) {
               </div>
             ) : null}
           </div>
-          <IconButton
-            icon={RiArrowRightSLine}
-            aria-label="เดือนถัดไป"
-            variant="outline"
-            onClick={() => setMonth((current) => shiftMonth(current, 1))}
-            className="size-10"
-          />
-        </div>
+          )}
+        />
       </div>
       {error ? <p className="px-4 pt-3 text-xs leading-5 text-status-danger sm:px-5">{error}</p> : null}
       <div className="overflow-x-auto p-3 sm:p-4">
-        <div className="min-w-[490px] overflow-hidden rounded-b-xl">
-          <div role="group" aria-label={`ปฏิทินเดือน${formatMonthLabel(month)}`}>
-            <div className="grid grid-cols-7 border-b border-border bg-muted text-center text-[11px] font-semibold leading-4 text-muted-foreground">
-              {WEEKDAY_LABELS.map((label) => (
-                <div className="py-2" key={label}>{label}</div>
-              ))}
-            </div>
-            <div className="divide-y divide-border">
-              {weeks.map((week, weekIndex) => (
-                <div className="grid grid-cols-7 divide-x divide-border" key={weekIndex}>
-                  {week.map((cellDate, dayIndex) => {
-                    if (!cellDate) return <div className="min-h-20 bg-muted/30" key={dayIndex} />;
-                    const dayKey = cellDate.toString();
-                    const dayItems = itemsByDate.get(dayKey) || [];
-                    return (
-                      <button
-                        type="button"
-                        key={dayKey}
-                        disabled={dayItems.length === 0}
-                        onClick={() => setSelectedDate(cellDate)}
-                        className="flex min-h-20 flex-col items-start gap-1 p-1.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
-                      >
-                        <span className="text-[11px] leading-4 text-muted-foreground">{cellDate.day}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {dayItems.slice(0, 2).map((item) => (
-                            <Chip key={item.id} variant="caption" color={statusColor(item.statusCode)}>{item.startTime}</Chip>
-                          ))}
-                          {dayItems.length > 2 ? <span className="text-[10px] leading-4 text-muted-foreground">+{dayItems.length - 2}</span> : null}
-                        </div>
-                      </button>
-                    );
-                  })}
+        <Calendar
+          month={month}
+          ariaLabel={`ปฏิทินเดือน${formatMonthLabel(month)}`}
+          selectedDate={selectedDate}
+          className="min-w-[490px] overflow-hidden rounded-b-xl"
+          renderDay={({ date, isSelected, isToday }) => {
+            if (!date) return <div className="min-h-20 bg-muted/30" aria-hidden="true" />;
+            const dayItems = itemsByDate.get(date.toString()) || [];
+            return (
+              <button
+                type="button"
+                disabled={dayItems.length === 0}
+                aria-pressed={isSelected}
+                aria-current={isToday ? "date" : undefined}
+                onClick={() => setSelectedDate(date)}
+                className={cn(
+                  "flex min-h-20 w-full flex-col items-start gap-1 p-1.5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent",
+                  isSelected && "bg-primary/5 ring-1 ring-inset ring-primary/40",
+                )}
+              >
+                <span className={cn("text-[11px] leading-4", isToday ? "font-semibold text-primary" : "text-muted-foreground")}>{date.day}</span>
+                <div className="flex flex-wrap gap-1">
+                  {dayItems.slice(0, 2).map((item) => (
+                    <Chip key={item.id} variant="caption" color={statusColor(item.statusCode)}>{item.startTime}</Chip>
+                  ))}
+                  {dayItems.length > 2 ? <span className="text-[10px] leading-4 text-muted-foreground">+{dayItems.length - 2}</span> : null}
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
+              </button>
+            );
+          }}
+        />
       </div>
       {loading ? <p className="px-4 pb-4 text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
       <HrmDialog

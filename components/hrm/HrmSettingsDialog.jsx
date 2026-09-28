@@ -5,6 +5,7 @@ import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
+import { TimePicker } from "@/components/ui/time-picker";
 import { Switch } from "@/components/ui/switch";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 
@@ -46,8 +47,8 @@ export function HrmSettingsDialog({ open, onClose }) {
                 <SelectItem id="Asia/Singapore">สิงคโปร์ (UTC+8)</SelectItem>
               </Select>
             </div>
-            <Input label="เวลาเริ่มงาน" type="time" defaultValue="09:00" />
-            <Input label="เวลาเลิกงาน" type="time" defaultValue="18:00" />
+            <TimePicker label="เวลาเริ่มงาน" defaultValue="09:00" />
+            <TimePicker label="เวลาเลิกงาน" defaultValue="18:00" />
           </div>
         </TabPanel>
         <TabPanel id="profile" className="pt-4">

@@ -50,6 +50,34 @@
       "when": 1790236803000,
       "tag": "0006_leave_type_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790312400000,
+      "tag": "0007_asset_borrowing",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790312401000,
+      "tag": "0008_remove_asset_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790320620000,
+      "tag": "0009_asset_agreement_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790329903000,
+      "tag": "0010_asset_agreement_templates",
+      "breakpoints": true
     }
   ]
 }

@@ -1,18 +1,24 @@
 import {
   type AnyPgColumn,
   boolean,
+  check,
   date,
+  bigint,
   index,
   integer,
+  jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ---------- lookup tables ----------
 
@@ -219,62 +225,205 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ---------- assets (new, not in init.sql) ----------
+// ---------- asset borrowing requests (ported from asset-borrowing) ----------
 
-export const assetCategories = pgTable("asset_categories", {
-  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull().unique(),
-  isActive: boolean("is_active").notNull().default(true),
-});
+export const assetRequestStatusEnum = pgEnum("asset_request_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "return_pending",
+  "returned",
+  "unknown",
+]);
+export const assetAgreementStatusEnum = pgEnum("asset_agreement_status", [
+  "waiting_handover",
+  "waiting_employee",
+  "waiting_admin",
+  "completed",
+]);
+export const assetAgreementTypeEnum = pgEnum("asset_agreement_type", ["borrow", "asset_form"]);
+export const assetAgreementParticipantEnum = pgEnum("asset_agreement_participant", ["employee", "handover", "admin"]);
+export const assetSignerKindEnum = pgEnum("asset_signer_kind", ["employee", "admin", "other"]);
+export const assetSignatureStatusEnum = pgEnum("asset_signature_status", ["pending", "signed", "locked"]);
+export const assetReturnConditionEnum = pgEnum("asset_return_condition", ["original", "damaged", "lost"]);
+export const assetAttachmentKindEnum = pgEnum("asset_attachment_kind", ["request", "additional", "return"]);
 
-export const assetStatusEnum = pgEnum("asset_status", ["available", "in_use", "maintenance", "retired"]);
-
-export const assets = pgTable("assets", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  code: varchar("code", { length: 20 }).notNull().unique(),
-  name: varchar("name", { length: 255 }).notNull(),
-  categoryId: integer("category_id")
-    .notNull()
-    .references(() => assetCategories.id),
-  serialNumber: varchar("serial_number", { length: 100 }).unique(),
-  status: assetStatusEnum("status").notNull().default("available"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const assetLoans = pgTable(
-  "asset_loans",
+export const assetRequests = pgTable(
+  "asset_requests",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    assetId: uuid("asset_id")
-      .notNull()
-      .references(() => assets.id),
-    employeeId: uuid("employee_id")
-      .notNull()
-      .references(() => employees.id),
-    checkoutDate: date("checkout_date").notNull(),
-    dueDate: date("due_date").notNull(),
-    // "Returned" is derived as statusCode='approved' AND returnedAt IS NOT NULL
-    // — not a separate status code, to reuse requestStatuses as-is.
-    returnedAt: timestamp("returned_at", { withTimezone: true }),
-    returnNote: text("return_note"),
-    purpose: text("purpose"),
-    statusCode: varchar("status_code", { length: 20 })
-      .notNull()
-      .default("pending")
-      .references(() => requestStatuses.code),
-    decidedByEmployeeId: uuid("decided_by_employee_id").references(() => employees.id),
-    decidedAt: timestamp("decided_at", { withTimezone: true }),
-    decisionNote: text("decision_note"),
-    cancelledByEmployeeId: uuid("cancelled_by_employee_id").references(() => employees.id),
-    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    agreementId: uuid("agreement_id").references(() => assetAgreements.id, { onDelete: "set null" }),
+    legacySheetId: text("legacy_sheet_id").unique(),
+    borrowerEmployeeId: uuid("borrower_employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
+    // Snapshots preserve the form and agreement as submitted if employee details later change.
+    borrowerEmployeeCode: varchar("borrower_employee_code", { length: 20 }).notNull(),
+    borrowerName: varchar("borrower_name", { length: 255 }).notNull(),
+    borrowerDepartment: varchar("borrower_department", { length: 255 }).notNull().default(""),
+    borrowerPosition: varchar("borrower_position", { length: 255 }).notNull().default(""),
+    formDate: timestamp("form_date", { withTimezone: true }).notNull().defaultNow(),
+    fromDate: date("from_date").notNull(),
+    toDate: date("to_date"),
+    reason: text("reason").notNull().default(""),
+    remarks: text("remarks").notNull().default(""),
+    status: assetRequestStatusEnum("status").notNull().default("pending"),
+    approvedBorrowByEmployeeId: uuid("approved_borrow_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    approvedBorrowByName: varchar("approved_borrow_by_name", { length: 255 }).notNull().default(""),
+    approvedBorrowAt: timestamp("approved_borrow_at", { withTimezone: true }),
+    borrowerSignatureData: text("borrower_signature_data").notNull().default(""),
+    approvedBorrowSignatureData: text("approved_borrow_signature_data").notNull().default(""),
+    returnInspectorEmployeeId: uuid("return_inspector_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    returnInspectorName: varchar("return_inspector_name", { length: 255 }).notNull().default(""),
+    approvedReturnByEmployeeId: uuid("approved_return_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    approvedReturnByName: varchar("approved_return_by_name", { length: 255 }).notNull().default(""),
+    returnInspection: text("return_inspection"),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedByEmployeeId: uuid("deleted_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   },
   (t) => [
-    index("asset_loans_asset_id_idx").on(t.assetId),
-    index("asset_loans_employee_id_idx").on(t.employeeId),
-    index("asset_loans_status_code_idx").on(t.statusCode),
+    index("asset_requests_borrower_created_idx").on(t.borrowerEmployeeId, t.createdAt),
+    index("asset_requests_status_created_idx").on(t.status, t.createdAt),
+    uniqueIndex("asset_requests_agreement_id_unique").on(t.agreementId),
+    check("asset_requests_date_order", sql`${t.toDate} IS NULL OR ${t.toDate} >= ${t.fromDate}`),
+    check("asset_requests_version_positive", sql`${t.version} > 0`),
+  ],
+);
+
+export const assetRequestItems = pgTable(
+  "asset_request_items",
+  {
+    requestId: uuid("request_id").notNull().references(() => assetRequests.id, { onDelete: "cascade" }),
+    position: smallint("position").notNull(),
+    name: text("name").notNull(),
+    quantity: integer("quantity").notNull().default(1),
+    note: text("note").notNull().default(""),
+  },
+  (t) => [
+    primaryKey({ columns: [t.requestId, t.position] }),
+    check("asset_request_items_position_nonnegative", sql`${t.position} >= 0`),
+    check("asset_request_items_quantity_positive", sql`${t.quantity} > 0`),
+    check("asset_request_items_name_not_blank", sql`length(btrim(${t.name})) > 0`),
+  ],
+);
+
+export const assetRequestAttachments = pgTable(
+  "asset_request_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestId: uuid("request_id").notNull().references(() => assetRequests.id, { onDelete: "cascade" }),
+    kind: assetAttachmentKindEnum("kind").notNull(),
+    position: smallint("position").notNull().default(0),
+    url: text("url").notNull(),
+    uploadedByEmployeeId: uuid("uploaded_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("asset_request_attachments_request_kind_idx").on(t.requestId, t.kind),
+    uniqueIndex("asset_request_attachments_request_kind_position_unique").on(t.requestId, t.kind, t.position),
+    check("asset_request_attachments_position_nonnegative", sql`${t.position} >= 0`),
+    check("asset_request_attachments_url_not_blank", sql`length(btrim(${t.url})) > 0`),
+  ],
+);
+
+export const assetAgreementTemplates = pgTable("asset_agreement_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  type: assetAgreementTypeEnum("type").notNull().default("borrow"),
+  title: text("title").notNull(),
+  headerHtml: text("header_html").notNull().default(""),
+  bodyHtml: text("body_html").notNull(),
+  footerHtml: text("footer_html").notNull().default(""),
+  isActive: boolean("is_active").notNull().default(true),
+  createdByEmployeeId: uuid("created_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  createdByName: varchar("created_by_name", { length: 255 }).notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  version: integer("version").notNull().default(1),
+}, (t) => [
+  index("asset_agreement_templates_active_type_idx").on(t.isActive, t.type),
+  check("asset_agreement_templates_title_not_blank", sql`length(btrim(${t.title})) > 0`),
+  check("asset_agreement_templates_body_not_blank", sql`length(btrim(${t.bodyHtml})) > 0`),
+  check("asset_agreement_templates_version_positive", sql`${t.version} > 0`),
+]);
+
+export const assetAgreements = pgTable("asset_agreements", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  templateId: uuid("template_id").references(() => assetAgreementTemplates.id, { onDelete: "set null" }),
+  type: assetAgreementTypeEnum("type").notNull().default("borrow"),
+  title: text("title").notNull(),
+  headerHtml: text("header_html").notNull().default(""),
+  bodyHtml: text("body_html").notNull(),
+  footerHtml: text("footer_html").notNull().default(""),
+  status: assetAgreementStatusEnum("status").notNull(),
+  createdByEmployeeId: uuid("created_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  createdByName: varchar("created_by_name", { length: 255 }).notNull().default(""),
+  createdByEmployeeCode: varchar("created_by_employee_code", { length: 20 }).notNull().default(""),
+  returnCondition: assetReturnConditionEnum("return_condition"),
+  documentDate: date("document_date").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+}, (t) => [check("asset_agreements_version_positive", sql`${t.version} > 0`)]);
+
+export const assetAgreementSigners = pgTable(
+  "asset_agreement_signers",
+  {
+    agreementId: uuid("agreement_id").notNull().references(() => assetAgreements.id, { onDelete: "cascade" }),
+    boxId: varchar("box_id", { length: 100 }).notNull(),
+    position: smallint("position").notNull(),
+    participant: assetAgreementParticipantEnum("participant").notNull(),
+    label: varchar("label", { length: 255 }).notNull(),
+    role: varchar("role", { length: 255 }).notNull(),
+    signerKind: assetSignerKindEnum("signer_kind").notNull(),
+    signerName: varchar("signer_name", { length: 255 }).notNull().default(""),
+    layoutPosition: varchar("layout_position", { length: 30 }).notNull(),
+    page: smallint("page"),
+    xPercent: numeric("x_percent", { precision: 5, scale: 2 }),
+    yPercent: numeric("y_percent", { precision: 5, scale: 2 }),
+    signatureData: text("signature_data"),
+    signatureStatus: assetSignatureStatusEnum("signature_status").notNull(),
+    signedByEmployeeId: uuid("signed_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    signedByName: varchar("signed_by_name", { length: 255 }).notNull().default(""),
+    signedAt: timestamp("signed_at", { withTimezone: true }),
+    returnSignatureData: text("return_signature_data"),
+    returnSignedByEmployeeId: uuid("return_signed_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    returnSignedByName: varchar("return_signed_by_name", { length: 255 }).notNull().default(""),
+    returnSignedAt: timestamp("return_signed_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.agreementId, t.boxId] }),
+    index("asset_agreement_signers_participant_idx").on(t.participant, t.agreementId),
+    check("asset_agreement_signers_position_nonnegative", sql`${t.position} >= 0`),
+    check("asset_agreement_signers_page_valid", sql`${t.page} IS NULL OR ${t.page} IN (2, 3)`),
+    check("asset_agreement_signers_x_valid", sql`${t.xPercent} IS NULL OR ${t.xPercent} BETWEEN 0 AND 100`),
+    check("asset_agreement_signers_y_valid", sql`${t.yPercent} IS NULL OR ${t.yPercent} BETWEEN 0 AND 100`),
+  ],
+);
+
+export const assetRequestReads = pgTable(
+  "asset_request_reads",
+  {
+    requestId: uuid("request_id").notNull().references(() => assetRequests.id, { onDelete: "cascade" }),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.requestId, t.employeeId] })],
+);
+
+export const assetRequestEvents = pgTable(
+  "asset_request_events",
+  {
+    id: bigint("id", { mode: "number" }).generatedAlwaysAsIdentity().primaryKey(),
+    requestId: uuid("request_id").notNull().references(() => assetRequests.id, { onDelete: "restrict" }),
+    actorEmployeeId: uuid("actor_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    eventType: varchar("event_type", { length: 100 }).notNull(),
+    fromStatus: assetRequestStatusEnum("from_status"),
+    toStatus: assetRequestStatusEnum("to_status"),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("asset_request_events_request_created_idx").on(t.requestId, t.createdAt),
+    check("asset_request_events_details_object", sql`jsonb_typeof(${t.details}) = 'object'`),
   ],
 );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { RiAddLine, RiFileList3Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
+import { PageHeader } from "@/components/hrm/PageHeader";
 import { AddOtDialog } from "@/components/hrm/ot/AddOtDialog";
 import { OtCalendarView } from "@/components/hrm/ot/OtCalendarView";
 import { OtListView } from "@/components/hrm/ot/OtListView";
@@ -23,17 +24,13 @@ export default function OTModule() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">HRM · Overtime management</p>
-          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">การทำงานล่วงเวลา</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            ยื่นคำขอ OT ดูชั่วโมงที่ทำ และติดตามผลการพิจารณา{role === "supervisor" || role === "ceo" ? "ของทีม" : "ของคุณ"}
-          </p>
-        </div>
-        <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอ OT</Button>
-      </section>
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="การทำงาน · OT"
+        title="การทำงานล่วงเวลา"
+        description={`ยื่นคำขอ OT ดูชั่วโมงที่ทำ และติดตามผลการพิจารณา${role === "supervisor" || role === "ceo" ? "ของทีม" : "ของคุณ"}`}
+        actions={<Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอ OT</Button>}
+      />
 
       {notice ? (
         <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-status-success/25 bg-status-success/10 px-4 py-3 text-xs font-medium leading-5 text-status-success">

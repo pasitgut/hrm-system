@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RiAddLine, RiFileList3Line } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
+import { PageHeader } from "@/components/hrm/PageHeader";
 import { LeaveCalendarView } from "@/components/hrm/leave/LeaveCalendarView";
 import { LeaveInsightsView } from "@/components/hrm/leave/LeaveInsightsView";
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";
@@ -60,17 +61,13 @@ export default function LeaveModule() {
   }
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">HRM · Leave management</p>
-          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">การลา</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ{isTeamView ? "และทีม" : ""}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>
-        </div>
-      </section>
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="การทำงาน · วันลา"
+        title="การลา"
+        description={`ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ${isTeamView ? "และทีม" : ""}`}
+        actions={<Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>}
+      />
 
       {notice ? (
         <div role="status" className="flex items-center justify-between gap-3 rounded-xl border border-status-success/25 bg-status-success/10 px-4 py-3 text-xs font-medium leading-5 text-status-success">

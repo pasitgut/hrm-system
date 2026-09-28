@@ -18,10 +18,10 @@ export const LEAVE_TYPE_PRESENTATION = [
   {
     code: "birthday",
     name: "ลาวันเกิด",
-    dotClass: "bg-status-violet",
-    surfaceClass: "bg-status-violet/10",
-    textClass: "text-status-violet",
-    barClass: "bg-status-violet",
+    dotClass: "bg-status-neutral",
+    surfaceClass: "bg-status-neutral/10",
+    textClass: "text-status-neutral",
+    barClass: "bg-status-neutral",
   },
 ];
 

@@ -5,7 +5,7 @@ import { durationHours, utcToBangkokParts } from "@/app/api/ot/_shared";
 // the Thai short-date formatting used to build each item's `detail` string.
 // Not a route itself — no HTTP method exports.
 
-export type ApprovalType = "ot" | "leave";
+export type ApprovalType = "ot" | "leave" | "asset";
 
 export type ApprovalItem = {
   id: string;
@@ -18,6 +18,8 @@ export type ApprovalItem = {
   submittedAt: string;
   statusCode: string;
   statusName: string;
+  assetItems?: Array<{ name: string; quantity: number; note: string }>;
+  requiresAssetWorkflow?: boolean;
 };
 
 export function jsonError(status: number, message: string) {

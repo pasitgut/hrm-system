@@ -23,7 +23,7 @@ export function Input({
         <input
           id={id}
           className={cx(
-            "flex h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-muted",
+            "flex h-10 w-full min-w-0 rounded-sm border border-input bg-background px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 read-only:bg-muted",
             LeadingIcon && "pl-9",
             props.type === "file" && "cursor-pointer file:mr-3 file:rounded-sm file:border-0 file:bg-transparent file:text-sm file:font-medium",
           )}

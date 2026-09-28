@@ -50,7 +50,7 @@ export default function ChangePasswordPage() {
         <div className="mb-6 text-center">
           <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">P</span>
           <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">PeopleOS · ระบบงานบุคคล</p>
-          <h1 className="mt-2 text-xl font-semibold tracking-tight text-foreground">ตั้งรหัสผ่านใหม่</h1>
+          <h1 className="hrm-form-title mt-2">ตั้งรหัสผ่านใหม่</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">เพื่อความปลอดภัย กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนเริ่มใช้งาน</p>
         </div>
 

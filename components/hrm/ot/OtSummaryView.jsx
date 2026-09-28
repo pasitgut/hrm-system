@@ -16,20 +16,20 @@ import { currentMonthInBangkok, formatMonthLabel, shiftMonth } from "@/component
 
 function SummaryCard({ icon: Icon, label, value, helper }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <Icon className="size-5 text-muted-foreground" aria-hidden />
+    <article className="min-w-0 border-r border-border py-1 pr-3 last:border-r-0 sm:pr-4">
+      <div className="flex items-center gap-1.5">
+        <Icon className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs leading-4 text-muted-foreground">{label}</span>
       </div>
-      <strong className="mt-3 block text-lg font-semibold tracking-tight leading-6 text-foreground">{value}</strong>
+      <strong className="mt-2 block text-lg font-semibold tracking-tight leading-6 text-foreground">{value}</strong>
       {helper ? <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">{helper}</span> : null}
-    </div>
+    </article>
   );
 }
 
 function MonthNav({ month, onChange }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-sm">
+    <div className="flex items-center justify-between border-y border-border py-1">
       <IconButton icon={RiArrowLeftSLine} aria-label="เดือนก่อนหน้า" onClick={() => onChange(shiftMonth(month, -1))} />
       <strong className="text-sm font-semibold leading-5 text-foreground">{formatMonthLabel(month)}</strong>
       <IconButton icon={RiArrowRightSLine} aria-label="เดือนถัดไป" onClick={() => onChange(shiftMonth(month, 1))} />
@@ -49,7 +49,7 @@ function IndividualSummary({ month, onMonthChange, summary, loading, error, back
       {loading || !summary ? (
         <p className="text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-3">
           <SummaryCard icon={RiCheckboxCircleLine} label="ชั่วโมงที่อนุมัติแล้ว" value={`${summary.totalApprovedHours} ชม.`} helper={`${summary.byStatus.approved} รายการ`} />
           <SummaryCard icon={RiClockwise2Line} label="ชั่วโมงรอดำเนินการ" value={`${summary.totalPendingHours} ชม.`} helper={`${summary.byStatus.pending} รายการ`} />
           <SummaryCard icon={RiCloseCircleLine} label="ชั่วโมงที่ไม่อนุมัติ" value={`${summary.totalRejectedHours} ชม.`} helper={`${summary.byStatus.rejected} รายการ`} />
@@ -123,13 +123,13 @@ export function OtSummaryView({ refreshKey = 0 }) {
       <MonthNav month={month} onChange={setMonth} />
       {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       {companySummary ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-3">
           <SummaryCard icon={RiCheckboxCircleLine} label="ชั่วโมงที่อนุมัติแล้วทั้งบริษัท" value={`${companySummary.totalApprovedHours} ชม.`} />
           <SummaryCard icon={RiClockwise2Line} label="ชั่วโมงรอดำเนินการทั้งบริษัท" value={`${companySummary.totalPendingHours} ชม.`} />
           <SummaryCard icon={RiFileList3Line} label="จำนวนคำขอทั้งหมด" value={`${companySummary.requestCount} รายการ`} />
         </div>
       ) : null}
-      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <section className="overflow-hidden border-y border-border bg-card">
         <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px] text-left">
             <thead className="bg-muted">
@@ -164,7 +164,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
               type="button"
               key={row.employeeId}
               onClick={() => setDrillEmployeeId(row.employeeId)}
-              className="rounded-xl border border-border bg-card p-4 text-left shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="rounded-md border border-border bg-card p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <strong className="block text-sm font-medium leading-5 text-foreground">{row.employeeName}</strong>
               <span className="text-xs leading-4 text-muted-foreground">{row.employeeCode}</span>

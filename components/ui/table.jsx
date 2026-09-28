@@ -1,7 +1,7 @@
 import { cx } from "@/utils/cx";
 
 export function Table({ className, ...props }) {
-  return <div className="relative w-full overflow-auto"><table className={cx("w-full caption-bottom text-sm", className)} {...props} /></div>;
+  return <div className="hrm-table-shell"><table className={cx("hrm-data-table caption-bottom", className)} {...props} /></div>;
 }
 
 export function TableHeader({ className, ...props }) {
@@ -17,15 +17,15 @@ export function TableFooter({ className, ...props }) {
 }
 
 export function TableRow({ className, ...props }) {
-  return <tr className={cx("border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted", className)} {...props} />;
+  return <tr className={cx("transition-colors data-[state=selected]:bg-muted", className)} {...props} />;
 }
 
 export function TableHead({ className, ...props }) {
-  return <th className={cx("h-11 px-4 text-left align-middle text-xs font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0", className)} {...props} />;
+  return <th className={cx("text-left align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />;
 }
 
 export function TableCell({ className, ...props }) {
-  return <td className={cx("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />;
+  return <td className={cx("align-middle [&:has([role=checkbox])]:pr-0", className)} {...props} />;
 }
 
 export function TableCaption({ className, ...props }) {

@@ -16,7 +16,7 @@ function QuotaCard({ type, quota }) {
     : Math.min(100, Math.round((usedDays / quota.annualQuotaDays) * 100));
 
   return (
-    <article className="rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
+    <article className="min-w-0 p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={cn("size-2.5 rounded-full", type.dotClass)} aria-hidden="true" />
@@ -25,7 +25,7 @@ function QuotaCard({ type, quota }) {
         {isMissing ? <Chip variant="caption" color="gray">ยังไม่ตั้งค่า</Chip> : isUncapped ? <Chip variant="caption" color="cyan">ไม่จำกัด</Chip> : null}
       </div>
       <div className="mt-4 flex items-baseline gap-2">
-        <strong className="text-2xl font-semibold tracking-tight text-foreground">
+        <strong className="text-xl font-semibold tracking-tight text-foreground">
           {isMissing ? "—" : isUncapped ? usedDays : remainingDays}
         </strong>
         <span className="text-xs text-muted-foreground">{isUncapped ? "วันที่ใช้ไป" : "วันคงเหลือ"}</span>
@@ -38,8 +38,8 @@ function QuotaCard({ type, quota }) {
             : `ใช้ไป ${usedDays} จาก ${quota.annualQuotaDays} วัน`}
       </p>
       {!isUncapped && !isMissing ? (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted" role="meter" aria-label={`ใช้สิทธิ์${type.name}ไป ${progress}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
-          <div className={cn("h-full rounded-full transition-[width]", type.barClass)} style={{ width: `${progress}%` }} />
+        <div className="mt-3 h-1 overflow-hidden rounded-sm bg-muted" role="meter" aria-label={`ใช้สิทธิ์${type.name}ไป ${progress}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <div className={cn("h-full transition-[width]", type.barClass)} style={{ width: `${progress}%` }} />
         </div>
       ) : null}
     </article>
@@ -84,9 +84,9 @@ export function LeaveSummaryView({ refreshKey = 0 }) {
     <div>
       {error ? <p role="alert" className="mb-3 text-xs leading-5 text-status-danger">{error}</p> : null}
       {loading && !summary ? (
-        <p className="rounded-xl border border-border bg-card p-8 text-center text-xs text-muted-foreground">กำลังโหลดสิทธิ์วันลา...</p>
+        <p className="border-y border-border py-6 text-center text-xs text-muted-foreground">กำลังโหลดสิทธิ์วันลา...</p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid divide-y divide-border border-y border-border sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-3">
           {LEAVE_TYPE_PRESENTATION.map((type) => <QuotaCard key={type.code} type={type} quota={quotas.get(type.code)} />)}
         </div>
       )}

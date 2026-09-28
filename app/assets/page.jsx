@@ -1,5 +1,5 @@
-import { notFound } from "next/navigation";
+import AssetModule from "@/components/hrm/assets/AssetModule";
 
 export default function AssetsPage() {
-  notFound();
+  return <AssetModule />;
 }

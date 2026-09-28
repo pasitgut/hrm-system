@@ -15,9 +15,11 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Chip } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Select, SelectItem } from "@/components/ui/select";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
+import { PageHeader } from "@/components/hrm/PageHeader";
 import { canManageEmployees } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
@@ -372,20 +374,18 @@ export default function EmployeeModule() {
   const activeTypes = lookups.employmentTypes.filter((item) => item.isActive !== false);
 
   return (
-    <div className="space-y-5">
-      <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">HRM / ทะเบียนพนักงาน</p>
-          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">ทะเบียนพนักงาน</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">จัดการข้อมูลพนักงาน แผนก ตำแหน่ง และประเภทการจ้างในที่เดียว</p>
-        </div>
-        {canManage ? (
-          <div className="flex flex-wrap gap-2">
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="ข้อมูลบุคลากร · พนักงาน"
+        title="ทะเบียนพนักงาน"
+        description="จัดการข้อมูลพนักงาน แผนก ตำแหน่ง และประเภทการจ้างในที่เดียว"
+        actions={canManage ? (
+          <>
             <Button type="button" variant="outline" leadingIcon={RiSettings3Line} onClick={() => setMasterOpen(true)}>จัดการรายการ</Button>
             <Button type="button" leadingIcon={RiAddLine} onClick={openAdd}>เพิ่มพนักงาน</Button>
-          </div>
+          </>
         ) : null}
-      </section>
+      />
 
       {notice ? (
         <div role="status" aria-live="polite" className={cn("flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm", notice.type === "success" ? "border-status-success/30 bg-status-success/5 text-foreground" : "border-status-danger/30 bg-status-danger/5 text-status-danger")}>
@@ -515,7 +515,7 @@ export default function EmployeeModule() {
         title={editing ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}
         description="กำหนดรหัสพนักงานเองเป็นตัวเลข 4 หลัก เช่น 2603"
         size="lg"
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto border-t-4 border-t-primary"
+        className="border-t-4 border-t-primary"
         footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
       >
         <form id="employee-form" className="grid gap-4 sm:grid-cols-2" onSubmit={saveEmployee} noValidate>
@@ -534,7 +534,7 @@ export default function EmployeeModule() {
           <Input label="ชื่อ (อังกฤษ)" value={form.firstNameEn} onChange={(value) => updateForm("firstNameEn", value)} />
           <Input label="นามสกุล (อังกฤษ)" value={form.lastNameEn} onChange={(value) => updateForm("lastNameEn", value)} />
           <Input label="เลขบัตรประชาชน" value={form.citizenId} onChange={(value) => updateForm("citizenId", value)} />
-          <Input label="วันเกิด" type="date" value={form.birthDate} onChange={(value) => updateForm("birthDate", value)} />
+          <DatePickerField label="วันเกิด" value={form.birthDate} onChange={(value) => updateForm("birthDate", value?.toString() || "")} />
           <Input label={editing ? "อีเมล" : "อีเมล *"} type="email" value={form.email} onChange={(value) => updateForm("email", value)} isRequired={!editing || Boolean(form.email)} />
           {!editing ? <p className="self-end pb-2 text-xs leading-5 text-muted-foreground sm:col-span-2">ใช้เข้าสู่ระบบได้ด้วยอีเมลหรือรหัสพนักงาน โดยรหัสผ่านเริ่มต้นคือรหัสพนักงานและต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก</p> : null}
           <Input label="โทรศัพท์" type="tel" value={form.phone} onChange={(value) => updateForm("phone", value)} />
@@ -554,8 +554,8 @@ export default function EmployeeModule() {
             <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
             {activeTypes.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
           </SelectField>
-          <Input label="วันที่เริ่มงาน *" type="date" value={form.startDate} onChange={(value) => updateForm("startDate", value)} isRequired />
-          {editing && !editing.isActive ? <Input label="วันที่สิ้นสุดการทำงาน" type="date" value={form.endDate} onChange={(value) => updateForm("endDate", value)} /> : null}
+          <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
+          {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
           <Input
             label="รูปโปรไฟล์"
             type="file"
@@ -586,7 +586,7 @@ export default function EmployeeModule() {
         footer={<><Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={offboarding}>ยกเลิก</Button><Button type="button" variant="danger" onClick={confirmDelete} disabled={offboarding}>{offboarding ? "กำลังดำเนินการ..." : "ยืนยันพ้นสภาพ"}</Button></>}
       >
         <p className="text-sm text-foreground">เปลี่ยน <strong>{deleteTarget ? `${deleteTarget.firstName} ${deleteTarget.lastName}` : ""}</strong> เป็นพ้นสภาพในวันที่</p>
-        <Input className="mt-3" label="วันที่สิ้นสุดการทำงาน" type="date" value={offboardingEndDate} onChange={(value) => { setOffboardingEndDate(value); setOffboardError(""); }} isRequired />
+        <DatePickerField className="mt-3" label="วันที่สิ้นสุดการทำงาน" value={offboardingEndDate} onChange={(value) => { setOffboardingEndDate(value?.toString() || ""); setOffboardError(""); }} isRequired />
         {offboardError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{offboardError}</p> : null}
       </HrmDialog>
 
@@ -627,7 +627,6 @@ export default function EmployeeModule() {
         title="จัดการรายการพนักงาน"
         description="เพิ่ม แก้ไข หรือลบประเภทการจ้าง สถานะพนักงาน แผนก และตำแหน่ง"
         size="lg"
-        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
       >
         <div className="space-y-4">
           <div role="tablist" aria-label="ประเภทข้อมูลที่จัดการ" className="grid grid-cols-2 gap-2 sm:grid-cols-4">

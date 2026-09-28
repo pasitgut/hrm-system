@@ -5,6 +5,13 @@
 - Use shadcn semantic color tokens (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary`, `ring-ring`) from `styles/theme.css`; keep light and dark themes token-driven.
 - Make layouts mobile-first. Let content shrink, wrap action groups, and contain horizontal table scrolling within its surface. Keep touch targets at least 40px where space allows.
 - Preserve keyboard access and visible focus rings when replacing controls. Form fields need associated labels and clear validation feedback.
+
+## Product design system
+
+- `docs/DESIGN_SYSTEM.md` is the source of truth for PeopleOS UI/UX. Read it before changing a page or creating a new one.
+- Use `styles/theme.css` semantic tokens and shared components from `components/ui/`; avoid route-specific palette literals and styling conventions.
+- Keep the interface white-first, compact, and data-led. Blue is for primary actions and selection; status colors follow the shared semantic mapping.
+- Compose pages with `components/hrm/PageHeader.jsx`, consistent section spacing, compact tables, and responsive controls. Preserve the existing dark theme through semantic tokens.
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

@@ -1,8 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import {
   employees,
+  assetRequestItems,
+  assetAgreements,
+  assetRequests,
   leaveRequests,
   leaveTypes,
   overtimeRequests,
@@ -11,13 +14,13 @@ import {
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { formatOtDetail, formatThaiDateRange, jsonError, type ApprovalItem } from "@/app/api/approvals/_shared";
 
-const TYPE_VALUES = new Set(["all", "leave", "ot"]);
+const TYPE_VALUES = new Set(["all", "leave", "ot", "asset"]);
 
-// Combines pending/recent OT and leave requests into a single
+// Combines OT, leave, and asset requests into a single
 // normalized, newest-first list. Used both as the central approvals queue
 // (supervisor/ceo, unscoped) and as "my requests across everything" (an
 // employee only ever sees their own rows here, same as every other list in
-// the app). Three separate per-table queries, normalized and merged in
+// the app). Separate per-table queries, normalized and merged in
 // application code — no DB-level UNION.
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
@@ -105,6 +108,70 @@ export const GET = withApiAuth(async (request: NextRequest) => {
           submittedAt: row.createdAt.toISOString(),
           statusCode: row.statusCode,
           statusName: row.statusName,
+        },
+      });
+    }
+  }
+
+  if (typeParam === "all" || typeParam === "asset") {
+    const assetConditions = [isNull(assetRequests.deletedAt)];
+    if (scopedEmployeeId) assetConditions.push(eq(assetRequests.borrowerEmployeeId, scopedEmployeeId));
+    const assetRows = await db
+      .select({
+        id: assetRequests.id,
+        employeeId: assetRequests.borrowerEmployeeId,
+        employeeFirstName: employees.firstName,
+        employeeLastName: employees.lastName,
+        fromDate: assetRequests.fromDate,
+        toDate: assetRequests.toDate,
+        reason: assetRequests.reason,
+        status: assetRequests.status,
+        formDate: assetRequests.formDate,
+        agreementTitle: assetAgreements.title,
+        agreementStatus: assetAgreements.status,
+      })
+      .from(assetRequests)
+      .innerJoin(employees, eq(assetRequests.borrowerEmployeeId, employees.id))
+      .leftJoin(assetAgreements, eq(assetAgreements.id, assetRequests.agreementId))
+      .where(and(...assetConditions));
+
+    const requestIds = assetRows.map((row) => row.id);
+    const assetItems = requestIds.length
+      ? await db.select().from(assetRequestItems).where(inArray(assetRequestItems.requestId, requestIds)).orderBy(asc(assetRequestItems.position))
+      : [];
+    const itemsByRequest = new Map<string, typeof assetItems>();
+    for (const item of assetItems) {
+      const current = itemsByRequest.get(item.requestId) ?? [];
+      current.push(item);
+      itemsByRequest.set(item.requestId, current);
+    }
+    const statusNames = {
+      pending: "รออนุมัติ",
+      approved: "กำลังยืม",
+      rejected: "ไม่อนุมัติ",
+      return_pending: "รอตรวจรับคืน",
+      returned: "คืนแล้ว",
+      unknown: "ไม่ทราบสถานะ",
+    };
+
+    for (const row of assetRows) {
+      const requestItems = itemsByRequest.get(row.id) ?? [];
+      const itemNames = requestItems.map((item) => `${item.name} × ${item.quantity}`).join(", ");
+      entries.push({
+        createdAt: row.formDate,
+        item: {
+          id: row.id,
+          type: "asset",
+          kind: "ยืมทรัพย์สิน",
+          employeeId: row.employeeId,
+          employeeName: `${row.employeeFirstName} ${row.employeeLastName}`.trim(),
+          detail: `${formatThaiDateRange(row.fromDate, row.toDate ?? row.fromDate)}${itemNames ? ` · ${itemNames}` : ""}`,
+          reason: row.reason,
+          submittedAt: row.formDate.toISOString(),
+          statusCode: row.status,
+          statusName: statusNames[row.status],
+          assetItems: requestItems.map(({ name, quantity, note }) => ({ name, quantity, note })),
+          requiresAssetWorkflow: row.status === "pending" && row.agreementTitle !== null,
         },
       });
     }

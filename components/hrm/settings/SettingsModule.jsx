@@ -9,6 +9,7 @@ import {
 } from "@remixicon/react";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { ResourceTab } from "@/components/hrm/settings/ResourceTab";
+import { PageHeader } from "@/components/hrm/PageHeader";
 
 const departmentFormFields = [{ key: "name", label: "ชื่อแผนก", type: "text", required: true }];
 
@@ -43,16 +44,12 @@ const leaveTypeDetailFields = [
 
 export default function SettingsModule() {
   return (
-    <div className="space-y-6">
-      <section>
-        <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-primary">HRM · Settings</p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight leading-tight text-foreground sm:text-3xl">
-          ตั้งค่าระบบ
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-          จัดการข้อมูลหลักที่ใช้ร่วมกันทั้งระบบ เช่น แผนก ตำแหน่ง สถานะและประเภทการจ้างงาน และประเภทการลา
-        </p>
-      </section>
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="ระบบ · ตั้งค่า"
+        title="ตั้งค่าระบบ"
+        description="จัดการข้อมูลหลักที่ใช้ร่วมกันทั้งระบบ เช่น แผนก ตำแหน่ง สถานะและประเภทการจ้างงาน และประเภทการลา"
+      />
       <Tabs defaultSelectedKey="departments">
         <TabList aria-label="หมวดหมู่การตั้งค่า" className="flex-wrap">
           <Tab id="departments" icon={RiBuildingLine}>

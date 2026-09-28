@@ -21,7 +21,7 @@ export default function LoginPage() {
           <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
             P
           </span>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">เข้าสู่ระบบ</h1>
+          <h1 className="hrm-form-title">เข้าสู่ระบบ</h1>
           <p className="mt-1 text-sm text-muted-foreground">PeopleOS · ระบบงานบุคคล</p>
         </div>
         <form action={formAction} className="space-y-4" noValidate>

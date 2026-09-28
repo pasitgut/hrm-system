@@ -1,8 +1,5 @@
 import { db } from "@/tests/setup/db";
 import {
-  assetCategories,
-  assetLoans,
-  assets,
   departments,
   employees,
   leaveRequests,
@@ -18,7 +15,6 @@ import { eq } from "drizzle-orm";
 type Role = (typeof userRoleEnum.enumValues)[number];
 
 let employeeCodeCounter = 0;
-let assetCodeCounter = 0;
 async function firstDepartmentId(): Promise<number> {
   const [row] = await db.select({ id: departments.id }).from(departments).limit(1);
   if (!row) throw new Error("No department seeded — call resetDb()/seedReferenceData() first");
@@ -35,12 +31,6 @@ async function firstLeaveTypeCode(): Promise<string> {
   const [row] = await db.select({ code: leaveTypes.code }).from(leaveTypes).limit(1);
   if (!row) throw new Error("No leave type seeded — call resetDb()/seedReferenceData() first");
   return row.code;
-}
-
-async function firstAssetCategoryId(): Promise<number> {
-  const [row] = await db.select({ id: assetCategories.id }).from(assetCategories).limit(1);
-  if (!row) throw new Error("No asset category seeded — call resetDb()/seedReferenceData() first");
-  return row.id;
 }
 
 export async function createEmployee(overrides: Partial<typeof employees.$inferInsert> = {}) {
@@ -125,40 +115,4 @@ export async function createLeaveRequest(overrides: Partial<typeof leaveRequests
     .returning();
 
   return request;
-}
-
-export async function createAsset(overrides: Partial<typeof assets.$inferInsert> = {}) {
-  assetCodeCounter += 1;
-  const categoryId = overrides.categoryId ?? (await firstAssetCategoryId());
-
-  const [asset] = await db
-    .insert(assets)
-    .values({
-      code: `AST-TEST-${String(assetCodeCounter).padStart(3, "0")}`,
-      name: `ทรัพย์สินทดสอบ ${assetCodeCounter}`,
-      categoryId,
-      ...overrides,
-    })
-    .returning();
-
-  return asset;
-}
-
-export async function createAssetLoan(overrides: Partial<typeof assetLoans.$inferInsert> = {}) {
-  const employeeId = overrides.employeeId ?? (await createEmployee()).id;
-  const assetId = overrides.assetId ?? (await createAsset()).id;
-
-  const [loan] = await db
-    .insert(assetLoans)
-    .values({
-      employeeId,
-      assetId,
-      checkoutDate: "2026-09-20",
-      dueDate: "2026-09-27",
-      purpose: "ทดสอบการยืม",
-      ...overrides,
-    })
-    .returning();
-
-  return loan;
 }

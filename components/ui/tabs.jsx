@@ -16,19 +16,19 @@ export function Tabs({ selectedKey, defaultSelectedKey, onSelectionChange, class
 }
 
 export function TabList({ className, ...props }) {
-  return <TabsPrimitive.List className={cx("inline-flex min-h-10 max-w-full items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1 text-muted-foreground", className)} {...props} />;
+  return <TabsPrimitive.List className={cx("inline-flex min-h-10 max-w-full items-center gap-1 overflow-x-auto border-b border-border text-muted-foreground", className)} {...props} />;
 }
 
 export function Tab({ id, icon: Icon, count, className, children, ...props }) {
   return (
     <TabsPrimitive.Trigger
       value={String(id)}
-      className={cx("group inline-flex min-h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm", className)}
+      className={cx("inline-flex min-h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-primary", className)}
       {...props}
     >
       {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
       {children}
-      {count != null ? <span className="rounded-sm bg-background/60 px-1.5 py-0.5 text-[10px] leading-none text-current">{count}</span> : null}
+      {count != null ? <span className="bg-muted px-1.5 py-0.5 text-[11px] leading-4 text-current">{count}</span> : null}
     </TabsPrimitive.Trigger>
   );
 }

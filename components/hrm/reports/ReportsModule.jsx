@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/hrm/PageHeader";
 import { cn } from "@/lib/utils";
 
 const reportTypes = [
@@ -113,7 +114,7 @@ function SelectField({ id, label, value, onChange, options, ariaLabel }) {
 function ReportSection({ id, icon: Icon, title, description, className, children }) {
   return (
     <section aria-labelledby={id} className={cn("min-w-0", className)}>
-      <Card className="h-full border-border/80 shadow-sm">
+      <Card className="h-full border-border/80">
         <CardHeader className="flex-row items-center gap-2.5 p-3 sm:p-4">
           <div className="hrm-soft-icon size-9 rounded-lg">
             <Icon className="size-4" aria-hidden="true" />
@@ -416,7 +417,7 @@ export default function ReportsModule() {
       ) : null}
       </div>
 
-      <Card className="border-border/80 shadow-sm">
+      <Card className="border-border/80">
         <CardContent className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold leading-4 text-muted-foreground">สรุปการตั้งค่า</p>
@@ -462,20 +463,12 @@ export default function ReportsModule() {
   );
 
   return (
-    <div className="space-y-4">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase leading-4 tracking-[0.08em] text-primary">People operations · Reports</p>
-          <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">สร้างรายงาน</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            เลือกหมวดและกำหนดรูปแบบรายงานก่อนส่งออก
-          </p>
-        </div>
-        <div className="flex items-center gap-2 self-start rounded-lg border border-border bg-card px-3 py-2 sm:self-auto">
-          <RiFileChartLine className="size-4 text-primary" aria-hidden="true" />
-          <span className="text-xs font-medium text-muted-foreground">ตัวสร้างรายงาน</span>
-        </div>
-      </header>
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="ข้อมูล · รายงาน"
+        title="สร้างรายงาน"
+        description="เลือกหมวด ช่วงเวลา และรูปแบบก่อนส่งออก"
+      />
 
       <Tabs selectedKey={reportType} onSelectionChange={(key) => setReportType(String(key))}>
         <TabList
@@ -501,11 +494,9 @@ export default function ReportsModule() {
             </Tab>
           ))}
         </TabList>
-        {reportTypes.map((item) => (
-          <TabPanel key={item.id} id={item.id} className="mt-0">
-            {settingsPanel}
-          </TabPanel>
-        ))}
+        <TabPanel key={reportType} id={reportType} className="mt-0">
+          {settingsPanel}
+        </TabPanel>
       </Tabs>
     </div>
   );

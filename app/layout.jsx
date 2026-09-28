@@ -7,7 +7,7 @@ import { employees } from "@/lib/db/schema";
 
 export const metadata = {
   title: "PeopleOS | ระบบงานบุคคล",
-  description: "ระบบ HRM สำหรับจัดการพนักงาน OT วันลา การอนุมัติ และรายงาน",
+  description: "ระบบ HRM สำหรับจัดการพนักงาน OT วันลา ทรัพย์สิน การอนุมัติ และรายงาน",
 };
 
 export default async function RootLayout({ children }) {
@@ -18,19 +18,23 @@ export default async function RootLayout({ children }) {
   const user = await getCurrentUser();
 
   let employeeName = null;
+  let employeeCode = null;
   if (user) {
     const [employee] = await db
-      .select({ firstName: employees.firstName, lastName: employees.lastName })
+      .select({ firstName: employees.firstName, lastName: employees.lastName, code: employees.code })
       .from(employees)
       .where(eq(employees.id, user.employeeId))
       .limit(1);
-    if (employee) employeeName = `${employee.firstName} ${employee.lastName}`;
+    if (employee) {
+      employeeName = `${employee.firstName} ${employee.lastName}`;
+      employeeCode = employee.code;
+    }
   }
 
   return (
-    <html lang="th">
+    <html lang="th" data-scroll-behavior="smooth">
       <body>
-        <HrmShell user={user} employeeName={employeeName}>
+        <HrmShell user={user} employeeName={employeeName} employeeCode={employeeCode}>
           {children}
         </HrmShell>
       </body>

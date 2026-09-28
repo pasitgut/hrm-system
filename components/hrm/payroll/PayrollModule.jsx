@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import {
-  RiArrowDownSLine,
   RiBankLine,
   RiCalendarLine,
   RiCheckLine,
@@ -18,7 +16,9 @@ import {
   RiWallet3Line,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectItem } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/hrm/PageHeader";
 
 const period = {
   label: "ก.ย. 2569",
@@ -26,17 +26,17 @@ const period = {
 };
 
 const payrollRows = [
-  { id: "P-1024", name: "วิภาวดี ศรีสุข", initials: "วศ", department: "บัญชี", color: "bg-sky-600", salary: 38000, ot: 0, allowance: 1500, tax: 1063, social: 750, deduction: 1900 },
-  { id: "P-1088", name: "ธนากร มั่นคง", initials: "ธม", department: "ผลิต", color: "bg-orange-600", salary: 18500, ot: 6240, allowance: 800, tax: 365, social: 750, deduction: 0, review: true },
-  { id: "P-1102", name: "ปิยะนุช แก้วใส", initials: "ปก", department: "ไอที", color: "bg-lime-600", salary: 52000, ot: 0, allowance: 2000, tax: 3575, social: 750, deduction: 2600 },
-  { id: "P-1125", name: "อนุชา พรหม", initials: "อพ", department: "ขาย", color: "bg-purple-700", salary: 28000, ot: 0, allowance: 8400, tax: 908, social: 750, deduction: 3400, review: true },
-  { id: "P-1174", name: "กมลวรรณ วงศ์สวัสดิ์", initials: "กว", department: "HR", color: "bg-amber-600", salary: 34000, ot: 0, allowance: 1500, tax: 863, social: 750, deduction: 1700 },
-  { id: "P-1190", name: "ณัฐพล ทองคำ", initials: "นท", department: "ผลิต", color: "bg-teal-600", salary: 19000, ot: 4120, allowance: 800, tax: 284, social: 750, deduction: 500 },
-  { id: "P-1218", name: "สุภาพร รุ่งเรือง", initials: "สร", department: "QA", color: "bg-rose-600", salary: 24500, ot: 1530, allowance: 1000, tax: 439, social: 750, deduction: 1225 },
-  { id: "P-1241", name: "ศุภชัย สายบุญ", initials: "ศส", department: "ผลิต", color: "bg-indigo-600", salary: 18800, ot: 5980, allowance: 800, tax: 367, social: 750, deduction: 0 },
-  { id: "P-1280", name: "พิมพ์ชนก เพชรรัตน์", initials: "พพ", department: "จัดซื้อ", color: "bg-emerald-600", salary: 31000, ot: 0, allowance: 1500, tax: 713, social: 750, deduction: 1550 },
-  { id: "P-1306", name: "วรเชษฐ์ บุญมา", initials: "วบ", department: "คลังสินค้า", color: "bg-blue-700", salary: 17500, ot: 3210, allowance: 800, tax: 163, social: 750, deduction: 0, review: true },
-  { id: "P-1342", name: "รัตนา ใจดี", initials: "รจ", department: "บริการลูกค้า", color: "bg-pink-700", salary: 22500, ot: 840, allowance: 1200, tax: 302, social: 750, deduction: 450, review: true },
+  { id: "P-1024", name: "วิภาวดี ศรีสุข", initials: "วศ", department: "บัญชี", color: "bg-primary/10 text-primary", salary: 38000, ot: 0, allowance: 1500, tax: 1063, social: 750, deduction: 1900 },
+  { id: "P-1088", name: "ธนากร มั่นคง", initials: "ธม", department: "ผลิต", color: "bg-accent/10 text-status-success", salary: 18500, ot: 6240, allowance: 800, tax: 365, social: 750, deduction: 0, review: true },
+  { id: "P-1102", name: "ปิยะนุช แก้วใส", initials: "ปก", department: "ไอที", color: "bg-muted text-muted-foreground", salary: 52000, ot: 0, allowance: 2000, tax: 3575, social: 750, deduction: 2600 },
+  { id: "P-1125", name: "อนุชา พรหม", initials: "อพ", department: "ขาย", color: "bg-primary/10 text-primary", salary: 28000, ot: 0, allowance: 8400, tax: 908, social: 750, deduction: 3400, review: true },
+  { id: "P-1174", name: "กมลวรรณ วงศ์สวัสดิ์", initials: "กว", department: "HR", color: "bg-muted text-muted-foreground", salary: 34000, ot: 0, allowance: 1500, tax: 863, social: 750, deduction: 1700 },
+  { id: "P-1190", name: "ณัฐพล ทองคำ", initials: "นท", department: "ผลิต", color: "bg-accent/10 text-status-success", salary: 19000, ot: 4120, allowance: 800, tax: 284, social: 750, deduction: 500 },
+  { id: "P-1218", name: "สุภาพร รุ่งเรือง", initials: "สร", department: "QA", color: "bg-primary/10 text-primary", salary: 24500, ot: 1530, allowance: 1000, tax: 439, social: 750, deduction: 1225 },
+  { id: "P-1241", name: "ศุภชัย สายบุญ", initials: "ศส", department: "ผลิต", color: "bg-muted text-muted-foreground", salary: 18800, ot: 5980, allowance: 800, tax: 367, social: 750, deduction: 0 },
+  { id: "P-1280", name: "พิมพ์ชนก เพชรรัตน์", initials: "พพ", department: "จัดซื้อ", color: "bg-accent/10 text-status-success", salary: 31000, ot: 0, allowance: 1500, tax: 713, social: 750, deduction: 1550 },
+  { id: "P-1306", name: "วรเชษฐ์ บุญมา", initials: "วบ", department: "คลังสินค้า", color: "bg-primary/10 text-primary", salary: 17500, ot: 3210, allowance: 800, tax: 163, social: 750, deduction: 0, review: true },
+  { id: "P-1342", name: "รัตนา ใจดี", initials: "รจ", department: "บริการลูกค้า", color: "bg-muted text-muted-foreground", salary: 22500, ot: 840, allowance: 1200, tax: 302, social: 750, deduction: 450, review: true },
 ];
 
 const money = new Intl.NumberFormat("th-TH", {
@@ -56,7 +56,7 @@ const stages = [
 const metrics = [
   { label: "พนักงานในงวด", value: "1,248", detail: "เข้าใหม่ 18 · ออก 7", icon: RiTeamLine, tone: "text-status-info" },
   { label: "รวมเงินได้ (Gross)", value: "฿43.16M", detail: "+12% จากเดือนก่อน", icon: RiWallet3Line, tone: "text-status-success" },
-  { label: "ภาษี + ประกันสังคม", value: "฿2.40M", detail: "นายจ้างสมทบ ปกส. ฿0.78M", icon: RiBankLine, tone: "text-status-violet" },
+  { label: "ภาษี + ประกันสังคม", value: "฿2.40M", detail: "นายจ้างสมทบ ปกส. ฿0.78M", icon: RiBankLine, tone: "text-status-neutral" },
   { label: "จ่ายสุทธิ (Net)", value: "฿38.97M", detail: "กำหนดจ่าย 30/09/2569", icon: RiMoneyDollarCircleLine, tone: "text-primary" },
   { label: "รายการตรวจสอบ", value: "4", detail: "ต้องยืนยันก่อนอนุมัติ", icon: RiSearchEyeLine, tone: "text-status-warning" },
 ];
@@ -122,21 +122,21 @@ function ProcessTimeline() {
 function MetricCard({ metric }) {
   const Icon = metric.icon;
   return (
-    <article className="min-w-0 rounded-xl border border-border bg-card p-4 shadow-sm sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-xs font-medium leading-5 text-muted-foreground">{metric.label}</h2>
+    <article className="min-w-0 py-1">
+      <p className="flex items-center gap-1.5 text-xs leading-5 text-muted-foreground">
         <Icon aria-hidden="true" className={cn("size-4 shrink-0", metric.tone)} />
-      </div>
-      <p className="mt-2 text-2xl font-semibold leading-7 tracking-tight tabular-nums text-foreground sm:text-[1.65rem]">{metric.value}</p>
-      <p className="mt-1 truncate text-[11px] leading-4 text-muted-foreground">{metric.detail}</p>
+        {metric.label}
+      </p>
+      <p className="mt-1 text-lg font-semibold leading-6 tabular-nums text-foreground">{metric.value}</p>
+      <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground">{metric.detail}</p>
     </article>
   );
 }
 
 function PayrollTable({ rows, onlyReview, onOnlyReviewChange, search, onSearchChange }) {
   return (
-    <section aria-labelledby="payroll-results-title" className="min-w-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+    <section aria-labelledby="payroll-results-title" className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="payroll-results-title" className="text-base font-semibold tracking-tight text-foreground">ผลคำนวณรายบุคคล</h2>
           <p className="mt-1 text-xs text-muted-foreground">แสดงตัวอย่าง {rows.length} จาก {payrollRows.length} รายการ</p>
@@ -180,7 +180,7 @@ function PayrollTable({ rows, onlyReview, onOnlyReviewChange, search, onSearchCh
               <tr className={cn("border-t border-border text-xs transition-colors hover:bg-muted/45", row.review && "bg-status-warning/5")} key={row.id}>
                 <th className="px-4 py-3 text-left font-normal">
                   <div className="flex min-w-44 items-center gap-2.5">
-                    <span aria-hidden="true" className={cn("grid size-8 shrink-0 place-items-center rounded-lg text-[10px] font-semibold text-white", row.color)}>{row.initials}</span>
+                    <span aria-hidden="true" className={cn("grid size-8 shrink-0 place-items-center rounded-lg text-[10px] font-semibold", row.color)}>{row.initials}</span>
                     <span className="min-w-0">
                       <span className="block truncate font-semibold text-foreground">{row.name}</span>
                       <span className="mt-0.5 block text-[10px] text-muted-foreground">{row.department}</span>
@@ -271,46 +271,32 @@ export default function PayrollModule() {
   });
 
   return (
-    <div className="space-y-5 sm:space-y-6">
-      <nav aria-label="เส้นทางนำทาง" className="flex min-w-0 items-center gap-2 overflow-hidden text-xs text-muted-foreground">
-        <Link className="shrink-0 transition-colors hover:text-foreground focus-visible:rounded-sm" href="/">HRM</Link>
-        <span aria-hidden="true">›</span>
-        <span className="shrink-0">เงินเดือน & สวัสดิการ</span>
-        <span aria-hidden="true">›</span>
-        <span aria-current="page" className="truncate font-medium text-foreground">Payroll</span>
-      </nav>
-      <section className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-status-warning" />
-            HR · Payroll Thailand
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-3xl">เงินเดือน — งวด {period.label}</h1>
-            <span className="rounded-md border border-status-info/20 bg-status-info/10 px-2 py-1 text-[10px] font-semibold text-status-info">MOCKUP</span>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">{period.dateRange} · บริษัท เอ จำกัด</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="relative min-w-40 flex-1 sm:flex-none">
-            <span className="sr-only">เลือกรอบเงินเดือน</span>
-            <select className="h-10 w-full appearance-none rounded-md border border-input bg-card py-2 pl-3 pr-9 text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-44" defaultValue={period.label}>
-              <option value={period.label}>Monthly · {period.label}</option>
-            </select>
-            <RiArrowDownSLine aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          </label>
-          <Button className="flex-1 sm:flex-none" onClick={() => setNotice("ส่งรายการตัวอย่างเข้าสู่ขั้นอนุมัติแล้ว")} size="sm">
-            <RiCheckLine aria-hidden="true" />
-            ส่งอนุมัติ
-          </Button>
-        </div>
-      </section>
+    <div className="hrm-page">
+      <PageHeader
+        eyebrow="เงินเดือน · ข้อมูลตัวอย่าง"
+        title={`เงินเดือน · งวด ${period.label}`}
+        description={`${period.dateRange} · บริษัท เอ จำกัด · ข้อมูลสมมติสำหรับแสดงหน้าจอ`}
+        actions={(
+          <>
+            <label className="grid min-w-40 gap-1">
+              <span className="text-xs font-medium text-muted-foreground">รอบเงินเดือน</span>
+              <Select aria-label="รอบเงินเดือน" defaultSelectedKey={period.label}>
+                <SelectItem id={period.label}>รายเดือน · {period.label}</SelectItem>
+              </Select>
+            </label>
+            <Button className="self-end" onClick={() => setNotice("ส่งรายการตัวอย่างเข้าสู่ขั้นอนุมัติแล้ว")} size="sm">
+              <RiCheckLine aria-hidden="true" />
+              ส่งอนุมัติ
+            </Button>
+          </>
+        )}
+      />
 
-      <section aria-label="ความคืบหน้าการจ่ายเงินเดือน" className="rounded-xl border border-border bg-card px-4 py-5 shadow-sm sm:px-5">
+      <section aria-label="ความคืบหน้าการจ่ายเงินเดือน" className="border-y border-border py-3">
         <ProcessTimeline />
       </section>
 
-      <section aria-label="สรุปเงินเดือน" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section aria-label="สรุปเงินเดือน" className="grid grid-cols-2 gap-x-5 gap-y-3 border-b border-border pb-4 sm:grid-cols-3 xl:grid-cols-5">
         {metrics.map((metric) => <MetricCard key={metric.label} metric={metric} />)}
       </section>
 
