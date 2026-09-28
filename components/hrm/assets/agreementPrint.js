@@ -260,37 +260,12 @@ export function agreementDocumentHtml(item, origin = "") {
     const positionedFields = positionedAgreementPages[index]?.fields;
     if (index === 0) return `<section class="page agreement-page-two">${contractHeader}<h1 class="agreement-title">${title}</h1>${agreementDate}<main class="agreement-body">${agreementPageTwo || "<p></p>"}</main>${positionedFields ? `<div class="agreement-signature-layer">${positionedFields}</div>` : ""}</section>`;
     const isLastPage = index === agreementBodyPages.length - 1;
-    const positionedLayer = positionedFields ? `<div class="agreement-signature-layer">${positionedFields}</div>` : "";
-    const defaultSignatures = isLastPage ? buildSignatureLayer(item, positionedSignerIds) : "";
-    const defaultLayer = defaultSignatures ? `<div class="agreement-signature-layer" data-auto-agreement-signatures>${defaultSignatures}</div>` : "";
-    return `<section class="page agreement-page-three">${contractHeader}<main class="agreement-body">${positionedAgreementPages[index]?.body || "<p></p>"}</main>${positionedLayer}${defaultLayer}${isLastPage && agreement.footer ? `<footer class="document-footer">${sanitizeAgreementHtml(agreement.footer)}</footer>` : ""}</section>`;
+    return `<section class="page agreement-page-three">${contractHeader}<main class="agreement-body">${positionedAgreementPages[index]?.body || "<p></p>"}</main>${positionedFields || isLastPage ? `<div class="agreement-signature-layer">${positionedFields || ""}${isLastPage ? buildSignatureLayer(item, positionedSignerIds) : ""}</div>` : ""}${isLastPage && agreement.footer ? `<footer class="document-footer">${sanitizeAgreementHtml(agreement.footer)}</footer>` : ""}</section>`;
   }).join("") : "";
   return `<!doctype html><html lang="th"><head><meta charset="utf-8">${base}<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(agreement?.title || "แบบฟอร์มการขอยืมทรัพย์สิน")}</title><style>${css}</style><style>${notoFontCss}</style><style>${agreementHeaderCss}</style><style>${signatureCss}</style></head><body>
     <section class="page request-page">${formHeader}<h1 class="request-title">แบบฟอร์มการขอยืมทรัพย์สิน/วัสดุ ของบริษัท</h1><p class="request-date">วันที่ ${escapeHtml(thaiFormalDate(item.formDate))}</p><p class="request-intro">ข้าพเจ้า <strong>นาย ${escapeHtml(item.employeeName)}</strong> ตำแหน่ง <strong>${escapeHtml(item.position || "-")}</strong> รหัสพนักงาน <strong>${escapeHtml(item.employeeCode)}</strong> มีความประสงค์ จะขอยืมทรัพย์สิน/วัสดุของบริษัท ต.จรัสชัย สากลก่อสร้าง จำกัด เพื่อนำไปใช้ <strong>ตั้งแต่วันที่ ${escapeHtml(thaiDate(item.fromDate))}${item.toDate ? ` ถึง ${escapeHtml(thaiDate(item.toDate))}` : " เป็นต้นไป"}</strong> ตามรายการดังนี้</p><table class="items"><colgroup><col><col><col><col></colgroup><thead><tr><th>ลำดับ</th><th>รายการทรัพย์สิน/วัสดุ</th><th>จำนวน</th><th>หมายเหตุ</th></tr></thead><tbody>${rows}</tbody></table><p class="responsibility">รวมทั้งสิ้น <strong>${item.itemDetails?.filter((detail) => detail.name.trim()).length || 0}</strong> รายการ โดยหากมีความเสียหายใด ๆ หรือมีการสูญหายเกิดขึ้น ข้าพเจ้าจะขอรับผิดชอบทั้งหมดทุกกรณีโดยไม่มีเงื่อนไข โดยจัดทำการซ่อมแซมให้ใช้การได้ดังเดิมหรือจัดหาทดแทนให้ครบตามจำนวนที่ยืม</p><div class="request-signatures">${signatureBox(requestEmployee, item.employeeName, "ผู้ยืม", "signatureData", "signedAt", false)}${signatureBox(requestApprover, COMPANY_APPROVER_NAME, "ผู้อนุมัติ", "signatureData", "signedAt", false)}</div><section class="company-return"><div class="return-top"><strong>สำหรับบริษัท</strong><p>ข้าพเจ้าได้รับทรัพย์สิน/วัสดุ/อุปกรณ์ ที่ได้ทำการยืม</p><div class="condition-row"><span>${conditionMark("original")} อยู่ในสภาพเดิม</span><span>${conditionMark("damaged")} ชำรุด</span><span>${conditionMark("lost")} สูญหาย</span></div><div class="return-note">หมายเหตุ ........................................................................................................................................</div></div><div class="return-divider"></div><div class="return-signatures">${signatureBox(employee, item.employeeName, "ผู้ยืม", "returnSignatureData", "returnSignedAt", false)}${signatureBox(admin, COMPANY_APPROVER_NAME, "ผู้อนุมัติ", "returnSignatureData", "returnSignedAt", false)}</div></section></section>
     ${agreementPages}
   </body></html>`;
-}
-
-export function moveAgreementSignaturesAfterBody(doc) {
-  const pages = doc.querySelectorAll(".page.agreement-page-three");
-  const lastPage = pages[pages.length - 1];
-  const body = lastPage?.querySelector(".agreement-body");
-  const signatureLayer = lastPage?.querySelector("[data-auto-agreement-signatures]");
-  const bodyChildren = body ? Array.from(body.children) : [];
-  const signatures = signatureLayer ? Array.from(signatureLayer.querySelectorAll(".agreement-signature")) : [];
-  if (!lastPage || !body || !signatureLayer || !bodyChildren.length || !signatures.length) return false;
-
-  const bodyBottom = Math.max(...bodyChildren.map((node) => node.getBoundingClientRect().bottom));
-  const signatureTop = Math.min(...signatures.map((node) => node.getBoundingClientRect().top));
-  if (bodyBottom <= signatureTop) return false;
-
-  const signaturePage = doc.createElement("section");
-  signaturePage.className = "page agreement-page-three agreement-signature-page";
-  const header = lastPage.querySelector(".agreement-header");
-  if (header) signaturePage.append(header.cloneNode(true));
-  signaturePage.append(signatureLayer);
-  lastPage.after(signaturePage);
-  return true;
 }
 
 function waitForImage(image) {
@@ -357,8 +332,6 @@ export async function downloadAgreementDocument(item) {
       waitForAgreementFonts(frameDocument),
       ...Array.from(frameDocument.images, waitForImage),
     ]);
-    moveAgreementSignaturesAfterBody(frameDocument);
-
     const itemTable = frameDocument.querySelector(".items");
     const requestPage = itemTable?.closest(".page");
     const tableTextCells = [];

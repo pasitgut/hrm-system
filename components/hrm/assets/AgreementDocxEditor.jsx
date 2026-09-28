@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
-import { agreementDocumentHtml, moveAgreementSignaturesAfterBody, sanitizeAgreementHtml } from "@/components/hrm/assets/agreementPrint";
+import { agreementDocumentHtml, sanitizeAgreementHtml } from "@/components/hrm/assets/agreementPrint";
 
 const fieldTokens = [
   ["ชื่อพนักงาน", "{{employeeName}}"],
@@ -122,7 +122,6 @@ export function AgreementDocxEditor({
   const [toolbarError, setToolbarError] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
-  const previewFrameRef = useRef(null);
   const imageInputRef = useRef(null);
   const savedSelection = useRef(null);
   const signatureFieldDrag = useRef(null);
@@ -726,13 +725,6 @@ export function AgreementDocxEditor({
     setPreviewOpen(true);
   }
 
-  async function fitPreviewSignatures() {
-    const previewDocument = previewFrameRef.current?.contentDocument;
-    if (!previewDocument) return;
-    if (previewDocument.fonts) await previewDocument.fonts.ready.catch(() => undefined);
-    moveAgreementSignaturesAfterBody(previewDocument);
-  }
-
   function toolbarButton(label, Icon, onClick, extra = {}) {
     return (
       <Button
@@ -897,7 +889,7 @@ export function AgreementDocxEditor({
             <DialogTitle>Preview เอกสาร PDF</DialogTitle>
             <DialogDescription>แสดงหน้ากระดาษและตำแหน่งลายเซ็นจากตัวสร้าง PDF จริง{previewItem ? "" : " โดยใช้ข้อมูลตัวอย่าง"}</DialogDescription>
           </DialogHeader>
-          <iframe ref={previewFrameRef} title="Preview เอกสาร PDF Agreement" sandbox="allow-same-origin" srcDoc={previewHtml} onLoad={() => void fitPreviewSignatures()} className="min-h-0 w-full flex-1 border border-border bg-muted" />
+          <iframe title="Preview เอกสาร PDF Agreement" sandbox="allow-same-origin" srcDoc={previewHtml} className="min-h-0 w-full flex-1 border border-border bg-muted" />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>ปิด Preview</Button>
           </DialogFooter>
