@@ -146,6 +146,7 @@ export default function AgreementDocumentEditorPage({ requestId }) {
             <AgreementDocxEditor
               key={requestId}
               requestId={requestId}
+              previewItem={item}
               body={body}
               title={title}
               documentDate={agreement.documentDate}

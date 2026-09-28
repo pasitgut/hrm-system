@@ -236,7 +236,7 @@
   .asset-docx-signature-field {
     z-index: 2;
     display: flex;
-    min-height: 34mm;
+    min-height: 26mm;
     align-items: center;
     justify-content: center;
     border: 1px dashed var(--border);

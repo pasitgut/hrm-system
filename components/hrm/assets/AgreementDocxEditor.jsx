@@ -12,6 +12,7 @@ import {
   RiCodeLine,
   RiFormatClear,
   RiFontColor,
+  RiEyeLine,
   RiImageAddLine,
   RiItalic,
   RiLink,
@@ -28,9 +29,10 @@ import {
   RiZoomOutLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
-import { sanitizeAgreementHtml } from "@/components/hrm/assets/agreementPrint";
+import { agreementDocumentHtml, sanitizeAgreementHtml } from "@/components/hrm/assets/agreementPrint";
 
 const fieldTokens = [
   ["ชื่อพนักงาน", "{{employeeName}}"],
@@ -103,6 +105,7 @@ export function AgreementDocxEditor({
   hideDocumentDate = false,
   hideDocumentDateInput = false,
   readOnly = false,
+  previewItem = null,
 }) {
   const titleEditorRef = useRef(null);
   const dateId = useId();
@@ -114,6 +117,8 @@ export function AgreementDocxEditor({
   const [textColor, setTextColor] = useState("#172033");
   const [fieldSelectKey, setFieldSelectKey] = useState(0);
   const [toolbarError, setToolbarError] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
   const imageInputRef = useRef(null);
   const savedSelection = useRef(null);
   const signatureFieldDrag = useRef(null);
@@ -663,6 +668,37 @@ export function AgreementDocxEditor({
     reader.readAsDataURL(file);
   }
 
+  function openPreview() {
+    const source = previewItem || {};
+    const sampleDate = dateInputValue(new Date());
+    const sampleName = "ตัวอย่างพนักงาน";
+    const sourceAgreement = source.agreement || {};
+    const previewAgreement = {
+      ...sourceAgreement,
+      title,
+      body,
+      documentDate: documentDate || sourceAgreement.documentDate || sampleDate,
+      signatureBoxes: sourceAgreement.signatureBoxes?.length
+        ? sourceAgreement.signatureBoxes
+        : [{ id: "employee", name: sampleName, role: "พนักงานผู้รับมอบ" }],
+    };
+    const item = {
+      ...source,
+      id: source.id || requestId,
+      formDate: source.formDate || sampleDate,
+      employeeName: source.employeeName || sampleName,
+      employeeCode: source.employeeCode || "0000",
+      position: source.position || "พนักงาน",
+      department: source.department || "แผนกตัวอย่าง",
+      fromDate: source.fromDate || sampleDate,
+      toDate: source.toDate || null,
+      itemDetails: source.itemDetails?.length ? source.itemDetails : [{ name: "ตัวอย่างรายการ", quantity: 1, note: "" }],
+      agreement: previewAgreement,
+    };
+    setPreviewHtml(agreementDocumentHtml(item, window.location.origin));
+    setPreviewOpen(true);
+  }
+
   function toolbarButton(label, Icon, onClick, extra = {}) {
     return (
       <Button
@@ -752,6 +788,8 @@ export function AgreementDocxEditor({
           <Select key={fieldSelectKey} defaultSelectedKey={null} placeholder="แทรกข้อมูล" onMouseDown={rememberEditorSelection} onSelectionChange={(token) => { if (signatureFieldTokens[token]) insertSignatureField(token); else insertMarkup(escapeText(token)); setFieldSelectKey((key) => key + 1); }} isDisabled={readOnly} size="sm" aria-label="แทรกข้อมูลในเอกสาร" className="w-[120px] shrink-0 border-transparent px-2">
             {fieldTokens.map(([label, token]) => <SelectItem key={token} id={token}>{label}</SelectItem>)}
           </Select>
+          <span className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden="true" />
+          <Button type="button" size="xs" variant="outline" leadingIcon={RiEyeLine} className="min-h-10 shrink-0" onClick={openPreview}>ดู Preview PDF</Button>
         </div>
         {toolbarError ? <p className="px-3 pb-2 text-xs text-status-danger" role="alert">{toolbarError}</p> : null}
       </div>
@@ -819,6 +857,18 @@ export function AgreementDocxEditor({
           ))}
         </div>
       </div>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="h-[90dvh] max-w-6xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Preview เอกสาร PDF</DialogTitle>
+            <DialogDescription>แสดงหน้ากระดาษและตำแหน่งลายเซ็นจากตัวสร้าง PDF จริง{previewItem ? "" : " โดยใช้ข้อมูลตัวอย่าง"}</DialogDescription>
+          </DialogHeader>
+          <iframe title="Preview เอกสาร PDF Agreement" sandbox="allow-same-origin" srcDoc={previewHtml} className="min-h-0 w-full flex-1 border border-border bg-muted" />
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>ปิด Preview</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
