@@ -87,17 +87,13 @@ export default function AgreementTemplateEditorPage({ templateId = null }) {
         <div className="flex min-w-0 items-center gap-3"><Link href="/assets/agreements" onClick={confirmExit} className="inline-flex min-h-10 shrink-0 items-center rounded-sm px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">← <span className="ml-1.5">กลับ Agreement</span></Link><span className="hidden h-8 border-l border-border sm:block" aria-hidden="true" /><div className="min-w-0"><p className="truncate text-sm font-semibold text-foreground">{title || "สร้าง Agreement"}</p><p className="text-xs text-muted-foreground">เอกสารต้นแบบสำหรับแนบกับคำขอยืม</p></div></div>
         <div className="flex shrink-0 items-center gap-2">{dirty ? <span className="hidden text-xs text-muted-foreground sm:inline">มีการแก้ไขที่ยังไม่บันทึก</span> : null}<Button type="button" variant="outline" disabled={saving} onClick={() => { if (!dirty || window.confirm("มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการออกจากเอกสารหรือไม่?")) router.push("/assets/agreements"); }}>ยกเลิก</Button><Button type="button" disabled={!manager || loading || saving || !dirty} onClick={() => void save()}>{saving ? "กำลังบันทึก…" : "บันทึก Agreement"}</Button></div>
       </header>
-      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_11rem] lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="flex min-h-0 min-w-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
+      <div className="flex min-h-0 min-w-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {!manager ? <p className="border-b border-border bg-background px-4 py-3 text-sm leading-6 text-status-danger" role="alert">หน้านี้สำหรับหัวหน้างานหรือผู้บริหารเท่านั้น</p> : null}
+          {error ? <p className="border-b border-border bg-background px-4 py-3 text-sm leading-6 text-status-danger" role="alert">{error}</p> : null}
           {loading ? <div className="grid min-h-0 flex-1 place-items-center p-6 text-sm text-muted-foreground" role="status">กำลังโหลด Agreement…</div> : null}
           {!loading ? <AgreementDocxEditor key={templateId || "new-template"} requestId={templateId || "new-template"} body={body} title={title} documentDate="" onBodyChange={setBody} onTitleChange={setTitle} onDocumentDateChange={() => {}} hideDocumentDate readOnly={!manager} /> : null}
         </div>
-        <aside className="min-h-0 min-w-0 space-y-4 overflow-y-auto bg-background p-4 sm:p-5">
-          <div><h1 className="text-sm font-semibold">ส่วนหัวเอกสาร</h1><p className="mt-1 text-xs leading-5 text-muted-foreground">กำหนดตายตัว: โลโก้บริษัทด้านซ้าย และชื่อกับที่อยู่บริษัทชิดขวาด้านล่าง</p></div>
-          <p className="border-t border-border pt-4 text-xs leading-5 text-muted-foreground">การเปิดหรือปิดใช้ Template จัดการได้จากหน้ารายการ Agreement</p>
-          {!manager ? <p className="text-sm leading-6 text-status-danger" role="alert">หน้านี้สำหรับหัวหน้างานหรือผู้บริหารเท่านั้น</p> : null}
-          {error ? <p className="text-sm leading-6 text-status-danger" role="alert">{error}</p> : null}
-        </aside>
       </div>
     </main>
   );
