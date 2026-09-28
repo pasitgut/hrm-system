@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cx } from "@/utils/cx";
 import { canExportAgreementDocument, isAssetFormOnly, matchesAssetAgreementFilter } from "@/asset-borrowing/domain/asset";
-import { agreementDocumentHtml, downloadAgreementDocument } from "@/components/hrm/assets/agreementPrint";
+import { agreementBodyPreviewText, agreementDocumentHtml, downloadAgreementDocument } from "@/components/hrm/assets/agreementPrint";
 
 const statusLabels = {
   pending: "รออนุมัติ",
@@ -450,7 +450,7 @@ function AssetRequestCard({ item, isManager, employeeCode, agreementTemplates = 
               </div>
               <details className="mt-3" open={pendingAgreementSignature}>
                 <summary className="min-h-10 cursor-pointer py-2 text-xs font-medium text-primary">อ่านเงื่อนไขข้อตกลง</summary>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap border-t border-border pt-3 font-sans text-xs leading-6 text-muted-foreground">{cleanHtml(agreement.body)}</pre>
+                <div className="whitespace-pre-wrap break-words border-t border-border pt-3 text-sm leading-7 text-foreground">{cleanHtml(agreementBodyPreviewText(item))}</div>
               </details>
               <ul className="mt-3 divide-y divide-border border-t border-border text-xs">
                 {agreement.signatureBoxes.map((box) => <li key={box.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><span>{box.label}{box.name ? ` · ${box.name}` : ""}</span><span className={cx("shrink-0", box.status === "signed" ? "text-status-success" : "text-muted-foreground")}>{box.status === "signed" ? "ลงชื่อแล้ว" : "รอลงชื่อ"}</span>{box.signatureData ? <img src={box.signatureData} alt={`ลายเซ็น ${box.label}`} className="max-h-12 max-w-40 object-contain" /> : null}{box.returnSignatureData ? <img src={box.returnSignatureData} alt={`ลายเซ็นรับคืน ${box.label}`} className="max-h-12 max-w-40 object-contain" /> : null}</li>)}

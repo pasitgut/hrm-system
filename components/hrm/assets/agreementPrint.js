@@ -149,6 +149,10 @@ function fillAgreementBody(item) {
   return legacyBreak > 0 ? [clean.slice(0, legacyBreak), clean.slice(legacyBreak)] : [clean, ""];
 }
 
+export function agreementBodyPreviewText(item) {
+  return fillAgreementBody(item).join("\n");
+}
+
 function publicAssetUrl(fileName, origin) {
   const base = String(origin || "").replace(/\/+$/, "");
   return `${base}/${fileName}`;
