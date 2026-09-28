@@ -142,6 +142,7 @@ export function AgreementDocxEditor({
   const nextPageId = useRef(pageIds.length);
   const pendingPageFocusId = useRef(null);
   const pendingPageFocusAtEnd = useRef(false);
+  const normalizedRequestId = useRef(null);
   const showDocumentDateInput = !hideDocumentDate && !hideDocumentDateInput;
 
   useEffect(() => {
@@ -151,6 +152,14 @@ export function AgreementDocxEditor({
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       let changed = false;
+      const firstId = pageIdsRef.current[0];
+      const firstEditor = pageEditorRefs.current.get(firstId);
+      const normalizeInitialPages = normalizedRequestId.current !== requestId;
+      normalizedRequestId.current = requestId;
+      const nextId = pageIdsRef.current[1];
+      if (firstEditor && nextId !== undefined && isPageEmpty(firstEditor)
+        && (normalizeInitialPages || !manualPageIds.current.has(nextId))
+        && pullPageContentForward(firstId, firstEditor)) changed = true;
       for (const id of pageIdsRef.current) {
         const editor = pageEditorRefs.current.get(id);
         if (editor && moveOverflowForward(id, editor, pendingPageFocusAtEnd.current)) changed = true;
@@ -225,11 +234,7 @@ export function AgreementDocxEditor({
     const bottom = editor.getBoundingClientRect().bottom;
     return Array.from(editor.childNodes).some((node) => {
       if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-agreement-signature-field")) return false;
-      const bounds = editorNodeBounds(node);
-      const marginBottom = node.nodeType === Node.ELEMENT_NODE
-        ? Number.parseFloat(window.getComputedStyle(node).marginBottom) || 0
-        : 0;
-      return bounds.bottom + marginBottom > bottom + 1;
+      return editorNodeBounds(node).bottom > bottom + 1;
     });
   }
 
@@ -251,7 +256,8 @@ export function AgreementDocxEditor({
     let changed = false;
     let pageIndex = pageIdsRef.current.indexOf(id);
     let nextId = pageIdsRef.current[pageIndex + 1];
-    while (nextId !== undefined && !manualPageIds.current.has(nextId)) {
+    const pullAcrossManualBreak = isPageEmpty(editor);
+    while (nextId !== undefined && (!manualPageIds.current.has(nextId) || pullAcrossManualBreak)) {
       const nextEditor = pageEditorRefs.current.get(nextId);
       if (!nextEditor) break;
       if (isPageEmpty(nextEditor)) {
@@ -350,11 +356,7 @@ export function AgreementDocxEditor({
     if (!children.length) return false;
     const overflowIndex = children.findIndex((node) => {
       if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-agreement-signature-field")) return false;
-      const bounds = editorNodeBounds(node);
-      const marginBottom = node.nodeType === Node.ELEMENT_NODE
-        ? Number.parseFloat(window.getComputedStyle(node).marginBottom) || 0
-        : 0;
-      return bounds.bottom + marginBottom > editorBottom + 1;
+      return editorNodeBounds(node).bottom > editorBottom + 1;
     });
     if (overflowIndex < 0) return false;
     const firstMovingIndex = overflowIndex;
@@ -448,7 +450,7 @@ export function AgreementDocxEditor({
 
     if (inputType.startsWith("delete")) {
       const currentIndex = pageIdsRef.current.indexOf(id);
-      if (currentIndex > 0 && !manualPageIds.current.has(id) && isPageEmpty(editor)) {
+      if (currentIndex > 0 && isPageEmpty(editor)) {
         const previousId = pageIdsRef.current[currentIndex - 1];
         const previousEditor = pageEditorRefs.current.get(previousId);
         if (previousEditor) {
