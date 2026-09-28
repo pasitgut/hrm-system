@@ -91,7 +91,10 @@ function displayThaiDate(value) {
   const normalized = dateInputValue(value);
   if (!normalized) return "";
   const [year, month, day] = normalized.split("-").map(Number);
-  return new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric" }).format(new Date(year, month - 1, day));
+  const parts = new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "long", year: "numeric" })
+    .formatToParts(new Date(year, month - 1, day));
+  const part = (type) => parts.find((entry) => entry.type === type)?.value || "";
+  return `${part("day")} เดือน ${part("month")} พ.ศ. ${part("year")}`;
 }
 
 export function AgreementDocxEditor({
@@ -208,7 +211,26 @@ export function AgreementDocxEditor({
   }
 
   function isPageEmpty(editor) {
-    return !editor.textContent?.trim() && !editor.querySelector("img,table,hr,ul,ol,video,audio,iframe,svg,canvas");
+    return !editor.textContent?.trim() && !editor.querySelector("img,table,hr,ul,ol,video,audio,iframe,svg,canvas,[data-agreement-signature-field]");
+  }
+
+  function editorNodeBounds(node) {
+    if (node.nodeType === Node.ELEMENT_NODE) return node.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNode(node);
+    return range.getBoundingClientRect();
+  }
+
+  function hasEditorOverflow(editor) {
+    const bottom = editor.getBoundingClientRect().bottom;
+    return Array.from(editor.childNodes).some((node) => {
+      if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-agreement-signature-field")) return false;
+      const bounds = editorNodeBounds(node);
+      const marginBottom = node.nodeType === Node.ELEMENT_NODE
+        ? Number.parseFloat(window.getComputedStyle(node).marginBottom) || 0
+        : 0;
+      return bounds.bottom + marginBottom > bottom + 1;
+    });
   }
 
   function removePage(id) {
@@ -225,7 +247,7 @@ export function AgreementDocxEditor({
   }
 
   function pullPageContentForward(id, editor) {
-    if (editor.scrollHeight > editor.clientHeight + 1) return false;
+    if (hasEditorOverflow(editor)) return false;
     let changed = false;
     let pageIndex = pageIdsRef.current.indexOf(id);
     let nextId = pageIdsRef.current[pageIndex + 1];
@@ -243,7 +265,7 @@ export function AgreementDocxEditor({
       while (nextEditor.firstChild) {
         const node = nextEditor.firstChild;
         editor.appendChild(node);
-        if (editor.scrollHeight > editor.clientHeight + 1) {
+        if (hasEditorOverflow(editor)) {
           nextEditor.insertBefore(node, nextEditor.firstChild);
           break;
         }
@@ -322,22 +344,22 @@ export function AgreementDocxEditor({
   }
 
   function moveOverflowForward(id, editor, focusOnNewPage = true) {
-    if (editor.scrollHeight <= editor.clientHeight + 1) return false;
+    if (!hasEditorOverflow(editor)) return false;
     const editorBottom = editor.getBoundingClientRect().bottom;
     const children = Array.from(editor.childNodes);
     if (!children.length) return false;
     const overflowIndex = children.findIndex((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) return node.getBoundingClientRect().bottom > editorBottom + 1;
-      const range = document.createRange();
-      range.selectNode(node);
-      return range.getBoundingClientRect().bottom > editorBottom + 1;
+      if (node.nodeType === Node.ELEMENT_NODE && node.hasAttribute("data-agreement-signature-field")) return false;
+      const bounds = editorNodeBounds(node);
+      const marginBottom = node.nodeType === Node.ELEMENT_NODE
+        ? Number.parseFloat(window.getComputedStyle(node).marginBottom) || 0
+        : 0;
+      return bounds.bottom + marginBottom > editorBottom + 1;
     });
     if (overflowIndex < 0) return false;
     const firstMovingIndex = overflowIndex;
     const firstMovingNode = children[firstMovingIndex];
-    const firstMovingRect = firstMovingNode.nodeType === Node.ELEMENT_NODE
-      ? firstMovingNode.getBoundingClientRect()
-      : (() => { const range = document.createRange(); range.selectNode(firstMovingNode); return range.getBoundingClientRect(); })();
+    const firstMovingRect = editorNodeBounds(firstMovingNode);
     if (firstMovingRect.height > editor.clientHeight) return false;
 
     const selection = window.getSelection();
@@ -540,7 +562,8 @@ export function AgreementDocxEditor({
     const pageBounds = page.getBoundingClientRect();
     const fieldBounds = field.getBoundingClientRect();
     const maxX = Math.max(0, 100 - (fieldBounds.width / pageBounds.width) * 100);
-    const maxY = Math.max(0, 100 - (fieldBounds.height / pageBounds.height) * 100);
+    const signatureOffset = (16 / 841.89) * pageBounds.height;
+    const maxY = Math.max(0, 100 - ((fieldBounds.height + signatureOffset) / pageBounds.height) * 100);
     const nextX = Math.max(0, Math.min(maxX, x));
     const nextY = Math.max(0, Math.min(maxY, y));
     field.dataset.x = nextX.toFixed(2);
@@ -572,8 +595,9 @@ export function AgreementDocxEditor({
     const drag = signatureFieldDrag.current;
     if (!drag) return;
     const bounds = drag.page.getBoundingClientRect();
+    const signatureOffset = (16 / 841.89) * bounds.height;
     const x = ((event.clientX - drag.offsetX - bounds.left) / bounds.width) * 100;
-    const y = ((event.clientY - drag.offsetY - bounds.top) / bounds.height) * 100;
+    const y = ((event.clientY - drag.offsetY - bounds.top - signatureOffset) / bounds.height) * 100;
     moveSignatureField(drag.field, drag.page, x, y);
   }
 
@@ -804,12 +828,12 @@ export function AgreementDocxEditor({
       <div className="asset-docx-workspace min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-muted px-3 py-5 sm:px-6 sm:py-8">
         <div className="flex min-w-0 flex-col items-center gap-4" style={{ zoom: zoom / 100 }}>
           {pageIds.map((id, index) => (
-            <article key={id} className="asset-docx-page relative mx-auto flex h-[297mm] w-[210mm] max-w-none flex-none flex-col overflow-hidden border border-border bg-background px-[23mm] pb-[24mm] pt-[13mm] text-foreground shadow-sm">
-              <header className="asset-docx-header mb-[15mm] grid min-h-[25mm] shrink-0 grid-cols-[25mm_minmax(0,1fr)] items-end gap-4 border-b border-border pb-4">
-                <img src="/download.png" alt="ตราบริษัท ต.จรัสชัย" className="h-[23mm] w-[23mm] object-contain" />
-                <div className="flex flex-col items-end text-right text-[10pt] leading-5 text-muted-foreground">
-                  <strong className="block text-[12pt] font-bold text-foreground">T.Jaruschai International Construction Co.,Ltd.</strong>
-                  2043 Soi Kanchanaphisek 008, Bangkae, Bangkae Bangkok 10160 Thailand
+            <article key={id} data-page-index={index} className="asset-docx-page relative mx-auto h-[297mm] w-[210mm] max-w-none flex-none overflow-hidden border border-border bg-background text-foreground shadow-sm">
+              <header className="asset-docx-header">
+                <img src="/download.png" alt="ตราบริษัท ต.จรัสชัย" />
+                <div className="asset-docx-header-copy">
+                  <strong>T.Jaruschai International Construction Co.,Ltd.</strong>
+                  <span>2043 Soi Kanchanaphisek 008, Bangkae, Bangkae Bangkok 10160 Thailand</span>
                 </div>
               </header>
               {index === 0 ? (
@@ -819,7 +843,7 @@ export function AgreementDocxEditor({
                     aria-label="ชื่อเอกสาร Agreement"
                     aria-multiline="true"
                     aria-readonly={readOnly}
-                    className="asset-docx-title mb-5 min-h-[1.75em] shrink-0 whitespace-pre-line text-center text-[16pt] font-bold leading-7 text-foreground outline-none focus:outline-none focus:shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className="asset-docx-title whitespace-pre-line text-foreground outline-none focus:outline-none focus:shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                     contentEditable={!readOnly}
                     role="textbox"
                     suppressContentEditableWarning
@@ -828,7 +852,7 @@ export function AgreementDocxEditor({
                     onPaste={pasteTitleText}
                     spellCheck="true"
                   />
-                  {!hideDocumentDate ? <p className="mb-7 shrink-0 text-right text-[12pt] text-foreground">วันที่ {displayThaiDate(documentDate) || "................................"}</p> : null}
+                  {!hideDocumentDate ? <p className="asset-docx-date text-foreground">วันที่ {displayThaiDate(documentDate) || "................................"}</p> : null}
                 </>
               ) : null}
               <div
@@ -837,7 +861,7 @@ export function AgreementDocxEditor({
                 aria-label={`เนื้อหาเอกสาร Agreement หน้า ${index + 1}`}
                 aria-multiline="true"
                 aria-readonly={readOnly}
-                className="asset-docx-content min-h-0 flex-1 overflow-visible text-[16pt] leading-[1.45] text-foreground outline-none focus:outline-none focus:shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="asset-docx-content text-foreground outline-none focus:outline-none focus:shadow-none focus:ring-0 focus:ring-offset-0 focus-visible:outline-none focus-visible:shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
                 contentEditable={!readOnly}
                 role="textbox"
                 suppressContentEditableWarning

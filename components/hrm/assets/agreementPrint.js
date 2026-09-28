@@ -97,7 +97,7 @@ export function sanitizeAgreementHtml(html) {
         return Number.isFinite(parsed) ? Math.max(0, Math.min(max, parsed)) : fallback;
       };
       const x = coordinate(node.getAttribute("data-x"), 10, 66);
-      const y = coordinate(node.getAttribute("data-y"), 72, 90);
+      const y = coordinate(node.getAttribute("data-y"), 72, 89.07);
       node.replaceChildren();
       node.setAttribute("class", "asset-docx-signature-field");
       node.setAttribute("data-label", `${config.name}ลงชื่อ`);
@@ -183,7 +183,7 @@ function extractPositionedSignatureFields(item, pageBody) {
     const config = AGREEMENT_SIGNATURE_FIELDS[node.getAttribute("data-agreement-signature-field")];
     if (!config) return;
     const x = Math.max(0, Math.min(66, Number(node.getAttribute("data-x")) || 0));
-    const y = Math.max(0, Math.min(90, Number(node.getAttribute("data-y")) || 0));
+    const y = Math.max(0, Math.min(89.07, Number(node.getAttribute("data-y")) || 0));
     const signer = signers.find((box) => box.id === config.slot || box.id.startsWith(`${config.slot}-`));
     if (signer) signerIds.push(signer.id);
     const signature = signatureBox(signer || { name: "", role: config.role }, config.name, config.role);
