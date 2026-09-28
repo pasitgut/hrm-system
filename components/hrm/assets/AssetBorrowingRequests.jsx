@@ -44,7 +44,7 @@ async function uploadAssetImage(file) {
   return payload.url;
 }
 
-function SignaturePad({ onChange, label = "ลงลายมือชื่อ" }) {
+function SignaturePad({ onChange, label = "ลงลายมือชื่อ", large = false }) {
   const uploadId = useId();
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
@@ -191,7 +191,7 @@ function SignaturePad({ onChange, label = "ลงลายมือชื่อ"
         ref={canvasRef}
         aria-label={`${label} พื้นที่วาดลายเซ็น`}
         hidden={method !== "draw"}
-        className="h-28 w-full touch-none rounded-sm border border-input bg-background"
+        className={cx("w-full touch-none rounded-sm border border-input bg-background", large ? "h-52 sm:h-64" : "h-28")}
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={finish}
@@ -274,10 +274,24 @@ function AssetRequestCard({ item, isManager, employeeCode, agreementTemplates = 
   const canEditDetails = isManager && agreement && (agreement.status === "waitingHandover" || (agreement.status === "waitingEmployee" && !hasSignedAgreement));
   const pendingAgreementSignature = showHandoverSign || showEmployeeSign || showAdminSign;
   const canExport = !agreement || Boolean(!assetFormOnly && canExportAgreementDocument(agreement.signatureBoxes));
+  const signingTitle = ({
+    "agreement:handover": "ลงชื่อผู้ส่งมอบ",
+    "agreement:employee": "ลงชื่อผู้ยืม",
+    "agreement:admin": "ลงชื่อผู้อนุมัติ",
+    formApproval: "ลงชื่อและอนุมัติคำขอ",
+    "return:employee": "ลงชื่อส่งคืน",
+    "return:admin": "ลงชื่อรับคืน",
+  })[signing];
 
   useEffect(() => {
     setAgreementReadConfirmed(false);
   }, [item.id, agreement?.status]);
+
+  function startSigning(target) {
+    setSigning(target);
+    setSignature("");
+    setActionError("");
+  }
 
   async function action(body, method = "PATCH") {
     setBusy(true);
@@ -467,23 +481,13 @@ function AssetRequestCard({ item, isManager, employeeCode, agreementTemplates = 
               <input type="checkbox" className="mt-0.5 size-4 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" checked={agreementReadConfirmed} onChange={(event) => setAgreementReadConfirmed(event.target.checked)} />
               <span>ฉันได้อ่าน Agreement และยืนยันขั้นตอนลงชื่อแล้ว</span>
             </label> : null}
-            {showHandoverSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => { setSigning("agreement:handover"); setSignature(""); }}>ลงชื่อผู้ส่งมอบ</Button> : null}
-            {showEmployeeSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => { setSigning("agreement:employee"); setSignature(""); }}>ลงชื่อผู้ยืม</Button> : null}
-            {showAdminSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => { setSigning("agreement:admin"); setSignature(""); }}>ลงชื่อผู้อนุมัติ</Button> : null}
-            {showFormApproval ? <Button type="button" className="w-full" onClick={() => { setSigning("formApproval"); setSignature(""); }}>ลงชื่อและอนุมัติคำขอ</Button> : null}
+            {showHandoverSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => startSigning("agreement:handover")}>ลงชื่อผู้ส่งมอบ</Button> : null}
+            {showEmployeeSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => startSigning("agreement:employee")}>ลงชื่อผู้ยืม</Button> : null}
+            {showAdminSign ? <Button type="button" className="w-full" disabled={!agreementReadConfirmed || busy} onClick={() => startSigning("agreement:admin")}>ลงชื่อผู้อนุมัติ</Button> : null}
+            {showFormApproval ? <Button type="button" className="w-full" onClick={() => startSigning("formApproval")}>ลงชื่อและอนุมัติคำขอ</Button> : null}
             {isManager && item.status === "pending" && !agreement ? <Button type="button" className="w-full" variant="outline" disabled={busy} onClick={() => action({ action: "transition", status: "rejected" })}>ไม่อนุมัติคำขอ</Button> : null}
-            {showReturnEmployeeSign ? <Button type="button" className="w-full" variant="secondary" onClick={() => { setSigning("return:employee"); setSignature(""); }}>ลงชื่อส่งคืน</Button> : null}
-            {showReturnAdminSign ? <Button type="button" className="w-full" variant="secondary" onClick={() => { setSigning("return:admin"); setSignature(""); }}>ลงชื่อรับคืน</Button> : null}
-
-            {signing ? <section className="rounded-sm border border-border bg-card p-3 sm:p-4">
-              <SignaturePad key={`${item.id}-${signing}`} onChange={setSignature} label={signing === "formApproval" ? "ลายเซ็นผู้อนุมัติ" : "ลายเซ็นผู้ลงนาม"} />
-              {signature ? <img src={signature} alt="ตัวอย่างลายเซ็น" className="max-h-16 max-w-48 object-contain" /> : null}
-              {actionError ? <p role="alert" className="mt-2 text-xs leading-5 text-status-danger">{actionError}</p> : null}
-              <div className="mt-3 flex justify-end gap-2">
-                <Button type="button" size="small" variant="outline" disabled={busy} onClick={() => { setSigning(null); setSignature(""); }}>ยกเลิก</Button>
-                <Button type="button" size="small" disabled={busy || !signature} onClick={submitSignature}>{busy ? "กำลังบันทึก…" : "ยืนยันลายเซ็น"}</Button>
-              </div>
-            </section> : null}
+            {showReturnEmployeeSign ? <Button type="button" className="w-full" variant="secondary" onClick={() => startSigning("return:employee")}>ลงชื่อส่งคืน</Button> : null}
+            {showReturnAdminSign ? <Button type="button" className="w-full" variant="secondary" onClick={() => startSigning("return:admin")}>ลงชื่อรับคืน</Button> : null}
 
             {isManager && item.status === "returnPending" ? <section className="grid gap-3 rounded-sm border border-border bg-card p-3 sm:p-4">
               <h4 className="text-sm font-semibold">ตรวจสภาพและยืนยันรับคืน</h4>
@@ -531,6 +535,33 @@ function AssetRequestCard({ item, isManager, employeeCode, agreementTemplates = 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setPreviewOpen(false)}>ปิด</Button>
             {canExport ? <Button type="button" leadingIcon={RiFileList3Line} disabled={exportingAgreement} onClick={() => void exportAgreement()}>{exportingAgreement ? "กำลังสร้าง PDF…" : "ส่งออก PDF"}</Button> : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(signing)} onOpenChange={(nextOpen) => {
+        if (!nextOpen && !busy) {
+          setSigning(null);
+          setSignature("");
+          setActionError("");
+        }
+      }}>
+        <DialogContent className="h-[min(88dvh,48rem)] max-w-3xl overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{signingTitle}</DialogTitle>
+            <DialogDescription>ลงชื่อด้วยการวาด พิมพ์ชื่อ หรืออัปโหลดรูปลายเซ็น</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <SignaturePad key={`${item.id}-${signing}`} onChange={setSignature} label={signingTitle} large />
+            {signature ? <img src={signature} alt="ตัวอย่างลายเซ็น" className="mt-3 max-h-24 max-w-64 object-contain" /> : null}
+            {actionError ? <p role="alert" className="mt-2 text-xs leading-5 text-status-danger">{actionError}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => {
+              setSigning(null);
+              setSignature("");
+              setActionError("");
+            }}>ยกเลิก</Button>
+            <Button type="button" disabled={busy || !signature} onClick={submitSignature}>{busy ? "กำลังบันทึก…" : "ยืนยันลายเซ็น"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
