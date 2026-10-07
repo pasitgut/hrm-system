@@ -20,7 +20,8 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
-import { canManageEmployees } from "@/lib/auth/permissions";
+import { EmployeeDocumentsPanel } from "@/components/hrm/employees/EmployeeDocumentsPanel";
+import { canManageEmployeeDocuments, canManageEmployees, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
 import { formatThaiDate, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
@@ -189,6 +190,8 @@ function EmployeeCard({ employee, tenureAsOf, ...props }) {
 export default function EmployeeModule() {
   const { permissions = [] } = useHrmRole();
   const canManage = canManageEmployees(permissions);
+  const canViewDocuments = canViewEmployeeDocuments(permissions);
+  const canManageDocuments = canManageEmployeeDocuments(permissions);
 
   const [lookups, setLookups] = useState(EMPTY_LOOKUPS);
   const [lookupError, setLookupError] = useState("");
@@ -617,7 +620,7 @@ export default function EmployeeModule() {
         onClose={closeForm}
         title={editing ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}
         description="กำหนดรหัสพนักงานเองเป็นตัวเลข 4 หลัก เช่น 2603"
-        size="lg"
+        size={canViewDocuments ? "lg" : "md"}
         className="border-t-4 border-t-primary"
         footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
       >
@@ -706,7 +709,7 @@ export default function EmployeeModule() {
         onClose={() => setSelected(null)}
         title="ข้อมูลพนักงาน"
         description={selected ? `${selected.code} / ${selected.department?.name || "-"} / ${selected.position?.name || "-"}` : ""}
-        size="md"
+        size="lg"
         footer={<><Button type="button" variant="secondary" onClick={() => setSelected(null)}>ปิด</Button>{canManage ? <Button type="button" leadingIcon={RiEditLine} onClick={() => { const employee = selected; setSelected(null); openEdit(employee); }}>แก้ไขข้อมูล</Button> : null}</>}
       >
         {selected ? (
@@ -732,6 +735,7 @@ export default function EmployeeModule() {
               {canManage ? <div><dt className="text-xs text-muted-foreground">เรท OT วันธรรมดา / วันหยุด</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.otWeekdayMultiplier}× / {selected.otHolidayMultiplier}×</dd></div> : null}
               {canManage ? <div><dt className="text-xs text-muted-foreground">ชั่วโมงทำงานปกติต่อวัน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.workHoursPerDay} ชม.</dd></div> : null}
             </dl>
+            {canViewDocuments ? <EmployeeDocumentsPanel employeeId={selected.id} canManage={canManageDocuments} /> : null}
           </div>
         ) : null}
       </HrmDialog>

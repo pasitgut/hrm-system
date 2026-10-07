@@ -4,6 +4,7 @@ import {
   check,
   date,
   bigint,
+  customType,
   index,
   integer,
   jsonb,
@@ -19,6 +20,10 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
 
 // ---------- lookup tables ----------
 
@@ -241,6 +246,33 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const employeeDocuments = pgTable(
+  "employee_documents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    employeeId: uuid("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    mimeType: varchar("mime_type", { length: 127 }).notNull(),
+    fileSize: integer("file_size").notNull(),
+    // Existing records may still have a legacy database copy until the
+    // Google Drive migration script moves them. New uploads only set driveFileId.
+    fileData: bytea("file_data"),
+    driveFileId: text("drive_file_id"),
+    sharedWithUserIds: uuid("shared_with_user_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("employee_documents_employee_created_idx").on(t.employeeId, t.createdAt),
+    uniqueIndex("employee_documents_drive_file_id_unique").on(t.driveFileId),
+    check("employee_documents_file_size_valid", sql`${t.fileSize} > 0 and ${t.fileSize} <= 15728640`),
+    check(
+      "employee_documents_storage_location_valid",
+      sql`(${t.driveFileId} is not null and ${t.fileData} is null) or (${t.driveFileId} is null and ${t.fileData} is not null)`,
+    ),
+  ],
+);
 
 // ---------- asset borrowing requests (ported from asset-borrowing) ----------
 

@@ -1,5 +1,7 @@
 export const PERMISSIONS = [
   { key: "employees.manage", group: "พนักงาน", label: "จัดการพนักงาน", description: "เพิ่ม แก้ไข และจัดการข้อมูลพนักงาน" },
+  { key: "employees.documents.view", group: "พนักงาน", label: "ดูเอกสารพนักงาน", description: "ดูและดาวน์โหลดเอกสารประจำตัวพนักงาน" },
+  { key: "employees.documents.manage", group: "พนักงาน", label: "จัดการเอกสารพนักงาน", description: "ดู อัปโหลด กำหนดผู้มีสิทธิ์ และลบเอกสารประจำตัวพนักงาน" },
   { key: "ot.approve", group: "OT", label: "อนุมัติ OT", description: "ตรวจสอบและอนุมัติคำขอ OT" },
   { key: "ot.view_company", group: "OT", label: "ดู OT ของทุกคน", description: "ดูตารางและสรุป OT ระดับบริษัท" },
   { key: "leave.approve", group: "วันลา", label: "อนุมัติวันลา", description: "ตรวจสอบและอนุมัติคำขอลา" },
@@ -42,6 +44,14 @@ export function canApproveAssetLoan(permissions: unknown): boolean {
 
 export function canManageEmployees(permissions: unknown): boolean {
   return hasPermission(permissions, "employees.manage");
+}
+
+export function canViewEmployeeDocuments(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "employees.documents.view", "employees.documents.manage");
+}
+
+export function canManageEmployeeDocuments(permissions: unknown): boolean {
+  return hasPermission(permissions, "employees.documents.manage");
 }
 
 export function canManageAssets(permissions: unknown): boolean {

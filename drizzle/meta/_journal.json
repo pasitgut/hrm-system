@@ -99,6 +99,20 @@
       "when": 1791417600000,
       "tag": "0013_configurable_ot_rate_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0014_employee_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0015_employee_documents_drive_storage",
+      "breakpoints": true
     }
   ]
 }
