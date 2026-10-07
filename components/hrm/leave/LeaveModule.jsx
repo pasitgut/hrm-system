@@ -12,7 +12,7 @@ import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
 import { LeaveRequestPanel } from "@/components/hrm/leave/LeaveRequestPanel";
 import { LeaveQuotaDialog } from "@/components/hrm/leave/LeaveQuotaDialog";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
-import { canManageSettings, canViewCompanyLeave } from "@/lib/auth/permissions";
+import { canManageLeaveQuotas, canManageOwnLeaveRequests, canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 
 export default function LeaveModule() {
   const { permissions = [] } = useHrmRole();
@@ -25,7 +25,9 @@ export default function LeaveModule() {
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
   const isTeamView = canViewCompanyLeave(permissions);
-  const canManageQuotas = canManageSettings(permissions);
+  const canViewLeaveData = isTeamView || canViewOwnLeaveRequests(permissions);
+  const canRequestOwnLeave = canManageOwnLeaveRequests(permissions);
+  const canManageQuotas = canManageLeaveQuotas(permissions);
 
   function bump() {
     setRefreshKey((current) => current + 1);
@@ -33,6 +35,12 @@ export default function LeaveModule() {
 
   useEffect(() => {
     let cancelled = false;
+    if (!canViewLeaveData) {
+      setItems([]);
+      setLoading(false);
+      setLoadError("");
+      return () => { cancelled = true; };
+    }
     setLoading(true);
     setLoadError("");
 
@@ -54,7 +62,7 @@ export default function LeaveModule() {
     return () => {
       cancelled = true;
     };
-  }, [refreshKey]);
+  }, [canViewLeaveData, refreshKey]);
 
   function handleDecision(updatedItem) {
     setItems((current) => current.map((item) => (item.id === updatedItem.id ? updatedItem : item)));
@@ -68,7 +76,12 @@ export default function LeaveModule() {
         eyebrow="การทำงาน · วันลา"
         title="การลา"
         description={`ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ${isTeamView ? "และทีม" : ""}`}
-        actions={<Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button>}
+        actions={canRequestOwnLeave || (!canViewLeaveData && canManageQuotas) ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {!canViewLeaveData && canManageQuotas ? <Button variant="outline" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
+            {canRequestOwnLeave ? <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button> : null}
+          </div>
+        ) : null}
       />
 
       {notice ? (
@@ -79,49 +92,57 @@ export default function LeaveModule() {
       ) : null}
       {loadError ? <p role="alert" className="rounded-xl border border-status-danger/25 bg-status-danger/10 px-4 py-3 text-xs leading-5 text-status-danger">{loadError}</p> : null}
 
-      <section aria-labelledby="leave-balance-heading">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">โควต้าประจำปี</p>
-            <h2 id="leave-balance-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สิทธิ์วันลาคงเหลือของฉัน</h2>
+      {canViewLeaveData ? (
+        <section aria-labelledby="leave-balance-heading">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">โควต้าประจำปี</p>
+              <h2 id="leave-balance-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สิทธิ์วันลาคงเหลือของฉัน</h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
+              {canManageQuotas ? <Button size="small" variant="outline" className="min-h-10" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
-            {canManageQuotas ? <Button size="small" variant="outline" className="min-h-10" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
-          </div>
-        </div>
-        <LeaveSummaryView refreshKey={refreshKey} />
-      </section>
+          <LeaveSummaryView refreshKey={refreshKey} />
+        </section>
+      ) : null}
 
-      <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
-        <LeaveCalendarView items={items} isTeamView={isTeamView} />
-        <LeaveRequestPanel items={items} loading={loading} permissions={permissions} onUpdated={handleDecision} />
-      </section>
+      {canViewLeaveData ? (
+        <>
+          <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
+            <LeaveCalendarView items={items} isTeamView={isTeamView} />
+            <LeaveRequestPanel items={items} loading={loading} permissions={permissions} onUpdated={handleDecision} />
+          </section>
 
-      <LeaveInsightsView items={items} isTeamView={isTeamView} />
+          <LeaveInsightsView items={items} isTeamView={isTeamView} />
 
-      <section aria-labelledby="leave-history-heading">
-        <div className="mb-3 flex items-center gap-2">
-          <RiFileList3Line className="size-5 text-muted-foreground" aria-hidden="true" />
-          <div>
-            <h2 id="leave-history-heading" className="text-base font-semibold leading-6 text-foreground sm:text-lg">ประวัติการลา</h2>
-            <p className="text-xs leading-5 text-muted-foreground">รายการคำขอทั้งหมดและสถานะล่าสุด</p>
-          </div>
-        </div>
-        <LeaveListView
-          items={items}
-          loading={loading}
-          onEdit={(item) => setEditTarget(item)}
-          onCancelled={() => { bump(); setNotice("ยกเลิกคำขอลาเรียบร้อยแล้ว"); }}
+          <section aria-labelledby="leave-history-heading">
+            <div className="mb-3 flex items-center gap-2">
+              <RiFileList3Line className="size-5 text-muted-foreground" aria-hidden="true" />
+              <div>
+                <h2 id="leave-history-heading" className="text-base font-semibold leading-6 text-foreground sm:text-lg">ประวัติการลา</h2>
+                <p className="text-xs leading-5 text-muted-foreground">รายการคำขอทั้งหมดและสถานะล่าสุด</p>
+              </div>
+            </div>
+            <LeaveListView
+              items={items}
+              loading={loading}
+              onEdit={(item) => setEditTarget(item)}
+              onCancelled={() => { bump(); setNotice("ยกเลิกคำขอลาเรียบร้อยแล้ว"); }}
+            />
+          </section>
+        </>
+      ) : null}
+
+      {canRequestOwnLeave ? (
+        <LeaveRequestDialog
+          open={addOpen}
+          mode="create"
+          onClose={() => setAddOpen(false)}
+          onSaved={() => { bump(); setNotice("ส่งคำขอลาเรียบร้อยแล้ว รอการอนุมัติ"); }}
         />
-      </section>
-
-      <LeaveRequestDialog
-        open={addOpen}
-        mode="create"
-        onClose={() => setAddOpen(false)}
-        onSaved={() => { bump(); setNotice("ส่งคำขอลาเรียบร้อยแล้ว รอการอนุมัติ"); }}
-      />
+      ) : null}
       <LeaveRequestDialog
         open={Boolean(editTarget)}
         mode="edit"

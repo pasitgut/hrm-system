@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employeeDocuments, users } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import { canDeleteEmployeeDocuments, canShareEmployeeDocuments } from "@/lib/auth/permissions";
 import { isUuid } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import { deleteEmployeeDocumentFromDrive, GoogleDriveError } from "@/lib/google-drive";
@@ -12,7 +12,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export const DELETE = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
-  if (!canManageEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์ลบเอกสารพนักงาน");
+  if (!canDeleteEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์ลบเอกสารพนักงาน");
 
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "ไม่พบเอกสาร");
@@ -39,7 +39,7 @@ export const DELETE = withApiAuth(async (request: NextRequest, context: RouteCon
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
-  if (!canManageEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์จัดการสิทธิ์เอกสารพนักงาน");
+  if (!canShareEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์จัดการสิทธิ์เอกสารพนักงาน");
 
   const { id } = await context.params;
   if (!isUuid(id)) return jsonError(404, "ไม่พบเอกสาร");

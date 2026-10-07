@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { jsonError } from "@/app/api/asset-requests/_shared";
+import { canCreateOwnAssetRequests, canManageAssets } from "@/lib/auth/permissions";
 
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 15_000;
@@ -8,7 +9,10 @@ const UPLOAD_TIMEOUT_MS = 15_000;
 type ImgbbResponse = { success?: boolean; data?: { url?: string } };
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiUser(request);
+  const user = await requireApiUser(request);
+  if (!canCreateOwnAssetRequests(user.permissions) && !canManageAssets(user.permissions)) {
+    return jsonError(403, "Asset request permission required");
+  }
   const apiKey = process.env.IMGBB_API_KEY?.trim();
   if (!apiKey) return jsonError(503, "การอัปโหลดรูปยังไม่ได้ตั้งค่า IMGBB_API_KEY");
 

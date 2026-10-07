@@ -4,7 +4,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, employeeDocuments } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import {
+  canShareEmployeeDocuments,
+  canUploadEmployeeDocuments,
+  canViewAllEmployeeDocuments,
+  canViewEmployeeDocuments,
+} from "@/lib/auth/permissions";
 import { isUuid, MAX_EMPLOYEE_DOCUMENT_BYTES, sanitizeDocumentName, validateEmployeeDocument } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import {
@@ -19,6 +24,8 @@ type RouteContext = { params: Promise<{ id: string }> };
 export const GET = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
   if (!canViewEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์ดูเอกสารพนักงาน");
+  const canViewAll = canViewAllEmployeeDocuments(user.permissions);
+  const canShare = canShareEmployeeDocuments(user.permissions);
 
   const { id: employeeId } = await context.params;
   if (!isUuid(employeeId)) return jsonError(404, "ไม่พบพนักงาน");
@@ -42,11 +49,11 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
     .orderBy(desc(employeeDocuments.createdAt));
 
   const items = documents
-    .filter((document) => canManageEmployeeDocuments(user.permissions) || document.sharedWithUserIds.includes(user.sub))
+    .filter((document) => canViewAll || document.sharedWithUserIds.includes(user.sub))
     .map(({ sharedWithUserIds, ...document }) => ({
       ...document,
-      sharedWithUserIds: canManageEmployeeDocuments(user.permissions) ? sharedWithUserIds : undefined,
-      sharedUserCount: canManageEmployeeDocuments(user.permissions) ? sharedWithUserIds.length : undefined,
+      sharedWithUserIds: canShare ? sharedWithUserIds : undefined,
+      sharedUserCount: canShare ? sharedWithUserIds.length : undefined,
     }));
 
   return NextResponse.json({ items }, { headers: { "Cache-Control": "private, no-store" } });
@@ -54,7 +61,7 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
 
 export const POST = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
-  if (!canManageEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์จัดการเอกสารพนักงาน");
+  if (!canUploadEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์อัปโหลดเอกสารพนักงาน");
 
   const { id: employeeId } = await context.params;
   if (!isUuid(employeeId)) return jsonError(404, "ไม่พบพนักงาน");

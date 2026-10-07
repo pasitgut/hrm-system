@@ -15,7 +15,13 @@ import { OtRateSettingsTab } from "@/components/hrm/settings/OtRateSettingsTab";
 import { PageHeader } from "@/components/hrm/PageHeader";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { canManageOtRates } from "@/lib/auth/rolePermissionAccess";
-import { canManageLeaveTypes, canManageSettings, canManageUserPermissions } from "@/lib/auth/permissions";
+import {
+  canManageDepartments,
+  canManageEmploymentSettings,
+  canManageLeaveTypes,
+  canManagePositions,
+  canManageUserPermissions,
+} from "@/lib/auth/permissions";
 
 const departmentFormFields = [{ key: "name", label: "ชื่อแผนก", type: "text", required: true }];
 
@@ -51,10 +57,17 @@ export default function SettingsModule() {
   const user = useHrmRole() ?? {};
   const permissions = user.permissions ?? [];
   const showOtRates = canManageOtRates(user);
-  const showSettings = canManageSettings(permissions);
+  const showDepartments = canManageDepartments(permissions);
+  const showPositions = canManagePositions(permissions);
+  const showEmploymentSettings = canManageEmploymentSettings(permissions);
   const showLeaveTypes = canManageLeaveTypes(permissions);
   const showUserPermissions = canManageUserPermissions(permissions);
-  const defaultTab = showSettings ? "departments" : showLeaveTypes ? "leave-types" : "user-permissions";
+  const defaultTab = showDepartments ? "departments"
+    : showPositions ? "positions"
+      : showEmploymentSettings ? "employment-statuses"
+        : showOtRates ? "ot-rates"
+          : showLeaveTypes ? "leave-types"
+            : "user-permissions";
 
   return (
     <div className="hrm-page">
@@ -65,17 +78,15 @@ export default function SettingsModule() {
       />
       <Tabs defaultSelectedKey={defaultTab}>
         <TabList aria-label="หมวดหมู่การตั้งค่า" className="flex-wrap">
-          {showSettings ? <>
-            <Tab id="departments" icon={RiBuildingLine}>แผนก</Tab>
-            <Tab id="positions" icon={RiBriefcaseLine}>ตำแหน่ง</Tab>
-            <Tab id="employment-statuses" icon={RiShieldUserLine}>สถานะพนักงาน</Tab>
-            <Tab id="employment-types" icon={RiUserSettingsLine}>ประเภทการจ้างงาน</Tab>
-          </> : null}
+          {showDepartments ? <Tab id="departments" icon={RiBuildingLine}>แผนก</Tab> : null}
+          {showPositions ? <Tab id="positions" icon={RiBriefcaseLine}>ตำแหน่ง</Tab> : null}
+          {showEmploymentSettings ? <Tab id="employment-statuses" icon={RiShieldUserLine}>สถานะพนักงาน</Tab> : null}
+          {showEmploymentSettings ? <Tab id="employment-types" icon={RiUserSettingsLine}>ประเภทการจ้างงาน</Tab> : null}
           {showOtRates ? <Tab id="ot-rates" icon={RiMoneyDollarCircleLine}>เรท OT</Tab> : null}
           {showLeaveTypes ? <Tab id="leave-types" icon={RiCalendarTodoLine}>ประเภทการลา</Tab> : null}
           {showUserPermissions ? <Tab id="user-permissions" icon={RiShieldUserLine}>สิทธิ์ผู้ใช้</Tab> : null}
         </TabList>
-        {showSettings ? <>
+        {showDepartments ?
           <TabPanel id="departments">
           <ResourceTab
             resourceKey="departments"
@@ -88,6 +99,8 @@ export default function SettingsModule() {
             deleteMode="hard"
           />
           </TabPanel>
+          : null}
+        {showPositions ?
           <TabPanel id="positions">
           <ResourceTab
             resourceKey="positions"
@@ -100,6 +113,8 @@ export default function SettingsModule() {
             deleteMode="hard"
           />
           </TabPanel>
+          : null}
+        {showEmploymentSettings ? <>
           <TabPanel id="employment-statuses">
           <ResourceTab
             resourceKey="employment-statuses"

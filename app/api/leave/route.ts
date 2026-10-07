@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canViewCompanyLeave } from "@/lib/auth/permissions";
+import { canManageOwnLeaveRequests, canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 import {
   fetchLeaveItemById,
   jsonError,
@@ -21,6 +21,9 @@ const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnLeaveRequests(user.permissions) && !canViewCompanyLeave(user.permissions)) {
+    return jsonError(403, "Leave view permission required");
+  }
   const searchParams = request.nextUrl.searchParams;
 
   const statusParam = searchParams.get("status") ?? "all";
@@ -58,6 +61,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 
 export const POST = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canManageOwnLeaveRequests(user.permissions)) return jsonError(403, "Leave self-service permission required");
 
   let body: unknown;
   try {

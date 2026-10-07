@@ -9,25 +9,29 @@ export function formatThaiDate(value) {
   return new Intl.DateTimeFormat("th-TH", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
-function validateEmployeeForm(form, employee) {
-  if (!form.firstName.trim() || !form.lastName.trim()) return "กรุณากรอกชื่อและนามสกุล";
-  if (!/^\d{4}$/.test(form.code.trim())) return "กรุณากำหนดรหัสพนักงานเป็นตัวเลข 4 หลัก เช่น 2603";
-  if (!employee && !form.email.trim()) return "กรุณากรอกอีเมลเพื่อใช้เป็นชื่อเข้าสู่ระบบของพนักงาน";
-  if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "รูปแบบอีเมลไม่ถูกต้อง";
-  if (!form.startDate) return "กรุณากรอกวันที่เริ่มงาน";
-  if (employee && !employee.isActive && !form.endDate) return "กรุณาระบุวันที่สิ้นสุดการทำงาน";
-  if (form.baseSalary !== "" && (!Number.isFinite(Number(form.baseSalary)) || Number(form.baseSalary) < 0)) return "ฐานเงินเดือนต้องเป็นตัวเลขตั้งแต่ 0 บาทขึ้นไป";
-  if (!Number.isFinite(Number(form.otWeekdayMultiplier)) || Number(form.otWeekdayMultiplier) <= 0) return "เรท OT วันธรรมดาต้องมากกว่า 0";
-  if (!Number.isFinite(Number(form.otHolidayMultiplier)) || Number(form.otHolidayMultiplier) <= 0) return "เรท OT วันหยุดต้องมากกว่า 0";
-  if (!Number.isFinite(Number(form.workHoursPerDay)) || Number(form.workHoursPerDay) <= 0 || Number(form.workHoursPerDay) > 24) return "ชั่วโมงทำงานปกติต่อวันต้องมากกว่า 0 และไม่เกิน 24";
+function validateEmployeeForm(form, employee, canEditProfile, canEditCompensation) {
+  if (canEditProfile) {
+    if (!form.firstName.trim() || !form.lastName.trim()) return "กรุณากรอกชื่อและนามสกุล";
+    if (!/^\d{4}$/.test(form.code.trim())) return "กรุณากำหนดรหัสพนักงานเป็นตัวเลข 4 หลัก เช่น 2603";
+    if (!employee && !form.email.trim()) return "กรุณากรอกอีเมลเพื่อใช้เป็นชื่อเข้าสู่ระบบของพนักงาน";
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "รูปแบบอีเมลไม่ถูกต้อง";
+    if (!form.startDate) return "กรุณากรอกวันที่เริ่มงาน";
+    if (employee && !employee.isActive && !form.endDate) return "กรุณาระบุวันที่สิ้นสุดการทำงาน";
+  }
+  if (canEditCompensation) {
+    if (form.baseSalary !== "" && (!Number.isFinite(Number(form.baseSalary)) || Number(form.baseSalary) < 0)) return "ฐานเงินเดือนต้องเป็นตัวเลขตั้งแต่ 0 บาทขึ้นไป";
+    if (!Number.isFinite(Number(form.otWeekdayMultiplier)) || Number(form.otWeekdayMultiplier) <= 0) return "เรท OT วันธรรมดาต้องมากกว่า 0";
+    if (!Number.isFinite(Number(form.otHolidayMultiplier)) || Number(form.otHolidayMultiplier) <= 0) return "เรท OT วันหยุดต้องมากกว่า 0";
+    if (!Number.isFinite(Number(form.workHoursPerDay)) || Number(form.workHoursPerDay) <= 0 || Number(form.workHoursPerDay) > 24) return "ชั่วโมงทำงานปกติต่อวันต้องมากกว่า 0 และไม่เกิน 24";
+  }
   return null;
 }
 
-function employeeRequestBody(form, employee, lookups) {
+function employeeRequestBody(form, employee, lookups, canEditProfile, canEditCompensation) {
   const operationalStatus = lookups.employmentStatuses.find((item) => item.name === "ปฏิบัติงาน" && item.isActive !== false)
     || lookups.employmentStatuses.find((item) => item.name !== "พ้นสภาพ" && item.isActive !== false);
 
-  return {
+  const body = {
     code: form.code.trim(),
     prefix: form.prefix || null,
     firstName: form.firstName.trim(),
@@ -51,6 +55,14 @@ function employeeRequestBody(form, employee, lookups) {
     employmentTypeId: form.employmentTypeId ? Number(form.employmentTypeId) : null,
     ...(!employee ? { employmentStatusId: operationalStatus?.id ?? null } : {}),
   };
+
+  const compensationFields = ["baseSalary", "otWeekdayMultiplier", "otHolidayMultiplier", "workHoursPerDay"];
+  if (canEditProfile && canEditCompensation) return body;
+  if (canEditProfile) {
+    for (const field of compensationFields) delete body[field];
+    return body;
+  }
+  return Object.fromEntries(compensationFields.map((field) => [field, body[field]]));
 }
 
 function networkFailure(action) {
@@ -78,8 +90,8 @@ export function useEmployeeWorkflow({ onEmployeesChanged, onEmployeeChanged, onS
   const [offboarding, setOffboarding] = useState(false);
   const [offboardError, setOffboardError] = useState("");
 
-  async function saveEmployee({ employee, form, lookups }) {
-    const validationError = validateEmployeeForm(form, employee);
+  async function saveEmployee({ employee, form, lookups, canEditProfile = true, canEditCompensation = true }) {
+    const validationError = validateEmployeeForm(form, employee, canEditProfile, canEditCompensation);
     if (validationError) {
       setFormError(validationError);
       return false;
@@ -91,7 +103,7 @@ export function useEmployeeWorkflow({ onEmployeesChanged, onEmployeeChanged, onS
       const outcome = await requestEmployeeMutation({
         url: employee ? `/api/employees/${employee.id}` : "/api/employees",
         method: employee ? "PATCH" : "POST",
-        body: employeeRequestBody(form, employee, lookups),
+        body: employeeRequestBody(form, employee, lookups, canEditProfile, canEditCompensation),
         fallback: "บันทึกข้อมูลพนักงานไม่สำเร็จ",
         networkAction: "บันทึกข้อมูลพนักงาน",
       });

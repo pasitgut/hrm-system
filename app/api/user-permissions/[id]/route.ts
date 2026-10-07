@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
-import { PERMISSIONS, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { encodePermissionsForStorage, normalizePermissions, PERMISSIONS, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 
@@ -31,6 +31,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
     return jsonError(400, "permissions contains an unknown permission");
   }
   const permissions = [...new Set(value)] as PermissionKey[];
+  const storedPermissions = encodePermissionsForStorage(permissions);
 
   const result = await db.transaction(async (tx) => {
     // Serialize permission-manager changes so two concurrent requests cannot
@@ -50,7 +51,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 
     const [updated] = await tx
       .update(users)
-      .set({ permissions, updatedAt: new Date() })
+      .set({ permissions: storedPermissions, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning({ id: users.id, permissions: users.permissions });
     return updated ? { kind: "updated" as const, item: updated } : { kind: "not-found" as const };
@@ -58,5 +59,5 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 
   if (result.kind === "not-found") return jsonError(404, "User account not found");
   if (result.kind === "last-manager") return jsonError(409, "At least one active user must keep permission management access");
-  return NextResponse.json({ item: result.item });
+  return NextResponse.json({ item: { ...result.item, permissions: normalizePermissions(result.item.permissions) } });
 });

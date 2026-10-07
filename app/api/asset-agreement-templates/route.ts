@@ -22,13 +22,13 @@ function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
 }
 
 export const GET = withApiAuth(async (request: NextRequest) => {
-  await requireApiPermission(request, "assets.manage");
+  await requireApiPermission(request, "assets.templates.manage");
   const rows = await db.select().from(assetAgreementTemplates).orderBy(desc(assetAgreementTemplates.updatedAt));
   return NextResponse.json({ items: rows.map(templateDto) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  const user = await requireApiPermission(request, "assets.manage");
+  const user = await requireApiPermission(request, "assets.templates.manage");
   let body: unknown;
   try { body = await request.json(); }
   catch { return jsonError(400, "Invalid JSON body"); }

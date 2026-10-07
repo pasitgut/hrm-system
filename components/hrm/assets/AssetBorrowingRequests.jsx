@@ -569,7 +569,7 @@ function AssetRequestCard({ item, isManager, employeeCode, agreementTemplates = 
   );
 }
 
-export function AssetBorrowingRequests({ isManager = false, employeeCode, createOpen = false, onCreateClose = () => {} }) {
+export function AssetBorrowingRequests({ isManager = false, canViewCompany = isManager, employeeCode, createOpen = false, onCreateClose = () => {} }) {
   const [items, setItems] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [agreementTemplates, setAgreementTemplates] = useState([]);
@@ -661,12 +661,12 @@ export function AssetBorrowingRequests({ isManager = false, employeeCode, create
     ]),
   ), [items]);
   const filtered = useMemo(() => items.filter((item) => {
-    const matchesStatus = isManager
+    const matchesStatus = canViewCompany
       ? statusFilter === "all" || matchesAssetAgreementFilter(item, statusFilter)
       : statusFilter === "all" || item.status === statusFilter;
     const searchText = `${item.employeeName} ${item.employeeCode} ${item.department} ${item.position} ${item.reason} ${(item.itemDetails || []).map((detail) => `${detail.name} ${detail.note}`).join(" ")}`.toLocaleLowerCase();
     return matchesStatus && searchText.includes(query.trim().toLocaleLowerCase());
-  }), [items, isManager, statusFilter, query]);
+  }), [items, canViewCompany, statusFilter, query]);
 
   function updateItem(index, key, value) {
     setAssetItems((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item));
@@ -753,7 +753,7 @@ export function AssetBorrowingRequests({ isManager = false, employeeCode, create
   const managerTabs = Object.entries(agreementFilterLabels)
     .filter(([id]) => !["waitingHandover", "waitingEmployee"].includes(id) || agreementFilterCounts[id] > 0)
     .map(([id, label]) => ({ id, label, count: agreementFilterCounts[id] }));
-  const tabs = isManager ? managerTabs : employeeTabs;
+  const tabs = canViewCompany ? managerTabs : employeeTabs;
 
   return (
     <div className="space-y-4">

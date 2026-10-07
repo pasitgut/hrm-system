@@ -7,11 +7,11 @@ import { PageHeader } from "@/components/hrm/PageHeader";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
-import { canManageAssets } from "@/lib/auth/permissions";
+import { canManageAssetTemplates } from "@/lib/auth/permissions";
 
 export default function AgreementTemplatesPage() {
   const user = useHrmRole();
-  const manager = Boolean(user && canManageAssets(user.permissions));
+  const manager = Boolean(user && canManageAssetTemplates(user.permissions));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

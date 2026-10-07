@@ -3,13 +3,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canViewCompanyLeave } from "@/lib/auth/permissions";
+import { canManageOwnLeaveRequests, canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 import { fetchLeaveItemById, jsonError, leaveDaySpan, leaveQuotaExceededMessage, parseLeaveInput } from "@/app/api/leave/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 export const GET = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnLeaveRequests(user.permissions) && !canViewCompanyLeave(user.permissions)) {
+    return jsonError(403, "Leave view permission required");
+  }
   const { id } = await context.params;
 
   const item = await fetchLeaveItemById(id);
@@ -59,6 +62,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       .where(eq(leaveRequests.id, id));
     if (!existing) return { error: "Not found", status: 404 as const };
     if (existing.employeeId !== user.employeeId) return { error: "Forbidden", status: 403 as const };
+    if (!canManageOwnLeaveRequests(user.permissions)) return { error: "Leave self-service permission required", status: 403 as const };
     if (existing.statusCode !== "pending") return { error: "Only a pending request can be edited", status: 409 as const };
 
     const [leaveType] = await tx
@@ -126,6 +130,7 @@ export const DELETE = withApiAuth(async (request: NextRequest, context: RouteCon
 
   if (!existing) return jsonError(404, "Not found");
   if (existing.employeeId !== user.employeeId) return jsonError(403, "Forbidden");
+  if (!canManageOwnLeaveRequests(user.permissions)) return jsonError(403, "Leave self-service permission required");
   if (existing.statusCode !== "pending") return jsonError(409, "Only a pending request can be cancelled");
 
   const cancelledAt = new Date();

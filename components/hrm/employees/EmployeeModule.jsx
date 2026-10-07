@@ -21,7 +21,17 @@ import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
 import { EmployeeDocumentsPanel } from "@/components/hrm/employees/EmployeeDocumentsPanel";
-import { canManageEmployeeDocuments, canManageEmployees, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import {
+  canCreateEmployees,
+  canDeleteEmployeeDocuments,
+  canOffboardEmployees,
+  canShareEmployeeDocuments,
+  canUpdateEmployeeProfiles,
+  canUploadEmployeeDocuments,
+  canViewEmployeeCompensation,
+  canViewEmployeeDocuments,
+} from "@/lib/auth/permissions";
+import { canManageEmployeeCompensation } from "@/lib/auth/rolePermissionAccess";
 import { cn } from "@/lib/utils";
 import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
 import { formatThaiDate, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
@@ -143,15 +153,15 @@ function SelectField({ id, label, children, ...props }) {
   );
 }
 
-function EmployeeActions({ employee, canManage, onView, onEdit, onOffboard }) {
+function EmployeeActions({ employee, canEdit, canOffboard, onView, onEdit, onOffboardEmployee }) {
   const name = `${employee.firstName} ${employee.lastName}`;
   return (
     <div className="flex items-center justify-end gap-1">
       <IconButton icon={RiEyeLine} aria-label={`ดูข้อมูล ${name}`} onClick={() => onView(employee)} />
-      {canManage ? (
+      {canEdit || canOffboard ? (
         <>
-          <IconButton icon={RiEditLine} aria-label={`แก้ไข ${name}`} onClick={() => onEdit(employee)} />
-          {employee.isActive ? <Button type="button" size="xs" variant="outline" className="text-destructive" aria-label={`เปลี่ยน ${name} เป็นพ้นสภาพ`} onClick={() => onOffboard(employee)}>พ้นสภาพ</Button> : null}
+          {canEdit ? <IconButton icon={RiEditLine} aria-label={`แก้ไข ${name}`} onClick={() => onEdit(employee)} /> : null}
+          {canOffboard && employee.isActive ? <Button type="button" size="xs" variant="outline" className="text-destructive" aria-label={`เปลี่ยน ${name} เป็นพ้นสภาพ`} onClick={() => onOffboardEmployee(employee)}>พ้นสภาพ</Button> : null}
         </>
       ) : null}
     </div>
@@ -189,9 +199,17 @@ function EmployeeCard({ employee, tenureAsOf, ...props }) {
 
 export default function EmployeeModule() {
   const { permissions = [] } = useHrmRole();
-  const canManage = canManageEmployees(permissions);
+  const canCreate = canCreateEmployees(permissions);
+  const canUpdateProfile = canUpdateEmployeeProfiles(permissions);
+  const canOffboard = canOffboardEmployees(permissions);
+  const canManageCompensation = canManageEmployeeCompensation({ permissions });
+  const canViewCompensation = canViewEmployeeCompensation(permissions);
+  const canEditEmployee = canUpdateProfile || canManageCompensation;
+  const canEditProfileForm = editing ? canUpdateProfile : canCreate;
   const canViewDocuments = canViewEmployeeDocuments(permissions);
-  const canManageDocuments = canManageEmployeeDocuments(permissions);
+  const canUploadDocuments = canUploadEmployeeDocuments(permissions);
+  const canShareDocuments = canShareEmployeeDocuments(permissions);
+  const canDeleteDocuments = canDeleteEmployeeDocuments(permissions);
 
   const [lookups, setLookups] = useState(EMPTY_LOOKUPS);
   const [lookupError, setLookupError] = useState("");
@@ -293,7 +311,7 @@ export default function EmployeeModule() {
       setListLoading(true);
       setListError("");
       try {
-        const response = await fetch(`/api/employees${canManage ? "?includeDeleted=true" : ""}`);
+        const response = await fetch(`/api/employees${canOffboard ? "?includeDeleted=true" : ""}`);
         const payload = await readJsonSafe(response);
         if (!response.ok) throw new Error(explainFailure(payload.error, "โหลดรายชื่อพนักงานไม่สำเร็จ"));
         if (!cancelled) setEmployeeList(payload.items || []);
@@ -305,7 +323,7 @@ export default function EmployeeModule() {
     }
     loadEmployees();
     return () => { cancelled = true; };
-  }, [canManage, refreshKey]);
+  }, [canOffboard, refreshKey]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -394,7 +412,13 @@ export default function EmployeeModule() {
 
   async function saveEmployee(event) {
     event.preventDefault();
-    const saved = await employeeWorkflow.saveEmployee({ employee: editing, form, lookups });
+    const saved = await employeeWorkflow.saveEmployee({
+      employee: editing,
+      form,
+      lookups,
+      canEditProfile: editing ? canUpdateProfile : canCreate,
+      canEditCompensation: canManageCompensation,
+    });
     if (!saved) return;
     setFormOpen(false);
     setEditing(null);
@@ -483,7 +507,7 @@ export default function EmployeeModule() {
         eyebrow="ข้อมูลบุคลากร · พนักงาน"
         title="ทะเบียนพนักงาน"
         description="จัดการข้อมูลพนักงาน แผนก ตำแหน่ง และประเภทการจ้างในที่เดียว"
-        actions={canManage ? (
+        actions={canCreate ? (
           <>
             <Button type="button" variant="outline" leadingIcon={RiSettings3Line} onClick={() => setMasterOpen(true)}>จัดการรายการ</Button>
             <Button type="button" leadingIcon={RiAddLine} onClick={openAdd}>เพิ่มพนักงาน</Button>
@@ -502,7 +526,7 @@ export default function EmployeeModule() {
         {[
           { key: "all", label: "ทั้งหมด", count: employeeList.length },
           { key: "active", label: "ปฏิบัติงาน", count: activeCount },
-          ...(canManage ? [{ key: "former", label: "พ้นสภาพ", count: formerCount }] : []),
+          ...(canOffboard ? [{ key: "former", label: "พ้นสภาพ", count: formerCount }] : []),
         ].map((item) => (
           <button
             type="button"
@@ -579,7 +603,7 @@ export default function EmployeeModule() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-foreground">{formatEmploymentTenure(employee, tenureAsOf)}</td>
                     <td className="px-4 py-3"><StatusChip status={employee.employmentStatus?.name} /></td>
-                    <td className="px-3 py-3"><EmployeeActions employee={employee} canManage={canManage} onView={setSelected} onEdit={openEdit} onOffboard={beginOffboard} /></td>
+                    <td className="px-3 py-3"><EmployeeActions employee={employee} canEdit={canEditEmployee} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onOffboardEmployee={beginOffboard} /></td>
                   </tr>
                 );
               })}
@@ -588,7 +612,7 @@ export default function EmployeeModule() {
         </div>
 
         <div className="grid gap-3 p-3 md:hidden">
-          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} tenureAsOf={tenureAsOf} canManage={canManage} onView={setSelected} onEdit={openEdit} onOffboard={beginOffboard} />)}
+          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} tenureAsOf={tenureAsOf} canEdit={canEditEmployee} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onOffboardEmployee={beginOffboard} />)}
         </div>
 
         {listLoading ? (
@@ -625,6 +649,8 @@ export default function EmployeeModule() {
         footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
       >
         <form id="employee-form" className="grid gap-4 sm:grid-cols-2" onSubmit={saveEmployee} noValidate>
+          {canEditProfileForm ? (
+            <>
           <div className="sm:col-span-2 border-b border-border pb-3">
             <h3 className="text-sm font-semibold text-foreground">ข้อมูลส่วนบุคคล</h3>
             <p className="mt-1 text-xs text-muted-foreground">กรอกข้อมูลที่จำเป็นให้ครบก่อนบันทึก</p>
@@ -662,6 +688,12 @@ export default function EmployeeModule() {
           </SelectField>
           <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
           {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
+            </>
+          ) : (
+            <p className="sm:col-span-2 text-sm text-muted-foreground">บัญชีนี้จัดการได้เฉพาะข้อมูลค่าตอบแทนของพนักงาน</p>
+          )}
+          {canManageCompensation ? (
+            <>
           <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
             <h3 className="text-sm font-semibold text-foreground">ข้อมูลสำหรับคำนวณ OT</h3>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">ใช้ค่าแรงรายชั่วโมง = เงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน แล้วคูณเรทตามประเภทวัน</p>
@@ -670,6 +702,10 @@ export default function EmployeeModule() {
           <Input label="ชั่วโมงทำงานปกติต่อวัน" type="number" min="0.01" max="24" step="0.25" inputMode="decimal" value={form.workHoursPerDay} onChange={(value) => updateForm("workHoursPerDay", value)} isRequired />
           <Input label="เรท OT วันธรรมดา (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otWeekdayMultiplier} onChange={(value) => updateForm("otWeekdayMultiplier", value)} isRequired />
           <Input label="เรท OT วันหยุด (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otHolidayMultiplier} onChange={(value) => updateForm("otHolidayMultiplier", value)} isRequired />
+            </>
+          ) : null}
+          {canEditProfileForm ? (
+            <>
           <Input
             label="รูปโปรไฟล์"
             type="file"
@@ -687,6 +723,8 @@ export default function EmployeeModule() {
             }}
           />
           {form.avatarUrl ? <div className="flex items-center gap-3 text-xs text-muted-foreground"><Avatar src={form.avatarUrl} alt="รูปพนักงาน" initials={initialsFor(form)} /><span>เลือกรูปแล้ว</span></div> : <p className="self-end pb-2 text-xs text-muted-foreground">JPG หรือ PNG ขนาดไม่เกิน 5 MB</p>}
+            </>
+          ) : null}
           {formError ? <p role="alert" className="sm:col-span-2 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{formError}</p> : null}
         </form>
       </HrmDialog>
@@ -710,7 +748,7 @@ export default function EmployeeModule() {
         title="ข้อมูลพนักงาน"
         description={selected ? `${selected.code} / ${selected.department?.name || "-"} / ${selected.position?.name || "-"}` : ""}
         size="lg"
-        footer={<><Button type="button" variant="secondary" onClick={() => setSelected(null)}>ปิด</Button>{canManage ? <Button type="button" leadingIcon={RiEditLine} onClick={() => { const employee = selected; setSelected(null); openEdit(employee); }}>แก้ไขข้อมูล</Button> : null}</>}
+        footer={<><Button type="button" variant="secondary" onClick={() => setSelected(null)}>ปิด</Button>{canEditEmployee ? <Button type="button" leadingIcon={RiEditLine} onClick={() => { const employee = selected; setSelected(null); openEdit(employee); }}>แก้ไขข้อมูล</Button> : null}</>}
       >
         {selected ? (
           <div className="space-y-5">
@@ -731,11 +769,11 @@ export default function EmployeeModule() {
               <div><dt className="text-xs text-muted-foreground">อายุงาน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{formatEmploymentTenure(selected, tenureAsOf)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันที่สิ้นสุดงาน</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.endDate)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันเกิด</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.birthDate)}</dd></div>
-              {canManage ? <div><dt className="text-xs text-muted-foreground">ฐานเงินเดือน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.baseSalary == null ? "ยังไม่ระบุ" : Number(selected.baseSalary).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " บาท"}</dd></div> : null}
-              {canManage ? <div><dt className="text-xs text-muted-foreground">เรท OT วันธรรมดา / วันหยุด</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.otWeekdayMultiplier}× / {selected.otHolidayMultiplier}×</dd></div> : null}
-              {canManage ? <div><dt className="text-xs text-muted-foreground">ชั่วโมงทำงานปกติต่อวัน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.workHoursPerDay} ชม.</dd></div> : null}
+              {canViewCompensation ? <div><dt className="text-xs text-muted-foreground">ฐานเงินเดือน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.baseSalary == null ? "ยังไม่ระบุ" : Number(selected.baseSalary).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " บาท"}</dd></div> : null}
+              {canViewCompensation ? <div><dt className="text-xs text-muted-foreground">เรท OT วันธรรมดา / วันหยุด</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.otWeekdayMultiplier}× / {selected.otHolidayMultiplier}×</dd></div> : null}
+              {canViewCompensation ? <div><dt className="text-xs text-muted-foreground">ชั่วโมงทำงานปกติต่อวัน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.workHoursPerDay} ชม.</dd></div> : null}
             </dl>
-            {canViewDocuments ? <EmployeeDocumentsPanel employeeId={selected.id} canManage={canManageDocuments} /> : null}
+            {canViewDocuments ? <EmployeeDocumentsPanel employeeId={selected.id} canUpload={canUploadDocuments} canShare={canShareDocuments} canDelete={canDeleteDocuments} /> : null}
           </div>
         ) : null}
       </HrmDialog>

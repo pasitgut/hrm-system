@@ -13,13 +13,27 @@ import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
-import { canApproveAnything } from "@/lib/auth/permissions";
+import {
+  canApproveAnything,
+  canManageOwnOtRequests,
+  canViewCompanyLeave,
+  canViewCompanyOt,
+  canViewOwnLeaveRequests,
+  canViewOwnOtRequests,
+  canViewReports,
+} from "@/lib/auth/permissions";
 
 function QuickLinks({ permissions }) {
   const items = [
-    { label: "จัดการคำขอลา", description: "ยื่นคำขอและตรวจสอบสิทธิ์วันลา", icon: RiCalendarTodoLine, href: "/leave" },
-    { label: "จัดการคำขอ OT", description: "ยื่นคำขอและดูชั่วโมงที่อนุมัติ", icon: RiTimerLine, href: "/ot" },
-    { label: "ดูรายงาน", description: "กำหนดช่วงเวลาและรูปแบบรายงาน", icon: RiFileChartLine, href: "/reports" },
+    ...(canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions)
+      ? [{ label: "จัดการคำขอลา", description: "ยื่นคำขอและตรวจสอบสิทธิ์วันลา", icon: RiCalendarTodoLine, href: "/leave" }]
+      : []),
+    ...(canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions)
+      ? [{ label: "จัดการคำขอ OT", description: "ยื่นคำขอและดูชั่วโมงที่อนุมัติ", icon: RiTimerLine, href: "/ot" }]
+      : []),
+    ...(canViewReports(permissions)
+      ? [{ label: "ดูรายงาน", description: "กำหนดช่วงเวลาและรูปแบบรายงาน", icon: RiFileChartLine, href: "/reports" }]
+      : []),
     ...(canApproveAnything(permissions)
       ? [{ label: "คิวอนุมัติ", description: "พิจารณาคำขอลาและ OT ของทีม", icon: RiUserSharedLine, href: "/approvals" }]
       : []),
@@ -55,29 +69,35 @@ export default function OverviewPage() {
         eyebrow="HRM · พื้นที่ทำงาน"
         title="ภาพรวม"
         description="ติดตามสิทธิ์วันลาและไปยังงานที่ต้องทำได้จากจุดเดียว"
-        actions={(
+        actions={canViewReports(permissions) || canManageOwnOtRequests(permissions) ? (
           <>
-            <Button variant="outline" leadingIcon={RiFileChartLine} onClick={() => router.push("/reports")}>
-              ดูรายงาน
-            </Button>
-            <Button leadingIcon={RiTimerLine} onClick={() => router.push("/ot")}>
-              ยื่นคำขอ OT
-            </Button>
+            {canViewReports(permissions) ? (
+              <Button variant="outline" leadingIcon={RiFileChartLine} onClick={() => router.push("/reports")}>
+                ดูรายงาน
+              </Button>
+            ) : null}
+            {canManageOwnOtRequests(permissions) ? (
+              <Button leadingIcon={RiTimerLine} onClick={() => router.push("/ot")}>
+                ยื่นคำขอ OT
+              </Button>
+            ) : null}
           </>
-        )}
+        ) : null}
       />
 
-      <section aria-labelledby="overview-leave-heading" className="min-w-0">
-        <SectionHeading
-          id="overview-leave-heading"
-          title="สิทธิ์วันลาของฉัน"
-          description="ยอดคงเหลือล่าสุดจากระบบวันลา"
-          actions={<Button asChild size="xs" variant="ghost"><Link href="/leave">ดูรายละเอียด</Link></Button>}
-        />
-        <div className="mt-3">
-          <LeaveSummaryView />
-        </div>
-      </section>
+      {canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) ? (
+        <section aria-labelledby="overview-leave-heading" className="min-w-0">
+          <SectionHeading
+            id="overview-leave-heading"
+            title="สิทธิ์วันลาของฉัน"
+            description="ยอดคงเหลือล่าสุดจากระบบวันลา"
+            actions={<Button asChild size="xs" variant="ghost"><Link href="/leave">ดูรายละเอียด</Link></Button>}
+          />
+          <div className="mt-3">
+            <LeaveSummaryView />
+          </div>
+        </section>
+      ) : null}
 
       <section aria-labelledby="overview-quick-links-heading" className="min-w-0">
         <SectionHeading

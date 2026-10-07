@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { RiSearchLine, RiShieldUserLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PERMISSIONS, hasPermission } from "@/lib/auth/permissions";
+import { PERMISSIONS } from "@/lib/auth/permissions";
 
 function fullName(user) {
   return `${user.firstName} ${user.lastName}`.trim();
@@ -63,6 +63,15 @@ export default function UserPermissionsTab() {
     setDraft((current) => enabled
       ? [...new Set([...current, permission])]
       : current.filter((value) => value !== permission));
+    setError("");
+    setNotice("");
+  }
+
+  function toggleGroup(group, enabled) {
+    const groupKeys = PERMISSIONS.filter((permission) => permission.group === group).map(({ key }) => key);
+    setDraft((current) => enabled
+      ? [...new Set([...current, ...groupKeys])]
+      : current.filter((value) => !groupKeys.includes(value)));
     setError("");
     setNotice("");
   }
@@ -143,15 +152,25 @@ export default function UserPermissionsTab() {
               </div>
 
               <div className="divide-y divide-border">
-                {groups.map((group) => (
+                {groups.map((group) => {
+                  const groupPermissions = PERMISSIONS.filter((permission) => permission.group === group);
+                  const selectedCount = groupPermissions.filter((permission) => draft.includes(permission.key)).length;
+                  const allSelected = selectedCount === groupPermissions.length;
+                  return (
                   <fieldset key={group} className="py-3 first:pt-2">
-                    <legend className="mb-1 text-xs font-semibold text-muted-foreground">{group}</legend>
+                    <legend className="sr-only">{group}</legend>
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-muted-foreground">{group} <span className="font-normal">{selectedCount}/{groupPermissions.length}</span></span>
+                      <Button type="button" variant="ghost" size="xs" onClick={() => toggleGroup(group, !allSelected)}>
+                        {allSelected ? "ล้างทั้งหมวด" : "เลือกทั้งหมวด"}
+                      </Button>
+                    </div>
                     <div className="space-y-1">
-                      {PERMISSIONS.filter((permission) => permission.group === group).map((permission) => (
+                      {groupPermissions.map((permission) => (
                         <label key={permission.key} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
                           <input
                             type="checkbox"
-                            checked={hasPermission(draft, permission.key)}
+                            checked={draft.includes(permission.key)}
                             onChange={(event) => toggle(permission.key, event.target.checked)}
                             className="size-4 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           />
@@ -166,7 +185,7 @@ export default function UserPermissionsTab() {
                       ))}
                     </div>
                   </fieldset>
-                ))}
+                );})}
               </div>
             </>
           ) : (

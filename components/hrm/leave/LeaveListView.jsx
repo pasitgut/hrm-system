@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { canViewCompanyLeave } from "@/lib/auth/permissions";
+import { canManageOwnLeaveRequests, canViewCompanyLeave } from "@/lib/auth/permissions";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { formatDateRange, formatDays, LEAVE_STATUS_TABS, statusColor } from "@/components/hrm/leave/leaveStatus";
 import { cn } from "@/lib/utils";
@@ -151,6 +151,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
   );
 
   const showEmployeeColumn = canViewCompanyLeave(permissions);
+  const canManageOwnRequests = canManageOwnLeaveRequests(permissions);
 
   function isOwn(item) {
     return item.employeeId === employeeId;
@@ -202,7 +203,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
                   key={item.id}
                   item={item}
                   showEmployeeColumn={showEmployeeColumn}
-                  canManage={isOwn(item)}
+                  canManage={canManageOwnRequests && isOwn(item)}
                   onEdit={onEdit}
                   onCancel={setCancelTarget}
                 />
@@ -216,7 +217,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
               key={item.id}
               item={item}
               showEmployeeColumn={showEmployeeColumn}
-              canManage={isOwn(item)}
+              canManage={canManageOwnRequests && isOwn(item)}
               onEdit={onEdit}
               onCancel={setCancelTarget}
             />

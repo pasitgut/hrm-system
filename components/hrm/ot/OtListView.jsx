@@ -10,6 +10,7 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { canApproveOtData, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canManageOwnOtRequests } from "@/lib/auth/permissions";
 import { OT_DAY_TYPES, OT_STATUS_TABS, currentMonthInBangkok, formatMonthLabel, overtimeTypeLabel, shiftMonth, statusColor } from "@/components/hrm/ot/otStatus";
 import { cx } from "@/utils/cx";
 
@@ -175,6 +176,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
 
   const showEmployeeColumn = canViewCompanyOtData(user);
   const canClassifyRequests = canApproveOtData(user);
+  const canManageOwnRequests = canManageOwnOtRequests(user.permissions);
 
   function handleEdit(item) {
     onEdit?.(item);
@@ -277,7 +279,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
                   item={item}
                   showEmployeeColumn={showEmployeeColumn}
                   showActionsColumn
-                  canManage={item.employeeId === employeeId && item.statusCode === "pending"}
+                  canManage={canManageOwnRequests && item.employeeId === employeeId && item.statusCode === "pending"}
                   canClassify={canClassifyRequests && item.statusCode === "approved" && !item.overtimeType}
                   onEdit={handleEdit}
                   onCancel={requestCancel}
@@ -293,7 +295,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
               key={item.id}
               item={item}
               showEmployeeColumn={showEmployeeColumn}
-              canManage={item.employeeId === employeeId && item.statusCode === "pending"}
+              canManage={canManageOwnRequests && item.employeeId === employeeId && item.statusCode === "pending"}
               canClassify={canClassifyRequests && item.statusCode === "approved" && !item.overtimeType}
               onEdit={handleEdit}
               onCancel={requestCancel}

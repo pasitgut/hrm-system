@@ -2,6 +2,12 @@ import DocumentsModule from "@/components/hrm/documents/DocumentsModule";
 import { requireAnyPermission } from "@/lib/auth/dal";
 
 export default async function DocumentsPage() {
-  await requireAnyPermission("employees.documents.view", "employees.documents.manage");
+  await requireAnyPermission(
+    "employees.documents.view",
+    "employees.documents.view_all",
+    "employees.documents.upload",
+    "employees.documents.share",
+    "employees.documents.delete",
+  );
   return <DocumentsModule />;
 }

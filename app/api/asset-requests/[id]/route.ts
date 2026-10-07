@@ -18,7 +18,7 @@ import { db } from "@/lib/db/client";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { assetAgreementTemplates, assetRequests, employees } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageAssets } from "@/lib/auth/permissions";
+import { canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const agreementTemplates = {
@@ -53,7 +53,10 @@ async function requestContext(request: NextRequest, id: string) {
   const [row] = await db.select({ borrowerEmployeeId: assetRequests.borrowerEmployeeId })
     .from(assetRequests).where(eq(assetRequests.id, id));
   if (!row) return { response: jsonError(404, "Not found") } as const;
-  if (!canManageAssets(user.permissions) && row.borrowerEmployeeId !== user.employeeId) return { response: jsonError(403, "Forbidden") } as const;
+  if (!canViewOwnAssetRequests(user.permissions) && !canViewCompanyAssetRequests(user.permissions)) {
+    return { response: jsonError(403, "Asset request view permission required") } as const;
+  }
+  if (!canViewCompanyAssetRequests(user.permissions) && row.borrowerEmployeeId !== user.employeeId) return { response: jsonError(403, "Forbidden") } as const;
   const [employee] = await db.select({
     code: employees.code,
     name: employees.firstName,

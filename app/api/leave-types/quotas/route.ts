@@ -12,7 +12,7 @@ function jsonError(status: number, message: string) {
 }
 
 export const PATCH = withApiAuth(async (request: NextRequest) => {
-  await requireApiPermission(request, "settings.manage");
+  await requireApiPermission(request, "leave.quotas.manage");
 
   let body: unknown;
   try {

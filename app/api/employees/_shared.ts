@@ -87,6 +87,13 @@ type EmployeeRow = {
 
 export type EmployeeItemDto = ReturnType<typeof toEmployeeItemDto>;
 
+export const EMPLOYEE_COMPENSATION_FIELDS = [
+  "baseSalary",
+  "otWeekdayMultiplier",
+  "otHolidayMultiplier",
+  "workHoursPerDay",
+] as const;
+
 export type EmployeeLifecycleFailure = {
   ok: false;
   kind: "invalid" | "not-found" | "conflict";
@@ -99,8 +106,16 @@ function lifecycleFailure(kind: EmployeeLifecycleFailure["kind"], message: strin
   return { ok: false, kind, message };
 }
 
-export function employeeLifecycleResponse<T>(outcome: EmployeeLifecycleOutcome<T>, status = 200) {
-  if (outcome.ok === true) return NextResponse.json({ item: outcome.value }, { status });
+export function employeeLifecycleResponse<T>(outcome: EmployeeLifecycleOutcome<T>, status = 200, includeCompensation = true) {
+  if (outcome.ok === true) {
+    let item = outcome.value;
+    if (!includeCompensation && item && typeof item === "object") {
+      const visibleItem = { ...(item as Record<string, unknown>) };
+      for (const field of EMPLOYEE_COMPENSATION_FIELDS) delete visibleItem[field];
+      item = visibleItem as T;
+    }
+    return NextResponse.json({ item }, { status });
+  }
   const statusByKind = { invalid: 400, "not-found": 404, conflict: 409 } as const;
   return jsonError(statusByKind[outcome.kind], outcome.message);
 }

@@ -24,7 +24,7 @@ function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
 }
 
 async function authorized(request: NextRequest, id: string) {
-  await requireApiPermission(request, "assets.manage");
+  await requireApiPermission(request, "assets.templates.manage");
   if (!requestId(id)) return { response: jsonError(400, "Invalid Agreement template id") } as const;
   const [template] = await db.select().from(assetAgreementTemplates).where(eq(assetAgreementTemplates.id, id));
   if (!template) return { response: jsonError(404, "Agreement template not found") } as const;

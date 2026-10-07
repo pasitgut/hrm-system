@@ -3,12 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, users } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import { canShareEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const actor = await requireApiUser(request);
-  if (!canManageEmployeeDocuments(actor.permissions)) return jsonError(403, "ไม่มีสิทธิ์จัดการสิทธิ์เอกสารพนักงาน");
+  if (!canShareEmployeeDocuments(actor.permissions)) return jsonError(403, "ไม่มีสิทธิ์จัดการสิทธิ์เอกสารพนักงาน");
 
   const accounts = await db
     .select({

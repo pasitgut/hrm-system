@@ -35,7 +35,7 @@ async function readPayload(response) {
   return response.json().catch(() => ({}));
 }
 
-export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
+export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare = false, canDelete = false }) {
   const fileInputId = useId();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -196,7 +196,7 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
           <h3 id="employee-documents-heading" className="text-sm font-semibold text-foreground">เอกสารพนักงาน</h3>
           <p className="mt-1 text-xs text-muted-foreground">ไฟล์ PDF, Word, Excel, JPG หรือ PNG ขนาดไม่เกิน 15 MB</p>
         </div>
-        {canManage ? (
+        {canUpload ? (
           <div className="shrink-0">
             <label
               htmlFor={fileInputId}
@@ -235,7 +235,7 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
         {!loading && !listError && items.length === 0 ? (
           <div className="flex items-start gap-3 py-4">
             <RiFileTextLine className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">{canManage ? "ยังไม่มีเอกสารสำหรับพนักงานคนนี้ เลือกไฟล์เพื่อเพิ่มเอกสารได้เลย" : "ยังไม่มีเอกสารที่คุณมีสิทธิ์เข้าถึงสำหรับพนักงานคนนี้"}</p>
+            <p className="text-sm text-muted-foreground">{canUpload ? "ยังไม่มีเอกสารสำหรับพนักงานคนนี้ เลือกไฟล์เพื่อเพิ่มเอกสารได้เลย" : "ยังไม่มีเอกสารที่คุณมีสิทธิ์เข้าถึงสำหรับพนักงานคนนี้"}</p>
           </div>
         ) : null}
         {items.map((item) => (
@@ -247,7 +247,7 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {formatBytes(item.fileSize)} <span aria-hidden="true">·</span> {formatUploadedAt(item.createdAt)}
                 </p>
-                {canManage ? <p className="mt-0.5 text-xs text-muted-foreground">กำหนดสิทธิ์ไว้ {item.sharedUserCount ?? item.sharedWithUserIds?.length ?? 0} บัญชี</p> : null}
+                {canShare ? <p className="mt-0.5 text-xs text-muted-foreground">กำหนดสิทธิ์ไว้ {item.sharedUserCount ?? item.sharedWithUserIds?.length ?? 0} บัญชี</p> : null}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -256,8 +256,7 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
                   <RiDownloadLine aria-hidden="true" />
                 </a>
               </Button>
-              {canManage ? (
-                <>
+              {canShare ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -268,6 +267,8 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
                   >
                     สิทธิ์
                   </Button>
+              ) : null}
+              {canDelete ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -279,7 +280,6 @@ export function EmployeeDocumentsPanel({ employeeId, canManage = false }) {
                   >
                     <RiDeleteBinLine aria-hidden="true" />
                   </Button>
-                </>
               ) : null}
             </div>
           </article>

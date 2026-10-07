@@ -15,11 +15,11 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   return NextResponse.json({ items });
 });
 
-// --- Settings module: create (settings.manage). Edit/delete live in
+// --- Settings module: create (settings.departments.manage). Edit/delete live in
 // ./[id]/route.ts. DELETE removes the lookup row and clears employee refs. ---
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiPermission(request, "settings.manage");
+  await requireApiPermission(request, "settings.departments.manage");
   const parsed = await readMasterDataBody(request);
   if (!parsed.ok) return parsed.response;
   const name = trimmedString(parsed.body.name, "name is required");

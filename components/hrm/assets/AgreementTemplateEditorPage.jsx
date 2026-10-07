@@ -7,7 +7,7 @@ import { AgreementDocxEditor } from "@/components/hrm/assets/AgreementDocxEditor
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { Button } from "@/components/ui/button";
 import { COMPANY_BORROW_AGREEMENT } from "@/asset-borrowing/presets/companyAgreements";
-import { canManageAssets } from "@/lib/auth/permissions";
+import { canManageAssetTemplates } from "@/lib/auth/permissions";
 
 function defaultTemplate() {
   return { title: COMPANY_BORROW_AGREEMENT.title, body: COMPANY_BORROW_AGREEMENT.body };
@@ -16,7 +16,7 @@ function defaultTemplate() {
 export default function AgreementTemplateEditorPage({ templateId = null }) {
   const router = useRouter();
   const roleContext = useHrmRole();
-  const manager = Boolean(roleContext && canManageAssets(roleContext.permissions));
+  const manager = Boolean(roleContext && canManageAssetTemplates(roleContext.permissions));
   const isNew = !templateId;
   const initialValues = useRef(null);
   const [title, setTitle] = useState("");

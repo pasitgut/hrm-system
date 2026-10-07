@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, overtimeRequests } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canViewEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canViewOwnOtRequests } from "@/lib/auth/permissions";
 import { currentBangkokMonth, durationHours, isValidMonthStr, jsonError, monthRangeUtc, payrollPeriodRangeUtc, round2, utcToBangkokParts } from "@/app/api/ot/_shared";
 
 async function individualSummary(employeeId: string, month: string, start: Date, end: Date) {
@@ -222,6 +223,9 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnOtRequests(user.permissions) && !canViewCompanyOtData(user)) {
+    return jsonError(403, "OT view permission required");
+  }
   const searchParams = request.nextUrl.searchParams;
 
   const periodParam = searchParams.get("period");
@@ -245,5 +249,5 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     return NextResponse.json(await individualSummary(employeeIdParam, monthParam, start, end));
   }
 
-  return NextResponse.json(await companySummary(monthParam, start, end, canManageEmployeeCompensation(user)));
+  return NextResponse.json(await companySummary(monthParam, start, end, canViewEmployeeCompensation(user)));
 });

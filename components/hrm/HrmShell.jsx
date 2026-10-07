@@ -24,7 +24,22 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
-import { canApproveAnything, canOpenSettings, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import {
+  canAccessEmployeeDocuments,
+  canApproveAnything,
+  canManageAssetTemplates,
+  canManageLeaveQuotas,
+  canOpenSettings,
+  canViewCompanyAssetRequests,
+  canViewCompanyLeave,
+  canViewCompanyOt,
+  canViewEmployeeCompensation,
+  canViewEmployeeProfiles,
+  canViewOwnAssetRequests,
+  canViewOwnLeaveRequests,
+  canViewOwnOtRequests,
+  canViewReports,
+} from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
 
 const RoleContext = createContext(null);
@@ -182,20 +197,33 @@ export default function HrmShell({ children, user = null, permissions = [], empl
                 : pathname === "/settings" ? "settings"
                   : "overview";
   const groups = useMemo(() => {
-    const nextGroups = baseGroups.map((group) => ({ ...group, items: [...group.items] }));
-    if (canViewEmployeeDocuments(permissions)) {
-      nextGroups[1].items.splice(1, 0, { key: "documents", label: "เอกสาร", icon: RiFileTextLine, href: "/documents" });
+    const nextGroups = baseGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (item.key === "employees") return canViewEmployeeProfiles(permissions);
+        if (item.key === "ot") return canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions);
+        if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
+        if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
+        if (item.key === "payroll") return canViewEmployeeCompensation(permissions);
+        if (item.key === "reports") return canViewReports(permissions);
+        return true;
+      }),
+    }));
+    const workGroup = nextGroups.find((group) => group.label === "การทำงาน");
+    if (canAccessEmployeeDocuments(permissions)) {
+      workGroup?.items.splice(1, 0, { key: "documents", label: "เอกสาร", icon: RiFileTextLine, href: "/documents" });
     }
     if (canApproveAnything(permissions)) {
-      nextGroups[1].items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
+      workGroup?.items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
     }
+    const visibleGroups = nextGroups.filter((group) => group.items.length > 0);
     if (canOpenSettings(permissions)) {
-      nextGroups.push({
+      visibleGroups.push({
         label: "ระบบ",
         items: [{ key: "settings", label: "ตั้งค่า", icon: RiSettings4Line, href: "/settings" }],
       });
     }
-    return nextGroups;
+    return visibleGroups;
   }, [permissions]);
   const roleContextValue = useMemo(
     () => (user ? { permissions, employeeId: user.employeeId, employeeCode, email: user.email } : null),

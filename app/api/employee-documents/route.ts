@@ -3,14 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { departments, employeeDocuments, employees } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import { canViewAllEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
   if (!canViewEmployeeDocuments(user.permissions)) return jsonError(403, "ไม่มีสิทธิ์ดูเอกสารพนักงาน");
 
-  const canManage = canManageEmployeeDocuments(user.permissions);
+  const canViewAll = canViewAllEmployeeDocuments(user.permissions);
   const documents = await db
     .select({
       id: employeeDocuments.id,
@@ -30,7 +30,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     .from(employeeDocuments)
     .innerJoin(employees, eq(employeeDocuments.employeeId, employees.id))
     .leftJoin(departments, eq(employees.departmentId, departments.id))
-    .where(canManage ? undefined : arrayContains(employeeDocuments.sharedWithUserIds, [user.sub]))
+    .where(canViewAll ? undefined : arrayContains(employeeDocuments.sharedWithUserIds, [user.sub]))
     .orderBy(desc(employeeDocuments.createdAt), asc(employees.firstName), asc(employees.lastName));
 
   const items = documents
@@ -38,7 +38,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
       ...document,
       employeeName: [employeeFirstName, employeeLastName].filter(Boolean).join(" "),
       employeeIsActive: employeeDeletedAt === null,
-      ...(canManage ? {
+      ...(canViewAll ? {
         sharedWithUserIds,
         sharedUserCount: sharedWithUserIds.length,
       } : {}),

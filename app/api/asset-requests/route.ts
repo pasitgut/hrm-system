@@ -9,17 +9,20 @@ import { jsonError, assetRequestDtos, isHttpUrl, requestId, toDate } from "@/app
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates as agreementTemplateTable, departments, employees, positions } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageAssets } from "@/lib/auth/permissions";
+import { canCreateOwnAssetRequests, canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 
 const agreementTemplates = { borrow: COMPANY_BORROW_AGREEMENT, assetForm: COMPANY_ASSET_FORM_AGREEMENT };
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnAssetRequests(user.permissions) && !canViewCompanyAssetRequests(user.permissions)) {
+    return jsonError(403, "Asset request view permission required");
+  }
   const repository = new DrizzleAssetRepository(user.employeeId);
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
-  const items = canManageAssets(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
+  const items = canViewCompanyAssetRequests(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
   return NextResponse.json({ items: assetRequestDtos(items) });
 });
 
@@ -37,6 +40,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   const flow = input.flow === "admin-managed" ? "admin-managed" : "self-service";
   const manager = canManageAssets(user.permissions);
   if (flow === "admin-managed" && !manager) return jsonError(403, "Asset management permission required");
+  if (flow === "self-service" && !canCreateOwnAssetRequests(user.permissions)) return jsonError(403, "Asset self-service permission required");
 
   let selectedAgreementTemplate: BorrowAgreementTemplate | null = null;
   if (input.agreementTemplateId != null && input.agreementTemplateId !== "") {

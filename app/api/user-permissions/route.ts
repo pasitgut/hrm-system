@@ -1,6 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
+import { normalizePermissions } from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
 import { employees, users } from "@/lib/db/schema";
 
@@ -22,5 +23,5 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     .where(eq(users.isActive, true))
     .orderBy(asc(employees.firstName), asc(employees.lastName));
 
-  return NextResponse.json({ items });
+  return NextResponse.json({ items: items.map((item) => ({ ...item, permissions: normalizePermissions(item.permissions) })) });
 });

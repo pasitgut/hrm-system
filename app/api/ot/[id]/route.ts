@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { overtimeRequests } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canApproveOtData, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canManageOwnOtRequests, canViewOwnOtRequests } from "@/lib/auth/permissions";
 import {
   bangkokToUtcDate,
   fetchOtItemById,
@@ -17,6 +18,9 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export const GET = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnOtRequests(user.permissions) && !canViewCompanyOtData(user)) {
+    return jsonError(403, "OT view permission required");
+  }
   const { id } = await context.params;
 
   const item = await fetchOtItemById(id);
@@ -72,6 +76,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
   }
 
   if (existing.employeeId !== user.employeeId) return jsonError(403, "Forbidden");
+  if (!canManageOwnOtRequests(user.permissions)) return jsonError(403, "OT self-service permission required");
   if (existing.statusCode !== "pending") return jsonError(409, "Request has already been decided");
 
   const { date, startTime, endTime, reason, overtimeType } = bodyRecord;
@@ -116,6 +121,7 @@ export const DELETE = withApiAuth(async (request: NextRequest, context: RouteCon
 
   if (!existing) return jsonError(404, "Not found");
   if (existing.employeeId !== user.employeeId) return jsonError(403, "Forbidden");
+  if (!canManageOwnOtRequests(user.permissions)) return jsonError(403, "OT self-service permission required");
   if (existing.statusCode !== "pending") return jsonError(409, "Request has already been decided");
 
   await db

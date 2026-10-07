@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { employees, overtimeRequests, requestStatuses } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canManageOwnOtRequests, canViewOwnOtRequests } from "@/lib/auth/permissions";
 import {
   bangkokToUtcDate,
   currentBangkokMonth,
@@ -22,6 +23,9 @@ const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnOtRequests(user.permissions) && !canViewCompanyOtData(user)) {
+    return jsonError(403, "OT view permission required");
+  }
   const searchParams = request.nextUrl.searchParams;
 
   const statusParam = searchParams.get("status") ?? "all";
@@ -65,6 +69,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 
 export const POST = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canManageOwnOtRequests(user.permissions)) return jsonError(403, "OT self-service permission required");
 
   let body: unknown;
   try {

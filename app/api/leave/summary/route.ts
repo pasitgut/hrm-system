@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canViewCompanyLeave } from "@/lib/auth/permissions";
+import { canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 import { jsonError, leaveDaySpan } from "@/app/api/leave/_shared";
 
 // Leave quotas are annual, not monthly (no `month` param like OT's
@@ -143,6 +143,9 @@ async function companySummary() {
 
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
+  if (!canViewOwnLeaveRequests(user.permissions) && !canViewCompanyLeave(user.permissions)) {
+    return jsonError(403, "Leave view permission required");
+  }
   const employeeIdParam = request.nextUrl.searchParams.get("employeeId");
   const yearParam = request.nextUrl.searchParams.get("year");
   const year = yearParam == null ? new Date().getFullYear() : Number(yearParam);

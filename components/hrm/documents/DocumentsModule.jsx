@@ -17,7 +17,11 @@ import { Table } from "@/components/ui/table";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { canManageEmployeeDocuments } from "@/lib/auth/permissions";
+import {
+  canDeleteEmployeeDocuments,
+  canShareEmployeeDocuments,
+  canUploadEmployeeDocuments,
+} from "@/lib/auth/permissions";
 import { MAX_EMPLOYEE_DOCUMENT_BYTES } from "@/lib/employee-documents";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +63,7 @@ function Feedback({ children, danger = false }) {
   );
 }
 
-function DocumentActions({ item, canManage, onShare, onDelete }) {
+function DocumentActions({ item, canShare, canDelete, onShare, onDelete }) {
   return (
     <div className="flex flex-wrap items-center justify-end gap-1">
       <Button asChild variant="ghost" size="icon" aria-label={`ดาวน์โหลด ${item.fileName}`}>
@@ -67,8 +71,7 @@ function DocumentActions({ item, canManage, onShare, onDelete }) {
           <RiDownloadLine aria-hidden="true" />
         </a>
       </Button>
-      {canManage ? (
-        <>
+      {canShare ? (
           <Button
             type="button"
             variant="outline"
@@ -78,6 +81,8 @@ function DocumentActions({ item, canManage, onShare, onDelete }) {
           >
             สิทธิ์
           </Button>
+      ) : null}
+      {canDelete ? (
           <Button
             type="button"
             variant="ghost"
@@ -88,7 +93,6 @@ function DocumentActions({ item, canManage, onShare, onDelete }) {
           >
             <RiDeleteBinLine aria-hidden="true" />
           </Button>
-        </>
       ) : null}
     </div>
   );
@@ -96,7 +100,9 @@ function DocumentActions({ item, canManage, onShare, onDelete }) {
 
 export default function DocumentsModule() {
   const { permissions = [] } = useHrmRole() || {};
-  const canManage = canManageEmployeeDocuments(permissions);
+  const canUpload = canUploadEmployeeDocuments(permissions);
+  const canShare = canShareEmployeeDocuments(permissions);
+  const canDelete = canDeleteEmployeeDocuments(permissions);
   const employeeSelectId = useId();
   const typeSelectId = useId();
   const uploadEmployeeSelectId = useId();
@@ -186,8 +192,8 @@ export default function DocumentsModule() {
   }, [loadDocuments]);
 
   useEffect(() => {
-    if (canManage) loadEmployees();
-  }, [canManage, loadEmployees]);
+    if (canUpload) loadEmployees();
+  }, [canUpload, loadEmployees]);
 
   const employeeOptions = useMemo(() => {
     const unique = new Map();
@@ -342,7 +348,7 @@ export default function DocumentsModule() {
     }
   }
 
-  const pageActions = canManage ? (
+  const pageActions = canUpload ? (
     <Button type="button" leadingIcon={RiUpload2Line} onClick={openUpload} disabled={employeesLoading}>
       อัปโหลดเอกสาร
     </Button>
@@ -436,13 +442,13 @@ export default function DocumentsModule() {
                 <p className="mt-1 max-w-xl text-sm text-muted-foreground">
                   {items.length
                     ? "ลองค้นด้วยคำอื่น หรือปรับตัวกรองพนักงานและชนิดไฟล์"
-                    : canManage
+                    : canUpload
                       ? "เพิ่มเอกสารให้พนักงานได้จากปุ่มอัปโหลดด้านบน"
                       : "เอกสารจะแสดงที่นี่เมื่อผู้จัดการแชร์สิทธิ์ให้บัญชีของคุณ"}
                 </p>
               </div>
             </div>
-            {!items.length && canManage ? (
+            {!items.length && canUpload ? (
               <Button type="button" variant="outline" leadingIcon={RiUpload2Line} onClick={openUpload} disabled={employeesLoading}>
                 อัปโหลดเอกสาร
               </Button>
@@ -460,7 +466,7 @@ export default function DocumentsModule() {
                     <th scope="col">เอกสาร</th>
                     <th scope="col">พนักงาน</th>
                     <th scope="col">วันที่เพิ่ม</th>
-                    {canManage ? <th scope="col">สิทธิ์เข้าถึง</th> : null}
+                    {canShare ? <th scope="col">สิทธิ์เข้าถึง</th> : null}
                     <th scope="col" className="text-right">การทำงาน</th>
                   </tr>
                 </thead>
@@ -485,9 +491,9 @@ export default function DocumentsModule() {
                         </p>
                       </td>
                       <td className="whitespace-nowrap text-sm text-muted-foreground">{formatDate(item.createdAt)}</td>
-                      {canManage ? <td className="whitespace-nowrap text-sm text-muted-foreground">แชร์ {item.sharedUserCount ?? 0} บัญชี</td> : null}
+                      {canShare ? <td className="whitespace-nowrap text-sm text-muted-foreground">แชร์ {item.sharedUserCount ?? 0} บัญชี</td> : null}
                       <td>
-                        <DocumentActions item={item} canManage={canManage} onShare={openShareEditor} onDelete={(target) => { setDeleteError(""); setShareTarget(null); setDeleteTarget(target); }} />
+                        <DocumentActions item={item} canShare={canShare} canDelete={canDelete} onShare={openShareEditor} onDelete={(target) => { setDeleteError(""); setShareTarget(null); setDeleteTarget(target); }} />
                       </td>
                     </tr>
                   ))}
@@ -509,11 +515,11 @@ export default function DocumentsModule() {
                         {extensionOf(item.fileName).toUpperCase()} · {formatBytes(item.fileSize)} · {formatDate(item.createdAt)}
                         {!item.employeeIsActive ? " · พ้นสภาพ" : ""}
                       </p>
-                      {canManage ? <p className="mt-0.5 text-xs text-muted-foreground">แชร์ {item.sharedUserCount ?? 0} บัญชี</p> : null}
+                      {canShare ? <p className="mt-0.5 text-xs text-muted-foreground">แชร์ {item.sharedUserCount ?? 0} บัญชี</p> : null}
                     </div>
                   </div>
                   <div className="pl-6">
-                    <DocumentActions item={item} canManage={canManage} onShare={openShareEditor} onDelete={(target) => { setDeleteError(""); setShareTarget(null); setDeleteTarget(target); }} />
+                    <DocumentActions item={item} canShare={canShare} canDelete={canDelete} onShare={openShareEditor} onDelete={(target) => { setDeleteError(""); setShareTarget(null); setDeleteTarget(target); }} />
                   </div>
                 </article>
               ))}

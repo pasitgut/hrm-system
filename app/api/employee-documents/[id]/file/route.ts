@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employeeDocuments } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
+import { canViewAllEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { contentDisposition, isUuid } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import { downloadEmployeeDocumentFromDrive, GoogleDriveError } from "@/lib/google-drive";
@@ -30,7 +30,7 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
     .where(eq(employeeDocuments.id, id))
     .limit(1);
   if (!item) return jsonError(404, "ไม่พบเอกสาร");
-  if (!canManageEmployeeDocuments(user.permissions) && !item.sharedWithUserIds.includes(user.sub)) {
+  if (!canViewAllEmployeeDocuments(user.permissions) && !item.sharedWithUserIds.includes(user.sub)) {
     return jsonError(403, "บัญชีนี้ไม่มีสิทธิ์เข้าถึงเอกสาร");
   }
 

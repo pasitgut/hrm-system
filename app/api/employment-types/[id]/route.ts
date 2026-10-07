@@ -19,7 +19,7 @@ import {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiPermission(request, "settings.manage");
+  await requireApiPermission(request, "settings.employment.manage");
   const { id: rawId } = await context.params;
   const id = parseMasterDataId(rawId);
   if (id === null) return masterDataError(400, "Invalid id");
@@ -47,7 +47,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 });
 
 export const DELETE = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiPermission(request, "settings.manage");
+  await requireApiPermission(request, "settings.employment.manage");
   const { id: rawId } = await context.params;
   const id = parseMasterDataId(rawId);
   if (id === null) return masterDataError(400, "Invalid id");

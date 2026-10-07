@@ -12,16 +12,23 @@ import {
   requestStatuses,
 } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageAssets, canViewCompanyLeave, canViewCompanyOt } from "@/lib/auth/permissions";
+import {
+  canViewCompanyAssetRequests,
+  canViewCompanyLeave,
+  canViewCompanyOt,
+  canViewOwnAssetRequests,
+  canViewOwnLeaveRequests,
+  canViewOwnOtRequests,
+} from "@/lib/auth/permissions";
 import { formatOtDetail, formatThaiDateRange, jsonError, type ApprovalItem } from "@/app/api/approvals/_shared";
 
 const TYPE_VALUES = new Set(["all", "leave", "ot", "asset"]);
 
 // Combines OT, leave, and asset requests into a single
 // normalized, newest-first list. Used both as the central approvals queue
-// (permission-scoped company queues) and as "my requests across everything" (an
-// employee only ever sees their own rows here, same as every other list in
-// the app). Separate per-table queries, normalized and merged in
+// (permission-scoped company queues) and as "my requests across everything".
+// Each request type is queried only when the account can view its own or
+// company-level records. Separate per-table queries, normalized and merged in
 // application code — no DB-level UNION.
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
@@ -30,13 +37,20 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid type");
   }
 
+  const canReadOt = canViewCompanyOt(user.permissions) || canViewOwnOtRequests(user.permissions);
+  const canReadLeave = canViewCompanyLeave(user.permissions) || canViewOwnLeaveRequests(user.permissions);
+  const canReadAssets = canViewCompanyAssetRequests(user.permissions) || canViewOwnAssetRequests(user.permissions);
+  if (typeParam === "ot" && !canReadOt) return jsonError(403, "OT view permission required");
+  if (typeParam === "leave" && !canReadLeave) return jsonError(403, "Leave view permission required");
+  if (typeParam === "asset" && !canReadAssets) return jsonError(403, "Asset request view permission required");
+
   const otEmployeeId = canViewCompanyOt(user.permissions) ? undefined : user.employeeId;
   const leaveEmployeeId = canViewCompanyLeave(user.permissions) ? undefined : user.employeeId;
-  const assetEmployeeId = canManageAssets(user.permissions) ? undefined : user.employeeId;
+  const assetEmployeeId = canViewCompanyAssetRequests(user.permissions) ? undefined : user.employeeId;
 
   const entries: Array<{ item: ApprovalItem; createdAt: Date }> = [];
 
-  if (typeParam === "all" || typeParam === "ot") {
+  if ((typeParam === "all" || typeParam === "ot") && canReadOt) {
     const otConditions = otEmployeeId ? [eq(overtimeRequests.employeeId, otEmployeeId)] : [];
     const otRows = await db
       .select({
@@ -77,7 +91,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     }
   }
 
-  if (typeParam === "all" || typeParam === "leave") {
+  if ((typeParam === "all" || typeParam === "leave") && canReadLeave) {
     const leaveConditions = leaveEmployeeId ? [eq(leaveRequests.employeeId, leaveEmployeeId)] : [];
     const leaveRows = await db
       .select({
@@ -118,7 +132,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     }
   }
 
-  if (typeParam === "all" || typeParam === "asset") {
+  if ((typeParam === "all" || typeParam === "asset") && canReadAssets) {
     const assetConditions = [isNull(assetRequests.deletedAt)];
     if (assetEmployeeId) assetConditions.push(eq(assetRequests.borrowerEmployeeId, assetEmployeeId));
     const assetRows = await db

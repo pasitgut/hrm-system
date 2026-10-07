@@ -10,10 +10,11 @@ import { OtCalendarView } from "@/components/hrm/ot/OtCalendarView";
 import { OtListView } from "@/components/hrm/ot/OtListView";
 import { OtRequestPanel } from "@/components/hrm/ot/OtRequestPanel";
 import { OtSummaryView } from "@/components/hrm/ot/OtSummaryView";
-import { canViewCompanyOt } from "@/lib/auth/permissions";
+import { canManageOwnOtRequests, canViewCompanyOt } from "@/lib/auth/permissions";
 
 export default function OTModule() {
   const { permissions = [] } = useHrmRole();
+  const canRequestOwnOt = canManageOwnOtRequests(permissions);
   const canViewTeam = canViewCompanyOt(permissions);
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -31,7 +32,7 @@ export default function OTModule() {
         eyebrow="การทำงาน · OT"
         title="การทำงานล่วงเวลา"
         description={`ยื่นคำขอ OT ดูชั่วโมงที่ทำ และติดตามผลการพิจารณา${canViewTeam ? "ของทีม" : "ของคุณ"}`}
-        actions={<Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอ OT</Button>}
+        actions={canRequestOwnOt ? <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอ OT</Button> : null}
       />
 
       {notice ? (
@@ -66,11 +67,13 @@ export default function OTModule() {
         <OtListView refreshKey={refreshKey} onEdit={setEditingItem} onCancelled={() => announce("ยกเลิกคำขอ OT เรียบร้อยแล้ว")} />
       </section>
 
-      <AddOtDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onCreated={() => { announce("ส่งคำขอ OT เรียบร้อยแล้ว สถานะรอจัดการ"); }}
-      />
+      {canRequestOwnOt ? (
+        <AddOtDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          onCreated={() => { announce("ส่งคำขอ OT เรียบร้อยแล้ว สถานะรอจัดการ"); }}
+        />
+      ) : null}
       <AddOtDialog
         open={Boolean(editingItem)}
         editingItem={editingItem}
