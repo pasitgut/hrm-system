@@ -676,7 +676,7 @@ export default function EmployeeModule() {
         className="border-t-4 border-t-primary"
         footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
       >
-        <form id="employee-form" className="grid gap-4 sm:grid-cols-2" onSubmit={saveEmployee} noValidate>
+        <form id="employee-form" className="grid items-start gap-4 sm:grid-cols-2" onSubmit={saveEmployee} noValidate>
           {canEditProfileForm ? (
             <>
           <div className="sm:col-span-2 border-b border-border pb-3">
