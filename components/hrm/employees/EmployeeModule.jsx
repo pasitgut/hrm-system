@@ -695,8 +695,10 @@ export default function EmployeeModule() {
           <Input label="นามสกุล (อังกฤษ)" value={form.lastNameEn} onChange={(value) => updateForm("lastNameEn", value)} />
           <Input label="เลขบัตรประชาชน" value={form.citizenId} onChange={(value) => updateForm("citizenId", value)} />
           <DatePickerField label="วันเกิด" value={form.birthDate} onChange={(value) => updateForm("birthDate", value?.toString() || "")} />
-          <Input label={editing ? "อีเมล" : "อีเมล *"} type="email" value={form.email} onChange={(value) => updateForm("email", value)} isRequired={!editing || Boolean(form.email)} />
-          {!editing ? <p className="self-end pb-2 text-xs leading-5 text-muted-foreground sm:col-span-2">ใช้เข้าสู่ระบบได้ด้วยอีเมลหรือรหัสพนักงาน โดยรหัสผ่านเริ่มต้นคือรหัสพนักงานและต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก</p> : null}
+          <div className="min-w-0 space-y-2">
+            <Input label={editing ? "อีเมล" : "อีเมล *"} type="email" value={form.email} onChange={(value) => updateForm("email", value)} isRequired={!editing || Boolean(form.email)} />
+            {!editing ? <p className="text-xs leading-5 text-muted-foreground">ใช้เข้าสู่ระบบได้ด้วยอีเมลหรือรหัสพนักงาน โดยรหัสผ่านเริ่มต้นคือรหัสพนักงานและต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก</p> : null}
+          </div>
           <Input label="โทรศัพท์" type="tel" value={form.phone} onChange={(value) => updateForm("phone", value)} />
 
           <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
