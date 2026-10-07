@@ -14,6 +14,7 @@ export type ApprovalItem = {
   employeeId: string;
   employeeName: string;
   detail: string;
+  overtimeType?: "weekday" | "holiday" | null;
   reason: string | null;
   submittedAt: string;
   statusCode: string;

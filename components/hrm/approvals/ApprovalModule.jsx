@@ -13,7 +13,7 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Tabs, TabList, Tab } from "@/components/ui/tabs";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { PageHeader } from "@/components/hrm/PageHeader";
-import { canApproveAssetLoan, canApproveLeave, canApproveOT } from "@/lib/auth/permissions";
+import { canApproveAssetLoan, canApproveLeave, canApproveOT, canApproveAnything } from "@/lib/auth/permissions";
 import { cx } from "@/utils/cx";
 
 const typeLabel = { ot: "OT", leave: "ลา", asset: "ทรัพย์สิน" };
@@ -63,10 +63,10 @@ function getInitials(name) {
 }
 
 // OT and leave permissions stay separate so their access rules can diverge.
-function canApproveRequest(role, type) {
-  if (type === "ot") return canApproveOT(role);
-  if (type === "leave") return canApproveLeave(role);
-  if (type === "asset") return canApproveAssetLoan(role);
+function canApproveRequest(permissions, type) {
+  if (type === "ot") return canApproveOT(permissions);
+  if (type === "leave") return canApproveLeave(permissions);
+  if (type === "asset") return canApproveAssetLoan(permissions);
   return false;
 }
 
@@ -98,8 +98,8 @@ function RequestActions({ request, canApprove, busy, onAction, onOpen, expanded 
 }
 
 export default function ApprovalModule() {
-  const { role } = useHrmRole();
-  const canApproveAny = canApproveOT(role) || canApproveLeave(role) || canApproveAssetLoan(role);
+  const { permissions = [] } = useHrmRole();
+  const canApproveAny = canApproveAnything(permissions);
   const [filter, setFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -322,7 +322,7 @@ export default function ApprovalModule() {
                     <td>
                       <RequestActions
                         request={request}
-                        canApprove={canApproveRequest(role, request.type)}
+                        canApprove={canApproveRequest(permissions, request.type)}
                         busy={busyId === request.id}
                         onAction={takeAction}
                         onOpen={setSelected}
@@ -364,7 +364,7 @@ export default function ApprovalModule() {
               <div className="mt-2">
                 <RequestActions
                   request={request}
-                  canApprove={canApproveRequest(role, request.type)}
+                  canApprove={canApproveRequest(permissions, request.type)}
                   busy={busyId === request.id}
                   onAction={takeAction}
                   onOpen={setSelected}

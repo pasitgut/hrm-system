@@ -5,8 +5,8 @@ import Link from "next/link";
 import { RiCheckLine, RiCloseLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
-import { canApproveOT } from "@/lib/auth/permissions";
-import { statusColor } from "@/components/hrm/ot/otStatus";
+import { canApproveOtData } from "@/lib/auth/rolePermissionAccess";
+import { overtimeTypeLabel, statusColor } from "@/components/hrm/ot/otStatus";
 import { cn } from "@/lib/utils";
 
 const FILTERS = [
@@ -27,7 +27,7 @@ function OtRequest({ item, canApprove, busy, onDecision }) {
             <strong className="text-sm font-semibold text-foreground">{item.employeeName}</strong>
             <Chip variant="caption" color={statusColor(item.statusCode)}>{item.statusName}</Chip>
           </div>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{item.detail}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">{overtimeTypeLabel(item.overtimeType)} · {item.detail}</p>
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.reason || "ไม่ได้ระบุรายละเอียดงาน"}</p>
         </div>
       </div>
@@ -45,8 +45,8 @@ function OtRequest({ item, canApprove, busy, onDecision }) {
   );
 }
 
-export function OtRequestPanel({ refreshKey = 0, role, onUpdated = () => {} }) {
-  const isApprover = canApproveOT(role);
+export function OtRequestPanel({ refreshKey = 0, role, permissions, onUpdated = () => {} }) {
+  const isApprover = canApproveOtData({ role, permissions });
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("pending");
   const [loading, setLoading] = useState(true);

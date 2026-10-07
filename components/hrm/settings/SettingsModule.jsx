@@ -4,12 +4,18 @@ import {
   RiBriefcaseLine,
   RiBuildingLine,
   RiCalendarTodoLine,
+  RiMoneyDollarCircleLine,
   RiShieldUserLine,
   RiUserSettingsLine,
 } from "@remixicon/react";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { ResourceTab } from "@/components/hrm/settings/ResourceTab";
+import UserPermissionsTab from "@/components/hrm/settings/UserPermissionsTab";
+import { OtRateSettingsTab } from "@/components/hrm/settings/OtRateSettingsTab";
 import { PageHeader } from "@/components/hrm/PageHeader";
+import { useHrmRole } from "@/components/hrm/HrmShell";
+import { canManageOtRates } from "@/lib/auth/rolePermissionAccess";
+import { canManageLeaveTypes, canManageSettings, canManageUserPermissions } from "@/lib/auth/permissions";
 
 const departmentFormFields = [{ key: "name", label: "ชื่อแผนก", type: "text", required: true }];
 
@@ -24,7 +30,6 @@ const employmentTypeFormFields = [
 const employmentTypeDetailFields = [{ key: "code", render: (item) => `รหัส: ${item.code}` }];
 
 const leaveTypeFormFields = [
-  { key: "code", label: "รหัสประเภทการลา", type: "text", required: true, readOnlyOnEdit: true },
   { key: "name", label: "ชื่อประเภทการลา", type: "text", required: true },
   { key: "description", label: "รายละเอียด", type: "textarea" },
   {
@@ -35,7 +40,7 @@ const leaveTypeFormFields = [
   },
 ];
 const leaveTypeDetailFields = [
-  { key: "code", render: (item) => `รหัส: ${item.code}` },
+  { key: "code", render: (item) => `รหัสอัตโนมัติ: ${item.code}` },
   {
     key: "quota",
     render: (item) => (item.annualQuotaDays == null ? "โควตา: ไม่จำกัด" : `โควตา: ${item.annualQuotaDays} วัน/ปี`),
@@ -43,6 +48,14 @@ const leaveTypeDetailFields = [
 ];
 
 export default function SettingsModule() {
+  const user = useHrmRole() ?? {};
+  const permissions = user.permissions ?? [];
+  const showOtRates = canManageOtRates(user);
+  const showSettings = canManageSettings(permissions);
+  const showLeaveTypes = canManageLeaveTypes(permissions);
+  const showUserPermissions = canManageUserPermissions(permissions);
+  const defaultTab = showSettings ? "departments" : showLeaveTypes ? "leave-types" : "user-permissions";
+
   return (
     <div className="hrm-page">
       <PageHeader
@@ -50,25 +63,20 @@ export default function SettingsModule() {
         title="ตั้งค่าระบบ"
         description="จัดการข้อมูลหลักที่ใช้ร่วมกันทั้งระบบ เช่น แผนก ตำแหน่ง สถานะและประเภทการจ้างงาน และประเภทการลา"
       />
-      <Tabs defaultSelectedKey="departments">
+      <Tabs defaultSelectedKey={defaultTab}>
         <TabList aria-label="หมวดหมู่การตั้งค่า" className="flex-wrap">
-          <Tab id="departments" icon={RiBuildingLine}>
-            แผนก
-          </Tab>
-          <Tab id="positions" icon={RiBriefcaseLine}>
-            ตำแหน่ง
-          </Tab>
-          <Tab id="employment-statuses" icon={RiShieldUserLine}>
-            สถานะพนักงาน
-          </Tab>
-          <Tab id="employment-types" icon={RiUserSettingsLine}>
-            ประเภทการจ้างงาน
-          </Tab>
-          <Tab id="leave-types" icon={RiCalendarTodoLine}>
-            ประเภทการลา
-          </Tab>
+          {showSettings ? <>
+            <Tab id="departments" icon={RiBuildingLine}>แผนก</Tab>
+            <Tab id="positions" icon={RiBriefcaseLine}>ตำแหน่ง</Tab>
+            <Tab id="employment-statuses" icon={RiShieldUserLine}>สถานะพนักงาน</Tab>
+            <Tab id="employment-types" icon={RiUserSettingsLine}>ประเภทการจ้างงาน</Tab>
+          </> : null}
+          {showOtRates ? <Tab id="ot-rates" icon={RiMoneyDollarCircleLine}>เรท OT</Tab> : null}
+          {showLeaveTypes ? <Tab id="leave-types" icon={RiCalendarTodoLine}>ประเภทการลา</Tab> : null}
+          {showUserPermissions ? <Tab id="user-permissions" icon={RiShieldUserLine}>สิทธิ์ผู้ใช้</Tab> : null}
         </TabList>
-        <TabPanel id="departments">
+        {showSettings ? <>
+          <TabPanel id="departments">
           <ResourceTab
             resourceKey="departments"
             title="แผนก"
@@ -79,8 +87,8 @@ export default function SettingsModule() {
             emptyLabel="ยังไม่มีแผนก"
             deleteMode="hard"
           />
-        </TabPanel>
-        <TabPanel id="positions">
+          </TabPanel>
+          <TabPanel id="positions">
           <ResourceTab
             resourceKey="positions"
             title="ตำแหน่ง"
@@ -91,8 +99,8 @@ export default function SettingsModule() {
             emptyLabel="ยังไม่มีตำแหน่ง"
             deleteMode="hard"
           />
-        </TabPanel>
-        <TabPanel id="employment-statuses">
+          </TabPanel>
+          <TabPanel id="employment-statuses">
           <ResourceTab
             resourceKey="employment-statuses"
             title="สถานะพนักงาน"
@@ -103,8 +111,8 @@ export default function SettingsModule() {
             emptyLabel="ยังไม่มีสถานะพนักงาน"
             deleteMode="hard"
           />
-        </TabPanel>
-        <TabPanel id="employment-types">
+          </TabPanel>
+          <TabPanel id="employment-types">
           <ResourceTab
             resourceKey="employment-types"
             title="ประเภทการจ้างงาน"
@@ -116,19 +124,23 @@ export default function SettingsModule() {
             emptyLabel="ยังไม่มีประเภทการจ้างงาน"
             deleteMode="hard"
           />
-        </TabPanel>
-        <TabPanel id="leave-types">
+          </TabPanel>
+        </> : null}
+        {showOtRates ? <TabPanel id="ot-rates"><OtRateSettingsTab /></TabPanel> : null}
+        {showLeaveTypes ? <TabPanel id="leave-types">
           <ResourceTab
             resourceKey="leave-types"
             title="ประเภทการลา"
-            description="ประเภทการลาและโควตาต่อปี"
+            description="เพิ่ม แก้ไข เปิดหรือปิดใช้งานประเภทการลา และกำหนดโควตาต่อปี"
+            addLabel="เพิ่มประเภทการลา"
             endpoint="/api/leave-types"
             idKey="code"
             formFields={leaveTypeFormFields}
             detailFields={leaveTypeDetailFields}
             emptyLabel="ยังไม่มีประเภทการลา"
           />
-        </TabPanel>
+        </TabPanel> : null}
+        {showUserPermissions ? <TabPanel id="user-permissions"><UserPermissionsTab /></TabPanel> : null}
       </Tabs>
     </div>
   );

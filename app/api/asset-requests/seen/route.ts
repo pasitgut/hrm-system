@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { isManagerRole, jsonError } from "@/app/api/asset-requests/_shared";
+import { jsonError } from "@/app/api/asset-requests/_shared";
 import { DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { db } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
+import { canManageAssets } from "@/lib/auth/permissions";
 import { eq } from "drizzle-orm";
 
 export const POST = withApiAuth(async (request: NextRequest) => {
@@ -22,7 +23,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
   const repository = new DrizzleAssetRepository(user.employeeId);
-  const visible = isManagerRole(user.role) ? await repository.listAll() : await repository.listForEmployee(employee.code);
+  const visible = canManageAssets(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
   const visibleIds = new Set(visible.map((item) => item.id));
   if (!ids.every((id) => visibleIds.has(id as string))) return jsonError(403, "Forbidden");
   await repository.markSeen(ids as string[]);

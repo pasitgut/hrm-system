@@ -111,6 +111,10 @@ export function Calendar({
 export function CalendarNavigation({
   monthLabel,
   monthControl,
+  previousLabel = "เดือนก่อนหน้า",
+  nextLabel = "เดือนถัดไป",
+  onPrevious,
+  onNext,
   onPreviousMonth,
   onNextMonth,
   compact = false,
@@ -121,7 +125,7 @@ export function CalendarNavigation({
 
   return (
     <div className={cx("flex min-h-10 items-center gap-2", className)}>
-      <Button type="button" size="icon" variant={buttonVariant} className={buttonSize} aria-label="เดือนก่อนหน้า" onClick={onPreviousMonth}>
+      <Button type="button" size="icon" variant={buttonVariant} className={buttonSize} aria-label={previousLabel} onClick={onPrevious || onPreviousMonth}>
         <RiArrowLeftSLine aria-hidden="true" />
       </Button>
       {monthControl || (
@@ -129,7 +133,7 @@ export function CalendarNavigation({
           {monthLabel}
         </span>
       )}
-      <Button type="button" size="icon" variant={buttonVariant} className={buttonSize} aria-label="เดือนถัดไป" onClick={onNextMonth}>
+      <Button type="button" size="icon" variant={buttonVariant} className={buttonSize} aria-label={nextLabel} onClick={onNext || onNextMonth}>
         <RiArrowRightSLine aria-hidden="true" />
       </Button>
     </div>

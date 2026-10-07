@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canManageEmployees } from "@/lib/auth/permissions";
+import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canManageEmployeeCompensation } from "@/lib/auth/rolePermissionAccess";
 import {
   createEmployee,
   employeeLifecycleResponse,
@@ -9,24 +9,28 @@ import {
   jsonError,
 } from "@/app/api/employees/_shared";
 
-// GET: any authenticated role may list the employee directory. Excludes
-// soft-deleted (off-boarded) rows by default; only supervisor/ceo may pass
-// includeDeleted=true to also see off-boarded employees (403 for `employee`).
+// GET: any authenticated account may list the employee directory. Excludes
+// soft-deleted (off-boarded) rows by default; accounts with employees.manage
+// may pass includeDeleted=true to also see off-boarded employees.
 export const GET = withApiAuth(async (request: NextRequest) => {
   const user = await requireApiUser(request);
   const includeDeleted = request.nextUrl.searchParams.get("includeDeleted") === "true";
 
-  if (includeDeleted && !canManageEmployees(user.role)) {
+  if (includeDeleted && !canManageEmployeeCompensation(user)) {
     return jsonError(403, "Forbidden");
   }
 
-  const items = includeDeleted ? await fetchAllEmployeeItems() : await fetchActiveEmployeeItems();
+  const includeCompensation = canManageEmployeeCompensation(user);
+  const items = includeDeleted
+    ? await fetchAllEmployeeItems(includeCompensation)
+    : await fetchActiveEmployeeItems(includeCompensation);
   return NextResponse.json({ items });
 });
 
 // POST is the HTTP adapter for the shared employee lifecycle operation.
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  const user = await requireApiUser(request);
+  if (!canManageEmployeeCompensation(user)) return jsonError(403, "Forbidden");
 
   let body: unknown;
   try {

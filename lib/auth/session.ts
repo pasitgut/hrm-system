@@ -9,6 +9,7 @@ export type SessionPayload = {
   employeeId: string;
   email: string;
   role: Role;
+  permissions?: string[];
   mustChangePassword?: boolean;
 };
 

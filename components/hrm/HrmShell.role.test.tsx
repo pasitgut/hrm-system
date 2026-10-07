@@ -27,9 +27,9 @@ window.matchMedia =
 
 import HrmShell from "@/components/hrm/HrmShell";
 
-const employeeUser = { role: "employee", employeeId: "emp-1", email: "employee@peopleos.co" };
-const supervisorUser = { role: "supervisor", employeeId: "sup-1", email: "supervisor@peopleos.co" };
-const ceoUser = { role: "ceo", employeeId: "ceo-1", email: "ceo@peopleos.co" };
+const employeeUser = { role: "employee", employeeId: "emp-1", email: "employee@example.com" };
+const supervisorUser = { role: "supervisor", employeeId: "sup-1", email: "supervisor@example.com" };
+const ceoUser = { role: "ceo", employeeId: "ceo-1", email: "ceo@example.com" };
 
 describe("HrmShell", () => {
   it("renders only children, with no chrome, when there is no user (i.e. on /login)", () => {
@@ -41,7 +41,7 @@ describe("HrmShell", () => {
 
     expect(screen.getByText("login page content")).toBeInTheDocument();
     expect(screen.queryByLabelText("เมนูหลัก")).not.toBeInTheDocument();
-    expect(screen.queryByText("PeopleOS")).not.toBeInTheDocument();
+    expect(screen.queryByText("HRM")).not.toBeInTheDocument();
   });
 
   it("hides the approvals nav item for an employee", () => {

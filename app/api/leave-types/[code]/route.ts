@@ -2,14 +2,11 @@ import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveTypes } from "@/lib/db/schema";
-import { requireApiRole, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 
 // Settings module: edit a single leave type (including reactivating via
-// isActive: true) and soft-deactivate it. `code` is the primary key here
-// (client-supplied, not an identity column) and is immutable via this
-// route — renaming it would break leave_requests.leaveTypeCode's FK
-// reference, so a rename is out of scope (delete + recreate if truly
-// needed). Never a hard delete otherwise — DELETE only flips isActive.
+// isActive: true) and soft-deactivate it. The generated code is immutable
+// because leave requests reference it; DELETE only flips isActive.
 
 type RouteContext = { params: Promise<{ code: string }> };
 
@@ -35,7 +32,7 @@ function invalidQuotaMessage(value: unknown): string | null {
 }
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "leave_types.manage");
   const { code } = await context.params;
 
   let body: unknown;
@@ -80,7 +77,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 });
 
 export const DELETE = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "leave_types.manage");
   const { code } = await context.params;
 
   const [item] = await db.update(leaveTypes).set({ isActive: false }).where(eq(leaveTypes.code, code)).returning();

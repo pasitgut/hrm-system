@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { departments } from "@/lib/db/schema";
-import { requireApiRole, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import {
   deleteLookupRecord,
   masterDataError,
@@ -19,7 +19,7 @@ import {
 type RouteContext = { params: Promise<{ id: string }> };
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "settings.manage");
   const { id: rawId } = await context.params;
   const id = parseMasterDataId(rawId);
   if (id === null) return masterDataError(400, "Invalid id");
@@ -45,7 +45,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 });
 
 export const DELETE = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "settings.manage");
   const { id: rawId } = await context.params;
   const id = parseMasterDataId(rawId);
   if (id === null) return masterDataError(400, "Invalid id");

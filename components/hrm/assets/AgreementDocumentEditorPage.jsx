@@ -27,7 +27,7 @@ function agreementStatusText(status) {
 export default function AgreementDocumentEditorPage({ requestId }) {
   const router = useRouter();
   const roleContext = useHrmRole();
-  const manager = Boolean(roleContext?.role && canManageAssets(roleContext.role));
+  const manager = Boolean(roleContext && canManageAssets(roleContext.permissions));
   const initialValues = useRef(null);
   const [item, setItem] = useState(null);
   const [title, setTitle] = useState("");
@@ -174,7 +174,7 @@ export default function AgreementDocumentEditorPage({ requestId }) {
               <div className="col-span-2"><dt className="text-muted-foreground">สถานะ Agreement</dt><dd className="mt-1 text-foreground">{agreementStatusText(agreement?.status)}</dd></div>
             </dl>
           </> : null}
-          {!loading && !manager ? <p className="mt-4 text-sm leading-6 text-status-danger" role="alert">หน้านี้สำหรับหัวหน้างานหรือผู้บริหารเท่านั้น</p> : null}
+          {!loading && !manager ? <p className="mt-4 text-sm leading-6 text-status-danger" role="alert">บัญชีนี้ไม่มีสิทธิ์จัดการทรัพย์สิน</p> : null}
           {!loading && manager && agreement && !editable ? <p className="mt-4 text-xs leading-5 text-muted-foreground">เอกสารนี้แก้ไขไม่ได้หลังเริ่มลงนามหรืออนุมัติแล้ว</p> : null}
           {error ? <p className="mt-4 text-sm leading-6 text-status-danger" role="alert">{error}</p> : null}
           {editable ? <p className="mt-5 text-xs leading-5 text-muted-foreground">แก้ไขได้เฉพาะชื่อและเนื้อหา Agreement</p> : null}

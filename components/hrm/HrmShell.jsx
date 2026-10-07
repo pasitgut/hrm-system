@@ -23,7 +23,7 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
-import { canApproveOT, canManageSettings } from "@/lib/auth/permissions";
+import { canApproveAnything, canOpenSettings } from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
 
 const RoleContext = createContext(null);
@@ -54,12 +54,6 @@ const baseGroups = [
     ],
   },
 ];
-
-const roleLabels = {
-  employee: "พนักงาน",
-  supervisor: "หัวหน้างาน",
-  ceo: "ผู้บริหาร",
-};
 
 function getInitials(name, email) {
   if (name) {
@@ -148,7 +142,7 @@ function Header({ displayName, darkMode, onToggleTheme, collapsed, onToggleSideb
         <span className="grid size-8 place-items-center rounded-md bg-muted text-primary" aria-hidden="true">
           <RiUserLine className="size-4" />
         </span>
-        <span className="truncate text-sm font-semibold">PeopleOS</span>
+        <span className="truncate text-sm font-semibold">HRM</span>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
         <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:inline" title={displayName}>{displayName}</span>
@@ -171,12 +165,11 @@ function Header({ displayName, darkMode, onToggleTheme, collapsed, onToggleSideb
   );
 }
 
-export default function HrmShell({ children, user = null, employeeName = null, employeeCode = null }) {
+export default function HrmShell({ children, user = null, permissions = [], employeeName = null, employeeCode = null }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const role = user?.role ?? null;
   const active = pathname === "/ot" ? "ot"
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
@@ -188,20 +181,20 @@ export default function HrmShell({ children, user = null, employeeName = null, e
                 : "overview";
   const groups = useMemo(() => {
     const nextGroups = baseGroups.map((group) => ({ ...group, items: [...group.items] }));
-    if (role && canApproveOT(role)) {
+    if (canApproveAnything(permissions)) {
       nextGroups[1].items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
     }
-    if (role && canManageSettings(role)) {
+    if (canOpenSettings(permissions)) {
       nextGroups.push({
         label: "ระบบ",
         items: [{ key: "settings", label: "ตั้งค่า", icon: RiSettings4Line, href: "/settings" }],
       });
     }
     return nextGroups;
-  }, [role]);
+  }, [permissions]);
   const roleContextValue = useMemo(
-    () => (user ? { role: user.role, employeeId: user.employeeId, employeeCode, email: user.email } : null),
-    [user, employeeCode],
+    () => (user ? { permissions, employeeId: user.employeeId, employeeCode, email: user.email } : null),
+    [user, permissions, employeeCode],
   );
   const displayName = employeeName || user?.email || "";
   const initials = getInitials(employeeName, user?.email);
@@ -244,7 +237,7 @@ export default function HrmShell({ children, user = null, employeeName = null, e
               <RiUserLine className="size-4" />
             </span>
             <span className={cx("min-w-0", collapsed && "lg:sr-only")}>
-              <strong className="block truncate text-sm font-semibold">PeopleOS</strong>
+              <strong className="block truncate text-sm font-semibold">HRM</strong>
               <span className="block truncate text-[11px] leading-4 text-muted-foreground">จัดการงานบุคคล</span>
             </span>
           </Link>
@@ -256,7 +249,7 @@ export default function HrmShell({ children, user = null, employeeName = null, e
             <div className={cx("min-w-0", collapsed && "lg:sr-only")}>
               <strong className="block truncate text-xs font-medium">{displayName}</strong>
               <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-                {user.email === "admin@peopleos.co" ? "ผู้ดูแลระบบ" : roleLabels[user.role] || user.role}
+                {employeeCode || "บัญชีผู้ใช้"}
               </span>
             </div>
           </div>

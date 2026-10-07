@@ -18,11 +18,11 @@ export default function LoginPage() {
     <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
         <div className="mb-6 text-center">
-          <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
-            P
+          <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
+            HRM
           </span>
           <h1 className="hrm-form-title">เข้าสู่ระบบ</h1>
-          <p className="mt-1 text-sm text-muted-foreground">PeopleOS · ระบบงานบุคคล</p>
+          <p className="mt-1 text-sm text-muted-foreground">HRM</p>
         </div>
         <form action={formAction} className="space-y-4" noValidate>
           <input type="hidden" name="next" value={next} />
@@ -33,7 +33,7 @@ export default function LoginPage() {
               name="identifier"
               type="text"
               autoComplete="username"
-              placeholder="name@peopleos.co หรือ 2603"
+              placeholder="name@example.com หรือ 2603"
               isRequired
             />
           </div>

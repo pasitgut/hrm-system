@@ -1,6 +1,6 @@
-# PeopleOS design system
+# HRM design system
 
-This document is the source of truth for UI work across PeopleOS. Build new screens from the shared tokens and patterns here; do not invent route-specific visual conventions. The design should support quick, confident work in a Thai-language HR system.
+This document is the source of truth for UI work across HRM. Build new screens from the shared tokens and patterns here; do not invent route-specific visual conventions. The design should support quick, confident work in a Thai-language HR system.
 
 ## Product philosophy
 

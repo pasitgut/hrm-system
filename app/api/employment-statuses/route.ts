@@ -2,10 +2,10 @@ import { asc } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employmentStatuses } from "@/lib/db/schema";
-import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { readMasterDataBody, trimmedString, withUniqueConflict } from "@/lib/master-data/write-policy";
 
-// Read-only lookup endpoint: any authenticated role may list employment
+// Read-only lookup endpoint: any authenticated account may list employment
 // statuses (needed for dropdowns across the app). Write access lives in the
 // settings module, added separately to this same file.
 
@@ -15,11 +15,11 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   return NextResponse.json({ items });
 });
 
-// --- Settings module: create (supervisor/ceo only). Edit/delete live in
+// --- Settings module: create (settings.manage). Edit/delete live in
 // ./[id]/route.ts. DELETE removes the lookup row and clears employee refs. ---
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "settings.manage");
   const parsed = await readMasterDataBody(request);
   if (!parsed.ok) return parsed.response;
   const name = trimmedString(parsed.body.name, "name is required");

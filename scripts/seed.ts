@@ -20,7 +20,9 @@ async function main() {
   await db.execute(sql`
     TRUNCATE TABLE
       users, overtime_requests, leave_requests, employee_skills,
-      asset_loans, assets, asset_categories,
+      asset_agreement_signers, asset_agreements, asset_agreement_templates,
+      asset_request_events, asset_request_reads, asset_request_attachments,
+      asset_request_items, asset_requests,
       employees, skills, leave_types, request_statuses,
       employment_types, employment_statuses, positions, departments
     RESTART IDENTITY CASCADE
@@ -100,6 +102,17 @@ async function main() {
     email: ADMIN_EMAIL,
     passwordHash,
     role: "ceo",
+    permissions: [
+      "employees.manage",
+      "ot.approve",
+      "ot.view_company",
+      "leave.approve",
+      "leave.view_company",
+      "leave_types.manage",
+      "assets.manage",
+      "settings.manage",
+      "users.permissions.manage",
+    ],
   });
 
   console.log("\nSeed complete.");

@@ -7,7 +7,7 @@ let mockRole = "employee";
 let mockEmployeeId = "emp-1";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
-  useHrmRole: () => ({ role: mockRole, employeeId: mockEmployeeId, email: "user@peopleos.co" }),
+  useHrmRole: () => ({ role: mockRole, employeeId: mockEmployeeId, email: "user@example.com" }),
 }));
 
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";

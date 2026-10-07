@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
+import { canApproveAnything } from "@/lib/auth/permissions";
 
-function QuickLinks({ role }) {
+function QuickLinks({ permissions }) {
   const items = [
     { label: "จัดการคำขอลา", description: "ยื่นคำขอและตรวจสอบสิทธิ์วันลา", icon: RiCalendarTodoLine, href: "/leave" },
     { label: "จัดการคำขอ OT", description: "ยื่นคำขอและดูชั่วโมงที่อนุมัติ", icon: RiTimerLine, href: "/ot" },
     { label: "ดูรายงาน", description: "กำหนดช่วงเวลาและรูปแบบรายงาน", icon: RiFileChartLine, href: "/reports" },
-    ...(role === "supervisor" || role === "ceo"
+    ...(canApproveAnything(permissions)
       ? [{ label: "คิวอนุมัติ", description: "พิจารณาคำขอลาและ OT ของทีม", icon: RiUserSharedLine, href: "/approvals" }]
       : []),
   ];
@@ -46,12 +47,12 @@ function QuickLinks({ role }) {
 
 export default function OverviewPage() {
   const router = useRouter();
-  const { role } = useHrmRole();
+  const { permissions = [] } = useHrmRole();
 
   return (
     <div className="hrm-page">
       <PageHeader
-        eyebrow="PeopleOS · พื้นที่ทำงาน"
+        eyebrow="HRM · พื้นที่ทำงาน"
         title="ภาพรวม"
         description="ติดตามสิทธิ์วันลาและไปยังงานที่ต้องทำได้จากจุดเดียว"
         actions={(
@@ -85,7 +86,7 @@ export default function OverviewPage() {
           description="เปิด workflow ที่ใช้บ่อย"
           className="mb-3"
         />
-        <QuickLinks role={role} />
+        <QuickLinks permissions={permissions} />
       </section>
     </div>
   );

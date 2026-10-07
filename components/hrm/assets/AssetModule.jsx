@@ -12,7 +12,7 @@ import { canManageAssets } from "@/lib/auth/permissions";
 export default function AssetModule() {
   const user = useHrmRole();
   const [createOpen, setCreateOpen] = useState(false);
-  const manager = Boolean(user && canManageAssets(user.role));
+  const manager = Boolean(user && canManageAssets(user.permissions));
 
   return (
     <div className="space-y-5">

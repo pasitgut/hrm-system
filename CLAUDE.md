@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-PeopleOS — a Thai-language HRM (HR management) system: employee records, OT requests, leave, a central approvals queue, and reports. Built on Next.js (App Router) with React 19 and Tailwind v4.
+HRM — a Thai-language human resources management system: employee records, OT requests, leave, a central approvals queue, and reports. Built on Next.js (App Router) with React 19 and Tailwind v4.
 
 **Before writing any code**, read the relevant guide under `node_modules/next/dist/docs/` — this project pins a Next.js version with breaking API/convention changes from older training data (see `AGENTS.md` for details on this requirement).
 

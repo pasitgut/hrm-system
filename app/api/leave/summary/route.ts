@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canViewCompanyLeave } from "@/lib/auth/permissions";
 import { jsonError, leaveDaySpan } from "@/app/api/leave/_shared";
 
 // Leave quotas are annual, not monthly (no `month` param like OT's
@@ -86,8 +87,7 @@ async function individualSummary(employeeId: string, year = new Date().getFullYe
 }
 
 // Company-wide overview: aggregated across all leave types combined (a
-// coarser granularity than the per-type individual view, matching a
-// reasonable company-overview scope for supervisor/ceo).
+// coarser granularity than the per-type individual view).
 async function companySummary() {
   const { start, end } = currentYearBounds();
 
@@ -150,7 +150,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid year");
   }
 
-  if (user.role === "employee") {
+  if (!canViewCompanyLeave(user.permissions)) {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {
       return jsonError(403, "Forbidden");
     }
@@ -159,18 +159,12 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     return NextResponse.json(summary);
   }
 
-  // supervisor / ceo
+  // Company-level access is determined by the account's permissions.
   if (employeeIdParam) {
     const summary = await individualSummary(employeeIdParam, year);
     if (!summary) return jsonError(404, "Employee not found");
     return NextResponse.json(summary);
   }
 
-  // Company scope — gated directly on role (no canViewCompanyLeave export;
-  // this read-only company view doesn't warrant a new permissions.ts
-  // function), mirroring app/api/ot/summary/route.ts's canViewCompanyOt gate.
-  if (user.role !== "supervisor" && user.role !== "ceo") {
-    return jsonError(403, "Forbidden");
-  }
   return NextResponse.json(await companySummary());
 });

@@ -59,13 +59,59 @@ const blankForm = {
   startDate: todayStr(),
   endDate: "",
   avatarUrl: "",
+  baseSalary: "",
+  otWeekdayMultiplier: "1.5",
+  otHolidayMultiplier: "3",
+  workHoursPerDay: "8",
 };
 
-function todayStr() {
-  const date = new Date();
+function todayStr(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function daysInMonth(year, month) {
+  if (month === 2) return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] || 0;
+}
+
+function parseDateParts(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [year, month, day] = value.split("-").map(Number);
+  const lastDay = daysInMonth(year, month);
+  if (!lastDay || day < 1 || day > lastDay) return null;
+  return { year, month, day };
+}
+
+function dateOrdinal({ year, month, day }) {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(0, 0, 0, 0);
+  return date.getTime() / 86_400_000;
+}
+
+function addMonthsClamped(date, monthCount) {
+  const monthIndex = date.year * 12 + date.month - 1 + monthCount;
+  const year = Math.floor(monthIndex / 12);
+  const month = monthIndex - year * 12 + 1;
+  return { year, month, day: Math.min(date.day, daysInMonth(year, month)) };
+}
+
+function formatEmploymentTenure(employee, asOfDate) {
+  const startDate = parseDateParts(employee?.startDate);
+  const endDate = parseDateParts(employee?.endDate || asOfDate);
+  if (!startDate || !endDate) return "-";
+  if (dateOrdinal(endDate) < dateOrdinal(startDate)) return "ยังไม่เริ่มงาน";
+
+  let monthCount = (endDate.year - startDate.year) * 12 + endDate.month - startDate.month;
+  if (dateOrdinal(addMonthsClamped(startDate, monthCount)) > dateOrdinal(endDate)) monthCount -= 1;
+
+  const completedMonths = addMonthsClamped(startDate, monthCount);
+  const years = Math.floor(monthCount / 12);
+  const months = monthCount % 12;
+  const days = dateOrdinal(endDate) - dateOrdinal(completedMonths);
+  return `${years} ปี ${months} เดือน ${days} วัน`;
 }
 
 function initialsFor(employee) {
@@ -111,7 +157,7 @@ function EmployeeActions({ employee, canManage, onView, onEdit, onOffboard }) {
   );
 }
 
-function EmployeeCard({ employee, ...props }) {
+function EmployeeCard({ employee, tenureAsOf, ...props }) {
   const name = `${employee.firstName} ${employee.lastName}`;
   return (
     <article className="rounded-lg border border-border bg-card p-4">
@@ -131,6 +177,7 @@ function EmployeeCard({ employee, ...props }) {
         <div><dt className="text-xs text-muted-foreground">ประเภทการจ้าง</dt><dd className="mt-1 text-foreground">{employee.employmentType?.name || "-"}</dd></div>
         <div><dt className="text-xs text-muted-foreground">วันที่เริ่มงาน</dt><dd className="mt-1 text-foreground">{formatThaiDate(employee.startDate)}</dd></div>
         <div><dt className="text-xs text-muted-foreground">วันที่สิ้นสุดงาน</dt><dd className="mt-1 text-foreground">{formatThaiDate(employee.endDate)}</dd></div>
+        <div><dt className="text-xs text-muted-foreground">อายุงาน</dt><dd className="mt-1 tabular-nums text-foreground">{formatEmploymentTenure(employee, tenureAsOf)}</dd></div>
       </dl>
       <div className="mt-4 border-t border-border pt-3">
         <EmployeeActions employee={employee} {...props} />
@@ -140,8 +187,8 @@ function EmployeeCard({ employee, ...props }) {
 }
 
 export default function EmployeeModule() {
-  const { role } = useHrmRole();
-  const canManage = canManageEmployees(role);
+  const { permissions = [] } = useHrmRole();
+  const canManage = canManageEmployees(permissions);
 
   const [lookups, setLookups] = useState(EMPTY_LOOKUPS);
   const [lookupError, setLookupError] = useState("");
@@ -156,10 +203,13 @@ export default function EmployeeModule() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
+  const [tenureAsOf, setTenureAsOf] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankForm);
+  const [otRateDefaults, setOtRateDefaults] = useState({ weekdayMultiplier: "1.5", holidayMultiplier: "3" });
+  const [otRateSettingsLoaded, setOtRateSettingsLoaded] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [offboardingEndDate, setOffboardingEndDate] = useState(todayStr());
@@ -184,6 +234,34 @@ export default function EmployeeModule() {
     onSuccess: (message) => setNotice({ type: "success", message }),
   });
   const { saving, formError, setFormError, offboarding, offboardError, setOffboardError } = employeeWorkflow;
+
+  useEffect(() => {
+    let timeoutId;
+    function updateTenureDate() {
+      const now = new Date();
+      setTenureAsOf(todayStr(now));
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timeoutId = window.setTimeout(updateTenureDate, tomorrow.getTime() - now.getTime() + 1000);
+    }
+    updateTenureDate();
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings/ot-rates")
+      .then((response) => response.ok ? response.json() : null)
+      .then((payload) => {
+        if (cancelled || !payload?.item) return;
+        setOtRateDefaults({
+          weekdayMultiplier: String(payload.item.weekdayMultiplier ?? 1.5),
+          holidayMultiplier: String(payload.item.holidayMultiplier ?? 3),
+        });
+      })
+      .catch(() => null)
+      .finally(() => { if (!cancelled) setOtRateSettingsLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -249,9 +327,28 @@ export default function EmployeeModule() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function openAdd() {
+  async function openAdd() {
+    let defaults = otRateDefaults;
+    if (!otRateSettingsLoaded) {
+      const payload = await fetch("/api/settings/ot-rates")
+        .then((response) => response.ok ? response.json() : null)
+        .catch(() => null);
+      if (payload?.item) {
+        defaults = {
+          weekdayMultiplier: String(payload.item.weekdayMultiplier ?? 1.5),
+          holidayMultiplier: String(payload.item.holidayMultiplier ?? 3),
+        };
+        setOtRateDefaults(defaults);
+      }
+      setOtRateSettingsLoaded(true);
+    }
     setEditing(null);
-    setForm({ ...blankForm, startDate: todayStr() });
+    setForm({
+      ...blankForm,
+      otWeekdayMultiplier: defaults.weekdayMultiplier,
+      otHolidayMultiplier: defaults.holidayMultiplier,
+      startDate: todayStr(),
+    });
     setFormError("");
     setFormOpen(true);
   }
@@ -270,6 +367,10 @@ export default function EmployeeModule() {
       birthDate: employee.birthDate || "",
       email: employee.email || "",
       phone: employee.phone || "",
+      baseSalary: employee.baseSalary == null ? "" : String(employee.baseSalary),
+      otWeekdayMultiplier: String(employee.otWeekdayMultiplier ?? 1.5),
+      otHolidayMultiplier: String(employee.otHolidayMultiplier ?? 3),
+      workHoursPerDay: String(employee.workHoursPerDay ?? 8),
       departmentId: employee.department ? String(employee.department.id) : "",
       positionId: employee.position ? String(employee.position.id) : "",
       employmentTypeId: employee.employmentType ? String(employee.employmentType.id) : "",
@@ -436,7 +537,7 @@ export default function EmployeeModule() {
         </div>
 
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[980px] text-left">
+          <table className="w-full min-w-[1100px] text-left">
             <thead className="bg-muted/70">
               <tr className="text-xs font-semibold text-muted-foreground">
                 <th scope="col" className="px-4 py-3">รหัส</th>
@@ -444,6 +545,7 @@ export default function EmployeeModule() {
                 <th scope="col" className="px-4 py-3">แผนก / ตำแหน่ง</th>
                 <th scope="col" className="px-4 py-3">ประเภทการจ้าง</th>
                 <th scope="col" className="px-4 py-3">วันที่เริ่ม / สิ้นสุดงาน</th>
+                <th scope="col" className="px-4 py-3">อายุงาน</th>
                 <th scope="col" className="px-4 py-3">สถานะ</th>
                 <th scope="col" className="px-4 py-3 text-right">จัดการ</th>
               </tr>
@@ -472,6 +574,7 @@ export default function EmployeeModule() {
                       <p>{formatThaiDate(employee.startDate)}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">สิ้นสุด: {formatThaiDate(employee.endDate)}</p>
                     </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-foreground">{formatEmploymentTenure(employee, tenureAsOf)}</td>
                     <td className="px-4 py-3"><StatusChip status={employee.employmentStatus?.name} /></td>
                     <td className="px-3 py-3"><EmployeeActions employee={employee} canManage={canManage} onView={setSelected} onEdit={openEdit} onOffboard={beginOffboard} /></td>
                   </tr>
@@ -482,7 +585,7 @@ export default function EmployeeModule() {
         </div>
 
         <div className="grid gap-3 p-3 md:hidden">
-          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} canManage={canManage} onView={setSelected} onEdit={openEdit} onOffboard={beginOffboard} />)}
+          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} tenureAsOf={tenureAsOf} canManage={canManage} onView={setSelected} onEdit={openEdit} onOffboard={beginOffboard} />)}
         </div>
 
         {listLoading ? (
@@ -556,6 +659,14 @@ export default function EmployeeModule() {
           </SelectField>
           <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
           {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
+          <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
+            <h3 className="text-sm font-semibold text-foreground">ข้อมูลสำหรับคำนวณ OT</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">ใช้ค่าแรงรายชั่วโมง = เงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน แล้วคูณเรทตามประเภทวัน</p>
+          </div>
+          <Input label="ฐานเงินเดือน (บาท/เดือน)" type="number" min="0" step="0.01" inputMode="decimal" value={form.baseSalary} onChange={(value) => updateForm("baseSalary", value)} />
+          <Input label="ชั่วโมงทำงานปกติต่อวัน" type="number" min="0.01" max="24" step="0.25" inputMode="decimal" value={form.workHoursPerDay} onChange={(value) => updateForm("workHoursPerDay", value)} isRequired />
+          <Input label="เรท OT วันธรรมดา (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otWeekdayMultiplier} onChange={(value) => updateForm("otWeekdayMultiplier", value)} isRequired />
+          <Input label="เรท OT วันหยุด (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otHolidayMultiplier} onChange={(value) => updateForm("otHolidayMultiplier", value)} isRequired />
           <Input
             label="รูปโปรไฟล์"
             type="file"
@@ -614,8 +725,12 @@ export default function EmployeeModule() {
               <div><dt className="text-xs text-muted-foreground">ตำแหน่ง</dt><dd className="mt-1 text-sm text-foreground">{selected.position?.name || "-"}</dd></div>
               <div><dt className="text-xs text-muted-foreground">ประเภทการจ้าง</dt><dd className="mt-1 text-sm text-foreground">{selected.employmentType?.name || "-"}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันที่เริ่มงาน</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.startDate)}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">อายุงาน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{formatEmploymentTenure(selected, tenureAsOf)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันที่สิ้นสุดงาน</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.endDate)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันเกิด</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.birthDate)}</dd></div>
+              {canManage ? <div><dt className="text-xs text-muted-foreground">ฐานเงินเดือน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.baseSalary == null ? "ยังไม่ระบุ" : Number(selected.baseSalary).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " บาท"}</dd></div> : null}
+              {canManage ? <div><dt className="text-xs text-muted-foreground">เรท OT วันธรรมดา / วันหยุด</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.otWeekdayMultiplier}× / {selected.otHolidayMultiplier}×</dd></div> : null}
+              {canManage ? <div><dt className="text-xs text-muted-foreground">ชั่วโมงทำงานปกติต่อวัน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{selected.workHoursPerDay} ชม.</dd></div> : null}
             </dl>
           </div>
         ) : null}

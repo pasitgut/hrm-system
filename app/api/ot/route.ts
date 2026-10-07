@@ -3,12 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, overtimeRequests, requestStatuses } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
 import {
   bangkokToUtcDate,
   currentBangkokMonth,
   fetchOtItemById,
   isValidDateStr,
   isValidMonthStr,
+  isValidOvertimeType,
   isValidTimeStr,
   jsonError,
   monthRangeUtc,
@@ -35,7 +37,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   const employeeIdParam = searchParams.get("employeeId");
 
   let scopedEmployeeId: string | undefined;
-  if (user.role === "employee") {
+  if (!canViewCompanyOtData(user)) {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {
       return jsonError(403, "Forbidden");
     }
@@ -75,7 +77,8 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid request body");
   }
 
-  const { date, startTime, endTime, reason, employeeId } = body as Record<string, unknown>;
+  const { date, startTime, endTime, reason, employeeId, overtimeType } = body as Record<string, unknown>;
+  const selectedOvertimeType = overtimeType === undefined ? "weekday" : overtimeType;
 
   if (employeeId != null && employeeId !== user.employeeId) {
     return jsonError(400, "Cannot create an OT request for another employee");
@@ -85,6 +88,9 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   }
   if (typeof reason !== "string" || !reason.trim()) {
     return jsonError(400, "Reason is required");
+  }
+  if (!isValidOvertimeType(selectedOvertimeType)) {
+    return jsonError(400, "Invalid overtime type");
   }
 
   const startAt = bangkokToUtcDate(date, startTime);
@@ -99,6 +105,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       employeeId: user.employeeId,
       startAt,
       endAt,
+      overtimeType: selectedOvertimeType,
       reason: reason.trim(),
       statusCode: "pending",
     })

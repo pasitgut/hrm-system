@@ -12,9 +12,10 @@ import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
 import { LeaveRequestPanel } from "@/components/hrm/leave/LeaveRequestPanel";
 import { LeaveQuotaDialog } from "@/components/hrm/leave/LeaveQuotaDialog";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
+import { canManageSettings, canViewCompanyLeave } from "@/lib/auth/permissions";
 
 export default function LeaveModule() {
-  const { role } = useHrmRole();
+  const { permissions = [] } = useHrmRole();
   const [addOpen, setAddOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
@@ -23,7 +24,8 @@ export default function LeaveModule() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
-  const isTeamView = role === "supervisor" || role === "ceo";
+  const isTeamView = canViewCompanyLeave(permissions);
+  const canManageQuotas = canManageSettings(permissions);
 
   function bump() {
     setRefreshKey((current) => current + 1);
@@ -85,7 +87,7 @@ export default function LeaveModule() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground">ปี {new Date().getFullYear() + 543}</span>
-            {isTeamView ? <Button size="small" variant="outline" className="min-h-10" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
+            {canManageQuotas ? <Button size="small" variant="outline" className="min-h-10" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
           </div>
         </div>
         <LeaveSummaryView refreshKey={refreshKey} />
@@ -93,7 +95,7 @@ export default function LeaveModule() {
 
       <section className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
         <LeaveCalendarView items={items} isTeamView={isTeamView} />
-        <LeaveRequestPanel items={items} loading={loading} role={role} onUpdated={handleDecision} />
+        <LeaveRequestPanel items={items} loading={loading} permissions={permissions} onUpdated={handleDecision} />
       </section>
 
       <LeaveInsightsView items={items} isTeamView={isTeamView} />

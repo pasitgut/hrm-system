@@ -8,11 +8,29 @@ import {
   RiClockwise2Line,
   RiCloseCircleLine,
   RiFileList3Line,
+  RiMoneyDollarCircleLine,
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { currentMonthInBangkok, formatMonthLabel, shiftMonth } from "@/components/hrm/ot/otStatus";
+import { canManageEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { currentMonthInBangkok, formatMonthLabel, formatPayrollPeriodLabel, shiftMonth } from "@/components/hrm/ot/otStatus";
+
+function formatMoney(value) {
+  return value == null
+    ? "ยังไม่ระบุ"
+    : Number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " บาท";
+}
+
+function formatHourlyMoney(value) {
+  return value == null
+    ? "ยังไม่ระบุ"
+    : Number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " บาท/ชม.";
+}
+
+function formatMultiplier(value) {
+  return Number(value).toLocaleString("th-TH", { maximumFractionDigits: 2 }) + "×";
+}
 
 function SummaryCard({ icon: Icon, label, value, helper }) {
   return (
@@ -37,14 +55,24 @@ function MonthNav({ month, onChange }) {
   );
 }
 
-function IndividualSummary({ month, onMonthChange, summary, loading, error, backAction }) {
+function PayrollPeriodNav({ period, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-2 border-y border-border py-1">
+      <IconButton icon={RiArrowLeftSLine} aria-label="งวดก่อนหน้า" onClick={() => onChange(shiftMonth(period, -1))} />
+      <strong className="text-center text-sm font-semibold leading-5 text-foreground">{formatPayrollPeriodLabel(period)}</strong>
+      <IconButton icon={RiArrowRightSLine} aria-label="งวดถัดไป" onClick={() => onChange(shiftMonth(period, 1))} />
+    </div>
+  );
+}
+
+function IndividualSummary({ month, onMonthChange, summary, loading, error, backAction, isPayrollPeriod = false }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         {backAction ? <Button size="small" variant="secondary" onClick={backAction}>ย้อนกลับ</Button> : <span />}
         {summary ? <span className="text-xs leading-5 text-muted-foreground">{summary.employeeName}</span> : null}
       </div>
-      <MonthNav month={month} onChange={onMonthChange} />
+      {isPayrollPeriod ? <PayrollPeriodNav period={month} onChange={onMonthChange} /> : <MonthNav month={month} onChange={onMonthChange} />}
       {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       {loading || !summary ? (
         <p className="text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p>
@@ -60,8 +88,9 @@ function IndividualSummary({ month, onMonthChange, summary, loading, error, back
 }
 
 export function OtSummaryView({ refreshKey = 0 }) {
-  const { role } = useHrmRole();
-  const isCompanyCapable = role === "supervisor" || role === "ceo";
+  const user = useHrmRole() ?? {};
+  const isCompanyCapable = canViewCompanyOtData(user);
+  const canViewCompensation = canManageEmployeeCompensation(user);
   const [month, setMonth] = useState(() => currentMonthInBangkok());
   const [drillEmployeeId, setDrillEmployeeId] = useState(null);
   const [individualSummary, setIndividualSummary] = useState(null);
@@ -74,7 +103,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
     setLoading(true);
     setError("");
     const targetEmployeeId = isCompanyCapable ? drillEmployeeId : null;
-    const query = new URLSearchParams({ month });
+    const query = new URLSearchParams(isCompanyCapable ? { period: month } : { month });
     if (targetEmployeeId) query.set("employeeId", targetEmployeeId);
 
     fetch(`/api/ot/summary?${query.toString()}`)
@@ -112,6 +141,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
         loading={loading}
         error={error}
         backAction={() => setDrillEmployeeId(null)}
+        isPayrollPeriod
       />
     );
   }
@@ -120,22 +150,33 @@ export function OtSummaryView({ refreshKey = 0 }) {
 
   return (
     <div className="space-y-4">
-      <MonthNav month={month} onChange={setMonth} />
+      <PayrollPeriodNav period={month} onChange={setMonth} />
       {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       {companySummary ? (
-        <div className="grid grid-cols-1 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-3">
-          <SummaryCard icon={RiCheckboxCircleLine} label="ชั่วโมงที่อนุมัติแล้วทั้งบริษัท" value={`${companySummary.totalApprovedHours} ชม.`} />
-          <SummaryCard icon={RiClockwise2Line} label="ชั่วโมงรอดำเนินการทั้งบริษัท" value={`${companySummary.totalPendingHours} ชม.`} />
-          <SummaryCard icon={RiFileList3Line} label="จำนวนคำขอทั้งหมด" value={`${companySummary.requestCount} รายการ`} />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-4">
+          <SummaryCard icon={RiCheckboxCircleLine} label="ชั่วโมง OT ที่อนุมัติ" value={String(companySummary.totalApprovedHours) + " ชม."} />
+          <SummaryCard icon={RiClockwise2Line} label="ชั่วโมง OT ที่รอจัดการ" value={String(companySummary.totalPendingHours) + " ชม."} />
+          {canViewCompensation ? (
+            <SummaryCard
+              icon={RiMoneyDollarCircleLine}
+              label="ยอด OT ที่ต้องจ่าย"
+              value={companySummary.totalApprovedPay == null ? "ข้อมูลไม่ครบ" : formatMoney(companySummary.totalApprovedPay)}
+              helper={companySummary.missingPayInfoCount ? "ข้อมูลเงินเดือน/ประเภทวันยังไม่ครบ " + companySummary.missingPayInfoCount + " คน" : "เฉพาะรายการที่อนุมัติแล้ว"}
+            />
+          ) : null}
+          <SummaryCard icon={RiFileList3Line} label="จำนวนคำขอในงวด" value={String(companySummary.requestCount) + " รายการ"} />
         </div>
       ) : null}
       <section className="overflow-hidden border-y border-border bg-card">
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[640px] text-left">
+          <table className="w-full min-w-[920px] text-left">
             <thead className="bg-muted">
               <tr className="text-xs font-semibold leading-4 text-muted-foreground">
                 <th className="px-3 py-3">พนักงาน</th>
-                <th className="px-3 py-3">อนุมัติแล้ว</th>
+                {canViewCompensation ? <th className="px-3 py-3 text-right">ฐานเงินเดือน</th> : null}
+                {canViewCompensation ? <th className="min-w-56 px-3 py-3">เรท OT</th> : null}
+                <th className="px-3 py-3">ชั่วโมง OT ที่อนุมัติ</th>
+                {canViewCompensation ? <th className="px-3 py-3 text-right">เงินที่ต้องจ่าย</th> : null}
                 <th className="px-3 py-3">รอดำเนินการ</th>
                 <th className="px-3 py-3">ไม่อนุมัติ</th>
                 <th className="px-3 py-3">จำนวนคำขอ</th>
@@ -143,13 +184,31 @@ export function OtSummaryView({ refreshKey = 0 }) {
             </thead>
             <tbody>
               {byEmployee.map((row) => (
-                <tr
-                  key={row.employeeId}
-                  className="cursor-pointer border-b border-border last:border-0 hover:bg-accent"
-                  onClick={() => setDrillEmployeeId(row.employeeId)}
-                >
-                  <td className="px-3 py-3 text-xs font-medium leading-5 text-foreground">{row.employeeName} <span className="text-muted-foreground">({row.employeeCode})</span></td>
-                  <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.approvedHours} ชม.</td>
+                <tr key={row.employeeId} className="border-b border-border last:border-0 hover:bg-accent">
+                  <td className="px-3 py-3 text-xs font-medium leading-5 text-foreground">
+                    <button type="button" className="text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setDrillEmployeeId(row.employeeId)}>
+                      {row.employeeName} <span className="text-muted-foreground">({row.employeeCode})</span>
+                    </button>
+                  </td>
+                  {canViewCompensation ? <td className="whitespace-nowrap px-3 py-3 text-right text-xs tabular-nums text-foreground">{formatMoney(row.baseSalary)}</td> : null}
+                  {canViewCompensation ? (
+                    <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">
+                      <span className="block">ธรรมดา {formatMultiplier(row.otWeekdayMultiplier)} · {formatHourlyMoney(row.weekdayRatePerHour)}</span>
+                      <span className="block">วันหยุด {formatMultiplier(row.otHolidayMultiplier)} · {formatHourlyMoney(row.holidayRatePerHour)}</span>
+                    </td>
+                  ) : null}
+                  <td className="whitespace-nowrap px-3 py-3 text-xs leading-5 text-foreground">
+                    <span className="block tabular-nums">{row.approvedHours} ชม.</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      ธรรมดา {row.weekdayApprovedHours} · วันหยุด {row.holidayApprovedHours}
+                      {row.unclassifiedApprovedHours ? " · ยังไม่ระบุ " + row.unclassifiedApprovedHours : ""}
+                    </span>
+                  </td>
+                  {canViewCompensation ? (
+                    <td className="whitespace-nowrap px-3 py-3 text-right text-xs font-semibold tabular-nums text-foreground">
+                      {row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}
+                    </td>
+                  ) : null}
                   <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.pendingHours} ชม.</td>
                   <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.rejectedHours} ชม.</td>
                   <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.requestCount}</td>
@@ -168,17 +227,35 @@ export function OtSummaryView({ refreshKey = 0 }) {
             >
               <strong className="block text-sm font-medium leading-5 text-foreground">{row.employeeName}</strong>
               <span className="text-xs leading-4 text-muted-foreground">{row.employeeCode}</span>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-xs leading-4 text-muted-foreground">
-                <span>อนุมัติ {row.approvedHours} ชม.</span>
-                <span>รอ {row.pendingHours} ชม.</span>
-                <span>ไม่อนุมัติ {row.rejectedHours} ชม.</span>
-              </div>
+              {canViewCompensation ? (
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border pt-3 text-xs leading-4">
+                  <span className="text-muted-foreground">ฐานเงินเดือน</span>
+                  <span className="text-right tabular-nums text-foreground">{formatMoney(row.baseSalary)}</span>
+                  <span className="text-muted-foreground">เรท OT ธรรมดา / วันหยุด</span>
+                  <span className="text-right tabular-nums text-foreground">{formatMultiplier(row.otWeekdayMultiplier)} / {formatMultiplier(row.otHolidayMultiplier)}</span>
+                  <span className="text-muted-foreground">OT ที่อนุมัติ</span>
+                  <span className="text-right tabular-nums text-foreground">{row.approvedHours} ชม.</span>
+                  <span className="text-muted-foreground">เงินที่ต้องจ่าย</span>
+                  <strong className="text-right tabular-nums text-foreground">{row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}</strong>
+                  <span className="col-span-2 text-[11px] leading-4 text-muted-foreground">
+                    ธรรมดา {row.weekdayApprovedHours} ชม. · วันหยุด {row.holidayApprovedHours} ชม.
+                    {row.unclassifiedApprovedHours ? " · ยังไม่ระบุ " + row.unclassifiedApprovedHours + " ชม." : ""}
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-xs leading-4 text-muted-foreground">
+                  <span>อนุมัติ {row.approvedHours} ชม.</span>
+                  <span>รอ {row.pendingHours} ชม.</span>
+                  <span>ไม่อนุมัติ {row.rejectedHours} ชม.</span>
+                </div>
+              )}
             </button>
           ))}
         </div>
-        {!loading && byEmployee.length === 0 ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">ไม่มีข้อมูล OT ในเดือนนี้</p> : null}
+        {!loading && byEmployee.length === 0 ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">ไม่มีข้อมูล OT ในงวดนี้</p> : null}
         {loading ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
       </section>
+      {canViewCompensation ? <p className="text-xs leading-5 text-muted-foreground">คำนวณจากเงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน × เรท OT × ชั่วโมงที่อนุมัติแล้ว</p> : null}
     </div>
   );
 }

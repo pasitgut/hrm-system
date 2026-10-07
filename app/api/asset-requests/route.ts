@@ -5,10 +5,11 @@ import { AssetApplicationError } from "@/asset-borrowing/application/AssetApplic
 import { parseAssetItems, serializeAssetItems } from "@/asset-borrowing/domain/asset";
 import { type BorrowAgreementTemplate } from "@/asset-borrowing/application/agreementFactory";
 import { COMPANY_ASSET_FORM_AGREEMENT, COMPANY_BORROW_AGREEMENT } from "@/asset-borrowing/presets/companyAgreements";
-import { jsonError, isManagerRole, assetRequestDtos, isHttpUrl, requestId, toDate } from "@/app/api/asset-requests/_shared";
+import { jsonError, assetRequestDtos, isHttpUrl, requestId, toDate } from "@/app/api/asset-requests/_shared";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates as agreementTemplateTable, departments, employees, positions } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canManageAssets } from "@/lib/auth/permissions";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 
 const agreementTemplates = { borrow: COMPANY_BORROW_AGREEMENT, assetForm: COMPANY_ASSET_FORM_AGREEMENT };
@@ -18,7 +19,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   const repository = new DrizzleAssetRepository(user.employeeId);
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
-  const items = isManagerRole(user.role) ? await repository.listAll() : await repository.listForEmployee(employee.code);
+  const items = canManageAssets(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
   return NextResponse.json({ items: assetRequestDtos(items) });
 });
 
@@ -34,12 +35,12 @@ export const POST = withApiAuth(async (request: NextRequest) => {
 
   const input = body as Record<string, unknown>;
   const flow = input.flow === "admin-managed" ? "admin-managed" : "self-service";
-  const manager = isManagerRole(user.role);
-  if (flow === "admin-managed" && !manager) return jsonError(403, "Only a supervisor or CEO can submit on behalf of employees");
+  const manager = canManageAssets(user.permissions);
+  if (flow === "admin-managed" && !manager) return jsonError(403, "Asset management permission required");
 
   let selectedAgreementTemplate: BorrowAgreementTemplate | null = null;
   if (input.agreementTemplateId != null && input.agreementTemplateId !== "") {
-    if (!manager || flow !== "admin-managed") return jsonError(403, "Only a supervisor or CEO can attach an Agreement");
+    if (!manager || flow !== "admin-managed") return jsonError(403, "Asset management permission required");
     if (typeof input.agreementTemplateId !== "string" || !requestId(input.agreementTemplateId)) return jsonError(400, "Invalid Agreement template id");
     const [template] = await db.select().from(agreementTemplateTable).where(eq(agreementTemplateTable.id, input.agreementTemplateId));
     if (!template || !template.isActive || template.type !== "borrow") return jsonError(400, "Agreement template is unavailable");

@@ -16,6 +16,10 @@ function validateEmployeeForm(form, employee) {
   if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "รูปแบบอีเมลไม่ถูกต้อง";
   if (!form.startDate) return "กรุณากรอกวันที่เริ่มงาน";
   if (employee && !employee.isActive && !form.endDate) return "กรุณาระบุวันที่สิ้นสุดการทำงาน";
+  if (form.baseSalary !== "" && (!Number.isFinite(Number(form.baseSalary)) || Number(form.baseSalary) < 0)) return "ฐานเงินเดือนต้องเป็นตัวเลขตั้งแต่ 0 บาทขึ้นไป";
+  if (!Number.isFinite(Number(form.otWeekdayMultiplier)) || Number(form.otWeekdayMultiplier) <= 0) return "เรท OT วันธรรมดาต้องมากกว่า 0";
+  if (!Number.isFinite(Number(form.otHolidayMultiplier)) || Number(form.otHolidayMultiplier) <= 0) return "เรท OT วันหยุดต้องมากกว่า 0";
+  if (!Number.isFinite(Number(form.workHoursPerDay)) || Number(form.workHoursPerDay) <= 0 || Number(form.workHoursPerDay) > 24) return "ชั่วโมงทำงานปกติต่อวันต้องมากกว่า 0 และไม่เกิน 24";
   return null;
 }
 
@@ -36,6 +40,10 @@ function employeeRequestBody(form, employee, lookups) {
     email: form.email || null,
     phone: form.phone || null,
     avatarUrl: form.avatarUrl || null,
+    baseSalary: form.baseSalary === "" ? null : Number(form.baseSalary),
+    otWeekdayMultiplier: Number(form.otWeekdayMultiplier),
+    otHolidayMultiplier: Number(form.otHolidayMultiplier),
+    workHoursPerDay: Number(form.workHoursPerDay),
     startDate: form.startDate,
     ...(employee ? { endDate: form.endDate || null } : {}),
     departmentId: form.departmentId ? Number(form.departmentId) : null,

@@ -11,7 +11,7 @@ import { canManageAssets } from "@/lib/auth/permissions";
 
 export default function AgreementTemplatesPage() {
   const user = useHrmRole();
-  const manager = Boolean(user?.role && canManageAssets(user.role));
+  const manager = Boolean(user && canManageAssets(user.permissions));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -61,7 +61,7 @@ export default function AgreementTemplatesPage() {
         description="จัดการเอกสารต้นแบบแยกจากคำขอยืม เมื่อแนบกับคำขอ ระบบจะเก็บสำเนาเอกสารฉบับนั้นไว้กับรายการ"
         actions={<div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link href="/assets">กลับรายการยืม</Link></Button>{manager ? <Button asChild leadingIcon={RiAddLine}><Link href="/assets/agreements/new">สร้าง Agreement</Link></Button> : null}</div>}
       />
-      {!manager ? <p role="alert" className="border border-status-danger/20 bg-status-danger/5 p-4 text-sm text-status-danger">หน้านี้สำหรับหัวหน้างานหรือผู้บริหารเท่านั้น</p> : null}
+      {!manager ? <p role="alert" className="border border-status-danger/20 bg-status-danger/5 p-4 text-sm text-status-danger">บัญชีนี้ไม่มีสิทธิ์จัดการทรัพย์สิน</p> : null}
       {error ? <p role="alert" className="text-sm text-status-danger">{error}</p> : null}
       <section className="overflow-hidden border border-border bg-card" aria-label="รายการ Agreement ต้นแบบ">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted px-4 py-3 sm:px-5">

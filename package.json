@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "db:seed-volume": "tsx --env-file-if-exists=.env scripts/seed-volume-data.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

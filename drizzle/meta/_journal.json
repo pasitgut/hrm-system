@@ -78,6 +78,27 @@
       "when": 1790329903000,
       "tag": "0010_asset_agreement_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791273600000,
+      "tag": "0011_user_permissions_and_leave_code_sequence",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0012_employee_ot_rates_and_request_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0013_configurable_ot_rate_defaults",
+      "breakpoints": true
     }
   ]
 }

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { hashPassword } from "@/lib/auth/password";
 import { departments, employees, employmentStatuses, employmentTypes, positions, users } from "@/lib/db/schema";
+import { DEFAULT_OT_RATE_SETTINGS, getOtRateSettings } from "@/lib/settings/otRateSettings";
 
 // Shared helpers for the app/api/employees/** Route Handlers: the joined
 // select used by every read, the GET response DTO, employee-code conflicts,
@@ -18,6 +19,10 @@ export const employeeSelectColumns = {
   prefix: employees.prefix,
   firstName: employees.firstName,
   lastName: employees.lastName,
+  baseSalary: employees.baseSalary,
+  otWeekdayMultiplier: employees.otWeekdayMultiplier,
+  otHolidayMultiplier: employees.otHolidayMultiplier,
+  workHoursPerDay: employees.workHoursPerDay,
   nickname: employees.nickname,
   citizenId: employees.citizenId,
   firstNameEn: employees.firstNameEn,
@@ -50,6 +55,10 @@ type EmployeeRow = {
   prefix: string | null;
   firstName: string;
   lastName: string;
+  baseSalary: number | null;
+  otWeekdayMultiplier: number;
+  otHolidayMultiplier: number;
+  workHoursPerDay: number;
   nickname: string | null;
   citizenId: string | null;
   firstNameEn: string | null;
@@ -102,13 +111,19 @@ export function employeeLifecycleResponse<T>(outcome: EmployeeLifecycleOutcome<T
 // directly to `{id, name}` shapes returned by the /api/departments etc.
 // endpoints, so nesting lets the employee-detail views reuse that same
 // shape without remapping.
-export function toEmployeeItemDto(row: EmployeeRow) {
+export function toEmployeeItemDto(row: EmployeeRow, includeCompensation = false) {
   return {
     id: row.id,
     code: row.code,
     prefix: row.prefix,
     firstName: row.firstName,
     lastName: row.lastName,
+    ...(includeCompensation ? {
+      baseSalary: row.baseSalary,
+      otWeekdayMultiplier: row.otWeekdayMultiplier,
+      otHolidayMultiplier: row.otHolidayMultiplier,
+      workHoursPerDay: row.workHoursPerDay,
+    } : {}),
     nickname: row.nickname,
     citizenId: row.citizenId,
     firstNameEn: row.firstNameEn,
@@ -141,9 +156,9 @@ export function employeeBaseSelect() {
     .leftJoin(managerEmployees, eq(employees.managerId, managerEmployees.id));
 }
 
-export async function fetchEmployeeItemById(id: string): Promise<EmployeeItemDto | null> {
+export async function fetchEmployeeItemById(id: string, includeCompensation = false): Promise<EmployeeItemDto | null> {
   const [row] = await employeeBaseSelect().where(eq(employees.id, id));
-  return row ? toEmployeeItemDto(row) : null;
+  return row ? toEmployeeItemDto(row, includeCompensation) : null;
 }
 
 export async function employeeExists(id: string): Promise<boolean> {
@@ -151,14 +166,14 @@ export async function employeeExists(id: string): Promise<boolean> {
   return employee !== undefined;
 }
 
-export async function fetchActiveEmployeeItems(): Promise<EmployeeItemDto[]> {
+export async function fetchActiveEmployeeItems(includeCompensation = false): Promise<EmployeeItemDto[]> {
   const rows = await employeeBaseSelect().where(isNull(employees.deletedAt)).orderBy(asc(employees.firstName), asc(employees.lastName));
-  return rows.map(toEmployeeItemDto);
+  return rows.map((row) => toEmployeeItemDto(row, includeCompensation));
 }
 
-export async function fetchAllEmployeeItems(): Promise<EmployeeItemDto[]> {
+export async function fetchAllEmployeeItems(includeCompensation = false): Promise<EmployeeItemDto[]> {
   const rows = await employeeBaseSelect().orderBy(asc(employees.firstName), asc(employees.lastName));
-  return rows.map(toEmployeeItemDto);
+  return rows.map((row) => toEmployeeItemDto(row, includeCompensation));
 }
 
 // Employee codes are entered by the person creating the employee. Include
@@ -191,6 +206,24 @@ export function isValidUuid(value: unknown): value is string {
 export function parseOptionalLookupId(value: unknown): number | null | undefined {
   if (value == null || value === "") return null;
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function parseOptionalNumber(value: unknown): number | null | undefined {
+  if (value == null || value === "") return null;
+  if (typeof value !== "number" && typeof value !== "string") return undefined;
+  if (typeof value === "string" && !value.trim()) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseMultiplier(value: unknown, defaultValue: number): number | undefined {
+  const parsed = value === undefined ? defaultValue : parseOptionalNumber(value);
+  return typeof parsed === "number" && parsed > 0 && parsed <= 10 ? parsed : undefined;
+}
+
+function parseWorkHours(value: unknown, defaultValue: number): number | undefined {
+  const parsed = value === undefined ? defaultValue : parseOptionalNumber(value);
+  return typeof parsed === "number" && parsed > 0 && parsed <= 24 ? parsed : undefined;
 }
 
 export function isValidEmail(value: unknown): value is string {
@@ -291,6 +324,10 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     email,
     phone,
     avatarUrl,
+    baseSalary,
+    otWeekdayMultiplier,
+    otHolidayMultiplier,
+    workHoursPerDay,
     startDate,
     endDate,
     departmentId,
@@ -299,6 +336,10 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     employmentTypeId,
     managerId,
   } = input as Record<string, unknown>;
+
+  const otRateDefaults = otWeekdayMultiplier === undefined || otHolidayMultiplier === undefined
+    ? await getOtRateSettings()
+    : DEFAULT_OT_RATE_SETTINGS;
 
   if (typeof firstName !== "string" || !firstName.trim()) return lifecycleFailure("invalid", "firstName is required");
   if (typeof lastName !== "string" || !lastName.trim()) return lifecycleFailure("invalid", "lastName is required");
@@ -317,6 +358,14 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
   if (!isValidEmail(email.trim())) return lifecycleFailure("invalid", "Invalid email");
   if (birthDate != null && birthDate !== "" && !isValidDateStr(birthDate)) return lifecycleFailure("invalid", "birthDate must be a YYYY-MM-DD date");
   if (managerId != null && managerId !== "" && !isValidUuid(managerId)) return lifecycleFailure("invalid", "Invalid managerId");
+  const baseSalaryValue = parseOptionalNumber(baseSalary);
+  const otWeekdayMultiplierValue = parseMultiplier(otWeekdayMultiplier, otRateDefaults.weekdayMultiplier);
+  const otHolidayMultiplierValue = parseMultiplier(otHolidayMultiplier, otRateDefaults.holidayMultiplier);
+  const workHoursPerDayValue = parseWorkHours(workHoursPerDay, 8);
+  if (baseSalaryValue === undefined || (typeof baseSalaryValue === "number" && baseSalaryValue < 0)) return lifecycleFailure("invalid", "Invalid baseSalary");
+  if (otWeekdayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid weekday OT multiplier");
+  if (otHolidayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid holiday OT multiplier");
+  if (workHoursPerDayValue === undefined) return lifecycleFailure("invalid", "Invalid work hours per day");
   if (typeof codeInput !== "string" || !/^\d{4}$/.test(codeInput.trim())) {
     return lifecycleFailure("invalid", "code must be exactly 4 digits");
   }
@@ -344,6 +393,10 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     prefix: (prefix as string) || null,
     firstName: firstName.trim(),
     lastName: lastName.trim(),
+    baseSalary: baseSalaryValue,
+    otWeekdayMultiplier: otWeekdayMultiplierValue,
+    otHolidayMultiplier: otHolidayMultiplierValue,
+    workHoursPerDay: workHoursPerDayValue,
     nickname: (nickname as string) || null,
     citizenId: (citizenId as string) || null,
     firstNameEn: (firstNameEn as string) || null,
@@ -374,7 +427,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
       });
       return inserted.id;
     });
-    return { ok: true, value: await fetchEmployeeItemById(employeeId) };
+    return { ok: true, value: await fetchEmployeeItemById(employeeId, true) };
   } catch (error) {
     if (isUniqueViolation(error)) {
       const conflict = await findEmployeeCodeConflict(employeeCode);
@@ -403,6 +456,26 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
   const body = input as Record<string, unknown>;
 
   const values: Record<string, unknown> = {};
+  if ("baseSalary" in body) {
+    const value = parseOptionalNumber(body.baseSalary);
+    if (value === undefined || (typeof value === "number" && value < 0)) return lifecycleFailure("invalid", "Invalid baseSalary");
+    values.baseSalary = value;
+  }
+  if ("otWeekdayMultiplier" in body) {
+    const value = parseMultiplier(body.otWeekdayMultiplier, 1.5);
+    if (value === undefined) return lifecycleFailure("invalid", "Invalid weekday OT multiplier");
+    values.otWeekdayMultiplier = value;
+  }
+  if ("otHolidayMultiplier" in body) {
+    const value = parseMultiplier(body.otHolidayMultiplier, 3);
+    if (value === undefined) return lifecycleFailure("invalid", "Invalid holiday OT multiplier");
+    values.otHolidayMultiplier = value;
+  }
+  if ("workHoursPerDay" in body) {
+    const value = parseWorkHours(body.workHoursPerDay, 8);
+    if (value === undefined) return lifecycleFailure("invalid", "Invalid work hours per day");
+    values.workHoursPerDay = value;
+  }
   if ("firstName" in body) {
     if (typeof body.firstName !== "string" || !body.firstName.trim()) return lifecycleFailure("invalid", "firstName cannot be empty");
     values.firstName = body.firstName.trim();
@@ -490,7 +563,7 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
   if (missingLookup) return lifecycleFailure("invalid", `${missingLookup} does not exist`);
 
   if (Object.keys(values).length === 0) {
-    return { ok: true, value: await fetchEmployeeItemById(id) };
+    return { ok: true, value: await fetchEmployeeItemById(id, true) };
   }
 
   const updatedAt = new Date();
@@ -511,7 +584,7 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
     throw error;
   }
 
-  return { ok: true, value: await fetchEmployeeItemById(id) };
+  return { ok: true, value: await fetchEmployeeItemById(id, true) };
 }
 
 // Offboarding preserves employee history while disabling the associated login.
@@ -546,5 +619,5 @@ export async function offboardEmployee(id: string, input: unknown): Promise<Empl
     await tx.update(users).set({ isActive: false, updatedAt: deletedAt }).where(eq(users.employeeId, id));
   });
 
-  return { ok: true, value: await fetchEmployeeItemById(id) };
+  return { ok: true, value: await fetchEmployeeItemById(id, true) };
 }

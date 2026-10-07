@@ -5,10 +5,6 @@ export function jsonError(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
 }
 
-export function isManagerRole(role: string): boolean {
-  return role === "supervisor" || role === "ceo";
-}
-
 function agreementDto(agreement: AssetAgreement | null) {
   if (!agreement) return null;
   return {

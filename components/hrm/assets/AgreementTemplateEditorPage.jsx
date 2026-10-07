@@ -16,7 +16,7 @@ function defaultTemplate() {
 export default function AgreementTemplateEditorPage({ templateId = null }) {
   const router = useRouter();
   const roleContext = useHrmRole();
-  const manager = Boolean(roleContext?.role && canManageAssets(roleContext.role));
+  const manager = Boolean(roleContext && canManageAssets(roleContext.permissions));
   const isNew = !templateId;
   const initialValues = useRef(null);
   const [title, setTitle] = useState("");
@@ -89,7 +89,7 @@ export default function AgreementTemplateEditorPage({ templateId = null }) {
       </header>
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {!manager ? <p className="border-b border-border bg-background px-4 py-3 text-sm leading-6 text-status-danger" role="alert">หน้านี้สำหรับหัวหน้างานหรือผู้บริหารเท่านั้น</p> : null}
+          {!manager ? <p className="border-b border-border bg-background px-4 py-3 text-sm leading-6 text-status-danger" role="alert">บัญชีนี้ไม่มีสิทธิ์จัดการทรัพย์สิน</p> : null}
           {error ? <p className="border-b border-border bg-background px-4 py-3 text-sm leading-6 text-status-danger" role="alert">{error}</p> : null}
           {loading ? <div className="grid min-h-0 flex-1 place-items-center p-6 text-sm text-muted-foreground" role="status">กำลังโหลด Agreement…</div> : null}
           {!loading ? <AgreementDocxEditor key={templateId || "new-template"} requestId={templateId || "new-template"} body={body} title={title} documentDate="" onBodyChange={setBody} onTitleChange={setTitle} onDocumentDateChange={() => {}} hideDocumentDate readOnly={!manager} /> : null}

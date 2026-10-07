@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { formatDateRange, formatDays, statusColor } from "@/components/hrm/leave/leaveStatus";
 import { cn } from "@/lib/utils";
-
-const isApproverRole = (role) => role === "supervisor" || role === "ceo";
+import { canApproveLeave } from "@/lib/auth/permissions";
 const APPROVAL_FILTERS = [
   { code: "pending", label: "รออนุมัติ" },
   { code: "approved", label: "อนุมัติแล้ว" },
@@ -46,8 +45,8 @@ function RequestItem({ item, canApprove, busy, onDecision }) {
   );
 }
 
-export function LeaveRequestPanel({ items = [], loading = false, role, onUpdated = () => {} }) {
-  const canApprove = isApproverRole(role);
+export function LeaveRequestPanel({ items = [], loading = false, permissions = [], onUpdated = () => {} }) {
+  const canApprove = canApproveLeave(permissions);
   const [statusFilter, setStatusFilter] = useState("pending");
   const visibleItems = (canApprove
     ? items.filter((item) => item.statusCode === statusFilter)

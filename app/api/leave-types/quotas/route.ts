@@ -2,7 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveTypes } from "@/lib/db/schema";
-import { requireApiRole, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 
 const QUOTA_CODES = ["personal", "sick", "birthday"] as const;
 const MAX_QUOTA_DAYS = 2_147_483_647;
@@ -12,7 +12,7 @@ function jsonError(status: number, message: string) {
 }
 
 export const PATCH = withApiAuth(async (request: NextRequest) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "settings.manage");
 
   let body: unknown;
   try {

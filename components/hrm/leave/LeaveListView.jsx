@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
+import { canViewCompanyLeave } from "@/lib/auth/permissions";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { formatDateRange, formatDays, LEAVE_STATUS_TABS, statusColor } from "@/components/hrm/leave/leaveStatus";
 import { cn } from "@/lib/utils";
@@ -97,7 +98,7 @@ function LeaveCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
 // view fetches GET /api/leave?status=all itself and filters the 4 tabs
 // client-side, so switching tabs never re-hits the network.
 export function LeaveListView({ items: itemsProp, loading: loadingProp = false, refreshKey = 0, onEdit = () => {}, onCancelled = () => {} }) {
-  const { role, employeeId } = useHrmRole();
+  const { employeeId, permissions = [] } = useHrmRole() ?? {};
   const [items, setItems] = useState(itemsProp || []);
   const [loading, setLoading] = useState(itemsProp === undefined);
   const [error, setError] = useState("");
@@ -149,7 +150,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
     [items, statusFilter],
   );
 
-  const showEmployeeColumn = role === "supervisor" || role === "ceo";
+  const showEmployeeColumn = canViewCompanyLeave(permissions);
 
   function isOwn(item) {
     return item.employeeId === employeeId;

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canViewCompanyLeave } from "@/lib/auth/permissions";
 import {
   fetchLeaveItemById,
   jsonError,
@@ -30,7 +31,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   const employeeIdParam = searchParams.get("employeeId");
 
   let scopedEmployeeId: string | undefined;
-  if (user.role === "employee") {
+  if (!canViewCompanyLeave(user.permissions)) {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {
       return jsonError(403, "Forbidden");
     }

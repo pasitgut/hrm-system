@@ -1,8 +1,8 @@
 import { desc, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { assetAgreementTemplateInputSchema } from "@/asset-borrowing/domain/agreementTemplate";
-import { jsonError, isManagerRole } from "@/app/api/asset-requests/_shared";
-import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { jsonError } from "@/app/api/asset-requests/_shared";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates, employees } from "@/lib/db/schema";
 
@@ -22,15 +22,13 @@ function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
 }
 
 export const GET = withApiAuth(async (request: NextRequest) => {
-  const user = await requireApiUser(request);
-  if (!isManagerRole(user.role)) return jsonError(403, "Only a supervisor or CEO can manage Agreements");
+  await requireApiPermission(request, "assets.manage");
   const rows = await db.select().from(assetAgreementTemplates).orderBy(desc(assetAgreementTemplates.updatedAt));
   return NextResponse.json({ items: rows.map(templateDto) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  const user = await requireApiUser(request);
-  if (!isManagerRole(user.role)) return jsonError(403, "Only a supervisor or CEO can create Agreements");
+  const user = await requireApiPermission(request, "assets.manage");
   let body: unknown;
   try { body = await request.json(); }
   catch { return jsonError(400, "Invalid JSON body"); }

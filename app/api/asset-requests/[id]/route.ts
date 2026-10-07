@@ -13,11 +13,12 @@ import {
   type AssetAgreementParticipant,
   type AssetStatus,
 } from "@/asset-borrowing/domain/asset";
-import { jsonError, isHttpUrl, isManagerRole, assetRequestDto, requestId, toDate } from "@/app/api/asset-requests/_shared";
+import { jsonError, isHttpUrl, assetRequestDto, requestId, toDate } from "@/app/api/asset-requests/_shared";
 import { db } from "@/lib/db/client";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { assetAgreementTemplates, assetRequests, employees } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canManageAssets } from "@/lib/auth/permissions";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const agreementTemplates = {
@@ -52,7 +53,7 @@ async function requestContext(request: NextRequest, id: string) {
   const [row] = await db.select({ borrowerEmployeeId: assetRequests.borrowerEmployeeId })
     .from(assetRequests).where(eq(assetRequests.id, id));
   if (!row) return { response: jsonError(404, "Not found") } as const;
-  if (!isManagerRole(user.role) && row.borrowerEmployeeId !== user.employeeId) return { response: jsonError(403, "Forbidden") } as const;
+  if (!canManageAssets(user.permissions) && row.borrowerEmployeeId !== user.employeeId) return { response: jsonError(403, "Forbidden") } as const;
   const [employee] = await db.select({
     code: employees.code,
     name: employees.firstName,
@@ -90,7 +91,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
   const input = body as Record<string, unknown>;
   const entry = await auth.repository.getById(id);
   if (!entry) return jsonError(404, "Not found");
-  const manager = isManagerRole(auth.user.role);
+  const manager = canManageAssets(auth.user.permissions);
   const actorName = `${auth.employee.name} ${auth.employee.lastName}`.trim();
   const service = new AssetApplicationService(auth.repository, agreementTemplates);
   const signatureData = typeof input.signatureData === "string" ? input.signatureData.trim() : "";
@@ -113,7 +114,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       });
       if (!candidate.success) return jsonError(400, "Invalid request status change");
       const next = candidate.data.status as AssetStatus;
-      if ((next === "approved" || next === "rejected" || next === "returned") && !manager) return jsonError(403, "Only a supervisor or CEO can approve or receive assets");
+      if ((next === "approved" || next === "rejected" || next === "returned") && !manager) return jsonError(403, "Asset management permission required");
       const assetFormOnly = isAssetFormOnly(entry.agreement);
       if ((next === "approved" || next === "rejected") && entry.agreement && !assetFormOnly) {
         return jsonError(409, "Requests with an agreement must follow the agreement workflow");
@@ -144,7 +145,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
         signatureData,
         actorName,
         actorEmployeeCode: auth.employee.code,
-        actorIsAdmin: auth.user.role === "ceo",
+        actorIsAdmin: canManageAssets(auth.user.permissions),
         actorCanManageRequests: manager,
         storeSignature: async (value) => value,
       });
@@ -163,11 +164,11 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
         storeSignature: async (value) => value,
       });
     } else if (input.action === "approveFormRequest") {
-      if (!manager) return jsonError(403, "Only a supervisor or CEO can approve this request");
+      if (!manager) return jsonError(403, "Asset management permission required");
       if (!signatureData) return jsonError(400, "Signature is required");
       await service.approveFormRequest(id, actorName, signatureData);
     } else if (input.action === "attachAgreementTemplate") {
-      if (!manager) return jsonError(403, "Only a supervisor or CEO can attach an Agreement");
+      if (!manager) return jsonError(403, "Asset management permission required");
       if (entry.status !== "pending" || entry.agreement) return jsonError(409, "Agreement can only be added to a pending request without one");
       const templateId = typeof input.templateId === "string" ? input.templateId : "";
       if (!requestId(templateId)) return jsonError(400, "Invalid Agreement template id");
@@ -184,7 +185,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       }, actorName, auth.employee.code);
       await service.saveAgreement(id, agreement);
     } else if (input.action === "confirmReturn") {
-      if (!manager) return jsonError(403, "Only a supervisor or CEO can confirm an asset return");
+      if (!manager) return jsonError(403, "Asset management permission required");
       if (typeof input.returnInspection !== "string" || !input.returnInspection.trim()) return jsonError(400, "Return inspection is required");
       if (!entry.agreement) return jsonError(409, "Agreement not found");
       if (!isAssetFormOnly(entry.agreement) && !hasBothReturnSignatures(entry.agreement)) return jsonError(409, "Borrower and receiver return signatures are required before confirming return");
@@ -198,7 +199,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
         returnInspection: input.returnInspection.trim(),
       });
     } else if (input.action === "updateDetails") {
-      if (!manager) return jsonError(403, "Only a supervisor or CEO can edit asset requests");
+      if (!manager) return jsonError(403, "Asset management permission required");
       if (typeof input.items !== "string") return jsonError(400, "Asset items are required");
       const agreement = deserializeAgreement(input.agreement);
       if (!agreement || !canEditAgreement(manager, true, agreement.status, agreement.signatureBoxes.some((box) => box.status === "signed"))) {
@@ -206,7 +207,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       }
       await service.updateRequestDetails(id, input.items, agreement);
     } else if (input.action === "saveAgreement") {
-      if (!manager) return jsonError(403, "Only a supervisor or CEO can edit agreements");
+      if (!manager) return jsonError(403, "Asset management permission required");
       const agreement = deserializeAgreement(input.agreement);
       if (!agreement) return jsonError(400, "Invalid agreement");
       if (!canEditAgreement(manager, true, agreement.status, agreement.signatureBoxes.some((box) => box.status === "signed"))) {
@@ -237,7 +238,7 @@ export const DELETE = withApiAuth(async (request: NextRequest, context: RouteCon
   const { id } = await context.params;
   const auth = await requestContext(request, id);
   if ("response" in auth) return auth.response;
-  if (!isManagerRole(auth.user.role)) return jsonError(403, "Only a supervisor or CEO can remove asset requests");
+  if (!canManageAssets(auth.user.permissions)) return jsonError(403, "Forbidden");
   try {
     const entry = await auth.repository.getById(id);
     if (!entry) return jsonError(404, "Not found");

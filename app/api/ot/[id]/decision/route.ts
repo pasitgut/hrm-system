@@ -2,18 +2,15 @@ import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { overtimeRequests } from "@/lib/db/schema";
-import { requireApiRole, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { fetchOtItemById, jsonError } from "@/app/api/ot/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 const DECISIONS = new Set(["approved", "rejected"]);
 
-// Gated the same way canApproveOT(role) resolves (supervisor/ceo); using
-// requireApiRole with the literal role list directly here so there is a
-// single place (this call) that decides who may decide an OT request.
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  const user = await requireApiRole(request, "supervisor", "ceo");
+  const user = await requireApiPermission(request, "ot.approve");
   const { id } = await context.params;
 
   let body: unknown;

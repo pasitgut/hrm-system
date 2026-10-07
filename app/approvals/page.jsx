@@ -1,7 +1,7 @@
 import ApprovalModule from "@/components/hrm/approvals/ApprovalModule";
-import { requireRole } from "@/lib/auth/dal";
+import { requireAnyPermission } from "@/lib/auth/dal";
 
 export default async function ApprovalsPage() {
-  await requireRole("supervisor", "ceo");
+  await requireAnyPermission("ot.approve", "leave.approve", "assets.manage");
   return <ApprovalModule />;
 }

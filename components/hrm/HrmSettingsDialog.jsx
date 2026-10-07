@@ -55,7 +55,7 @@ export function HrmSettingsDialog({ open, onClose }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="ชื่อ-สกุล" defaultValue="นภัสสร สายทอง" />
             <Input label="ตำแหน่ง" defaultValue="HR Manager" />
-            <Input label="อีเมล" type="email" defaultValue="napatsorn@peopleos.co.th" />
+            <Input label="อีเมล" type="email" defaultValue="napatsorn@example.com" />
             <Input label="เบอร์โทรศัพท์" type="tel" defaultValue="081-234-5678" />
           </div>
         </TabPanel>

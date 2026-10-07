@@ -12,13 +12,14 @@ import {
   requestStatuses,
 } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canManageAssets, canViewCompanyLeave, canViewCompanyOt } from "@/lib/auth/permissions";
 import { formatOtDetail, formatThaiDateRange, jsonError, type ApprovalItem } from "@/app/api/approvals/_shared";
 
 const TYPE_VALUES = new Set(["all", "leave", "ot", "asset"]);
 
 // Combines OT, leave, and asset requests into a single
 // normalized, newest-first list. Used both as the central approvals queue
-// (supervisor/ceo, unscoped) and as "my requests across everything" (an
+// (permission-scoped company queues) and as "my requests across everything" (an
 // employee only ever sees their own rows here, same as every other list in
 // the app). Separate per-table queries, normalized and merged in
 // application code — no DB-level UNION.
@@ -29,12 +30,14 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid type");
   }
 
-  const scopedEmployeeId = user.role === "employee" ? user.employeeId : undefined;
+  const otEmployeeId = canViewCompanyOt(user.permissions) ? undefined : user.employeeId;
+  const leaveEmployeeId = canViewCompanyLeave(user.permissions) ? undefined : user.employeeId;
+  const assetEmployeeId = canManageAssets(user.permissions) ? undefined : user.employeeId;
 
   const entries: Array<{ item: ApprovalItem; createdAt: Date }> = [];
 
   if (typeParam === "all" || typeParam === "ot") {
-    const otConditions = scopedEmployeeId ? [eq(overtimeRequests.employeeId, scopedEmployeeId)] : [];
+    const otConditions = otEmployeeId ? [eq(overtimeRequests.employeeId, otEmployeeId)] : [];
     const otRows = await db
       .select({
         id: overtimeRequests.id,
@@ -43,6 +46,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
         employeeLastName: employees.lastName,
         startAt: overtimeRequests.startAt,
         endAt: overtimeRequests.endAt,
+        overtimeType: overtimeRequests.overtimeType,
         reason: overtimeRequests.reason,
         statusCode: overtimeRequests.statusCode,
         statusName: requestStatuses.name,
@@ -63,6 +67,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
           employeeId: row.employeeId,
           employeeName: `${row.employeeFirstName} ${row.employeeLastName}`.trim(),
           detail: formatOtDetail(row.startAt, row.endAt),
+          overtimeType: row.overtimeType === "holiday" ? "holiday" : row.overtimeType === "weekday" ? "weekday" : null,
           reason: row.reason,
           submittedAt: row.createdAt.toISOString(),
           statusCode: row.statusCode,
@@ -73,7 +78,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   }
 
   if (typeParam === "all" || typeParam === "leave") {
-    const leaveConditions = scopedEmployeeId ? [eq(leaveRequests.employeeId, scopedEmployeeId)] : [];
+    const leaveConditions = leaveEmployeeId ? [eq(leaveRequests.employeeId, leaveEmployeeId)] : [];
     const leaveRows = await db
       .select({
         id: leaveRequests.id,
@@ -115,7 +120,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 
   if (typeParam === "all" || typeParam === "asset") {
     const assetConditions = [isNull(assetRequests.deletedAt)];
-    if (scopedEmployeeId) assetConditions.push(eq(assetRequests.borrowerEmployeeId, scopedEmployeeId));
+    if (assetEmployeeId) assetConditions.push(eq(assetRequests.borrowerEmployeeId, assetEmployeeId));
     const assetRows = await db
       .select({
         id: assetRequests.id,

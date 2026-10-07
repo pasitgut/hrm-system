@@ -10,9 +10,11 @@ import { OtCalendarView } from "@/components/hrm/ot/OtCalendarView";
 import { OtListView } from "@/components/hrm/ot/OtListView";
 import { OtRequestPanel } from "@/components/hrm/ot/OtRequestPanel";
 import { OtSummaryView } from "@/components/hrm/ot/OtSummaryView";
+import { canViewCompanyOt } from "@/lib/auth/permissions";
 
 export default function OTModule() {
-  const { role } = useHrmRole();
+  const { permissions = [] } = useHrmRole();
+  const canViewTeam = canViewCompanyOt(permissions);
   const [addOpen, setAddOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -28,7 +30,7 @@ export default function OTModule() {
       <PageHeader
         eyebrow="การทำงาน · OT"
         title="การทำงานล่วงเวลา"
-        description={`ยื่นคำขอ OT ดูชั่วโมงที่ทำ และติดตามผลการพิจารณา${role === "supervisor" || role === "ceo" ? "ของทีม" : "ของคุณ"}`}
+        description={`ยื่นคำขอ OT ดูชั่วโมงที่ทำ และติดตามผลการพิจารณา${canViewTeam ? "ของทีม" : "ของคุณ"}`}
         actions={<Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอ OT</Button>}
       />
 
@@ -39,15 +41,16 @@ export default function OTModule() {
         </div>
       ) : null}
 
-      <section className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,0.95fr)]">
+      <section className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
         <OtCalendarView refreshKey={refreshKey} />
-        <OtRequestPanel refreshKey={refreshKey} role={role} onUpdated={() => announce("บันทึกผลการพิจารณาคำขอ OT แล้ว")} />
+        <OtRequestPanel refreshKey={refreshKey} permissions={permissions} onUpdated={() => announce("บันทึกผลการพิจารณาคำขอ OT แล้ว")} />
       </section>
 
       <section aria-labelledby="ot-summary-heading">
         <div className="mb-3">
           <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ภาพรวมชั่วโมงทำงาน</p>
           <h2 id="ot-summary-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สรุป OT</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">ดูชั่วโมงและยอด OT ที่อนุมัติตามงวดเงินเดือน 26–25</p>
         </div>
         <OtSummaryView refreshKey={refreshKey} />
       </section>

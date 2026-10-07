@@ -2,9 +2,9 @@ import { asc } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveTypes } from "@/lib/db/schema";
-import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, requireApiUser, withApiAuth } from "@/lib/auth/dal";
 
-// Read-only lookup endpoint: any authenticated role may list leave types
+// Read-only lookup endpoint: any authenticated account may list leave types
 // (needed for the leave request form and reports). Write access lives in
 // the settings module, added separately to this same file.
 
@@ -14,12 +14,9 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   return NextResponse.json({ items });
 });
 
-// --- Settings module: create (supervisor/ceo only). Edit/deactivate live in
-// ./[code]/route.ts (the PK is `code`, client-supplied, not an identity
-// column). Never a hard delete — leave_requests.leaveTypeCode references
-// this table, so deactivation only ever flips isActive. ---
-
-const CODE_PATTERN = /^[a-zA-Z0-9_-]+$/;
+// --- Settings module: create; the database assigns each code from a sequence.
+// Edits and deactivation live in ./[code]/route.ts. Never hard-delete a type
+// because leave requests reference its code. ---
 
 function jsonError(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
@@ -45,7 +42,7 @@ function invalidQuotaMessage(value: unknown): string | null {
 }
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  await requireApiPermission(request, "leave_types.manage");
 
   let body: unknown;
   try {
@@ -57,10 +54,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid request body");
   }
 
-  const { code, name, description, annualQuotaDays } = body as Record<string, unknown>;
-  if (typeof code !== "string" || !code.trim() || !CODE_PATTERN.test(code.trim())) {
-    return jsonError(400, "code is required and must contain only letters, numbers, - or _");
-  }
+  const { name, description, annualQuotaDays } = body as Record<string, unknown>;
   if (typeof name !== "string" || !name.trim()) {
     return jsonError(400, "name is required");
   }
@@ -74,7 +68,6 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     const [item] = await db
       .insert(leaveTypes)
       .values({
-        code: code.trim(),
         name: name.trim(),
         description: typeof description === "string" ? description.trim() || null : null,
         annualQuotaDays: (annualQuotaDays as number | null | undefined) ?? null,
@@ -83,7 +76,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       .returning();
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    if (isUniqueViolation(error)) return jsonError(409, "A leave type with this code or name already exists");
+    if (isUniqueViolation(error)) return jsonError(409, "A leave type with this name already exists");
     throw error;
   }
 });

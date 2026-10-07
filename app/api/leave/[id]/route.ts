@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canViewCompanyLeave } from "@/lib/auth/permissions";
 import { fetchLeaveItemById, jsonError, leaveDaySpan, leaveQuotaExceededMessage, parseLeaveInput } from "@/app/api/leave/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -13,7 +14,7 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
 
   const item = await fetchLeaveItemById(id);
   if (!item) return jsonError(404, "Not found");
-  if (user.role === "employee" && item.employeeId !== user.employeeId) {
+  if (!canViewCompanyLeave(user.permissions) && item.employeeId !== user.employeeId) {
     return jsonError(403, "Forbidden");
   }
 

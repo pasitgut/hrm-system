@@ -6,7 +6,7 @@ import "@testing-library/jest-dom/vitest";
 let mockRole = "supervisor";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
-  useHrmRole: () => ({ role: mockRole, employeeId: "emp-1", email: "user@peopleos.co" }),
+  useHrmRole: () => ({ role: mockRole, employeeId: "emp-1", email: "user@example.com" }),
 }));
 
 import EmployeeModule from "@/components/hrm/employees/EmployeeModule";

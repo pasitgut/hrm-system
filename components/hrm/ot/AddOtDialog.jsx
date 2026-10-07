@@ -6,10 +6,11 @@ import { RiInformationLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { DatePickerField } from "@/components/ui/date-picker-field";
+import { Select, SelectItem } from "@/components/ui/select";
 import { TimePicker } from "@/components/ui/time-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
-import { computeDurationHours, formatDuration } from "@/components/hrm/ot/otStatus";
+import { OT_DAY_TYPES, computeDurationHours, formatDuration } from "@/components/hrm/ot/otStatus";
 
 function defaultDate() {
   try {
@@ -31,6 +32,7 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
   const [date, setDate] = useState(defaultDate);
   const [startTime, setStartTime] = useState(DEFAULT_START_TIME);
   const [endTime, setEndTime] = useState(DEFAULT_END_TIME);
+  const [overtimeType, setOvertimeType] = useState("weekday");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -45,11 +47,13 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
       setDate(parseDate(editingItem.date));
       setStartTime(editingItem.startTime);
       setEndTime(editingItem.endTime);
+      setOvertimeType(editingItem.overtimeType || "weekday");
       setReason(editingItem.reason || "");
     } else {
       setDate(defaultDate());
       setStartTime(DEFAULT_START_TIME);
       setEndTime(DEFAULT_END_TIME);
+      setOvertimeType("weekday");
       setReason("");
     }
     setError("");
@@ -65,6 +69,7 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
     setDate(defaultDate());
     setStartTime(DEFAULT_START_TIME);
     setEndTime(DEFAULT_END_TIME);
+    setOvertimeType("weekday");
     setReason("");
     setError("");
   }
@@ -95,6 +100,7 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
           date: date.toString(),
           startTime,
           endTime,
+          overtimeType,
           reason: reason.trim(),
         }),
       });
@@ -143,6 +149,12 @@ export function AddOtDialog({ open, onClose, editingItem = null, onCreated = () 
           <DatePickerField label="วันที่ทำ OT" value={date} onChange={setDate} isRequired />
           <TimePicker label="เวลาที่เริ่ม" value={startTime} onChange={setStartTime} isRequired />
           <TimePicker label="เวลาที่สิ้นสุด" value={endTime} onChange={setEndTime} isRequired />
+        </div>
+        <div className="grid max-w-sm gap-1.5">
+          <span id="ot-day-type-label" className="text-sm font-medium leading-5 text-foreground">ประเภทวันสำหรับคิดเรท OT</span>
+          <Select aria-labelledby="ot-day-type-label" selectedKey={overtimeType} onSelectionChange={(key) => setOvertimeType(String(key))}>
+            {OT_DAY_TYPES.map((type) => <SelectItem key={type.key} id={type.key}>{type.label}</SelectItem>)}
+          </Select>
         </div>
         <div className="flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
           <div className="flex items-center gap-2">

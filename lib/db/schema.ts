@@ -58,8 +58,19 @@ export const requestStatuses = pgTable("request_statuses", {
   name: varchar("name", { length: 100 }).notNull().unique(),
 });
 
+export const otRateSettings = pgTable("ot_rate_settings", {
+  id: integer("id").primaryKey().default(1),
+  weekdayMultiplier: numeric("weekday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(1.5),
+  holidayMultiplier: numeric("holiday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(3),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("ot_rate_settings_single_row", sql`${t.id} = 1`),
+  check("ot_rate_settings_weekday_multiplier_valid", sql`${t.weekdayMultiplier} > 0 AND ${t.weekdayMultiplier} <= 10`),
+  check("ot_rate_settings_holiday_multiplier_valid", sql`${t.holidayMultiplier} > 0 AND ${t.holidayMultiplier} <= 10`),
+]);
+
 export const leaveTypes = pgTable("leave_types", {
-  code: varchar("code", { length: 30 }).primaryKey(),
+  code: varchar("code", { length: 30 }).primaryKey().default(sql`nextval('leave_type_code_seq')::text`),
   name: varchar("name", { length: 100 }).notNull().unique(),
   description: text("description"),
   // Annual entitlement in days; null = uncapped.
@@ -83,6 +94,10 @@ export const employees = pgTable(
     prefix: varchar("prefix", { length: 20 }),
     firstName: varchar("first_name", { length: 255 }).notNull(),
     lastName: varchar("last_name", { length: 255 }).notNull(),
+    baseSalary: numeric("base_salary", { precision: 12, scale: 2, mode: "number" }),
+    otWeekdayMultiplier: numeric("ot_weekday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(1.5),
+    otHolidayMultiplier: numeric("ot_holiday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(3),
+    workHoursPerDay: numeric("work_hours_per_day", { precision: 5, scale: 2, mode: "number" }).notNull().default(8),
     nickname: varchar("nickname", { length: 100 }),
     citizenId: varchar("citizen_id", { length: 20 }).unique(),
     firstNameEn: varchar("first_name_en", { length: 255 }),
@@ -148,6 +163,7 @@ export const overtimeRequests = pgTable(
     // start_at must be earlier than end_at (enforced in application code).
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    overtimeType: varchar("overtime_type", { length: 20 }),
     reason: text("reason").notNull(),
     statusCode: varchar("status_code", { length: 20 })
       .notNull()
@@ -219,6 +235,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   role: userRoleEnum("role").notNull().default("employee"),
+  permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

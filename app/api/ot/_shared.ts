@@ -47,6 +47,10 @@ export function isValidMonthStr(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
 
+export function isValidOvertimeType(value: unknown): value is "weekday" | "holiday" {
+  return value === "weekday" || value === "holiday";
+}
+
 // [start, end) bounds, expressed as UTC instants, for the given "YYYY-MM"
 // month as it is understood in Asia/Bangkok local time.
 export function monthRangeUtc(month: string): { start: Date; end: Date } {
@@ -55,6 +59,19 @@ export function monthRangeUtc(month: string): { start: Date; end: Date } {
   const nextY = m === 12 ? y + 1 : y;
   const nextM = m === 12 ? 1 : m + 1;
   const end = bangkokToUtcDate(`${String(nextY).padStart(4, "0")}-${String(nextM).padStart(2, "0")}-01`, "00:00");
+  return { start, end };
+}
+
+// Payroll periods are labeled by the month in which they end: for example,
+// 2026-09 covers 26 Aug through 25 Sep in Bangkok local time.
+export function payrollPeriodRangeUtc(period: string): { start: Date; end: Date } {
+  const [year, month] = period.split("-").map(Number);
+  const previousYear = month === 1 ? year - 1 : year;
+  const previousMonth = month === 1 ? 12 : month - 1;
+  const startMonth = String(previousMonth).padStart(2, "0");
+  const endMonth = String(month).padStart(2, "0");
+  const start = bangkokToUtcDate(String(previousYear).padStart(4, "0") + "-" + startMonth + "-26", "00:00");
+  const end = bangkokToUtcDate(String(year).padStart(4, "0") + "-" + endMonth + "-26", "00:00");
   return { start, end };
 }
 
@@ -75,6 +92,7 @@ export const otSelectColumns = {
   employeeCode: employees.code,
   startAt: overtimeRequests.startAt,
   endAt: overtimeRequests.endAt,
+  overtimeType: overtimeRequests.overtimeType,
   reason: overtimeRequests.reason,
   statusCode: overtimeRequests.statusCode,
   statusName: requestStatuses.name,
@@ -92,6 +110,7 @@ type OtRow = {
   employeeCode: string;
   startAt: Date;
   endAt: Date;
+  overtimeType: string | null;
   reason: string;
   statusCode: string;
   statusName: string;
@@ -114,6 +133,7 @@ export function toOtItemDto(row: OtRow) {
     date,
     startTime,
     endTime,
+    overtimeType: row.overtimeType,
     durationHours: durationHours(row.startAt, row.endAt),
     reason: row.reason,
     statusCode: row.statusCode,

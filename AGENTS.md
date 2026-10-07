@@ -8,7 +8,7 @@
 
 ## Product design system
 
-- `docs/DESIGN_SYSTEM.md` is the source of truth for PeopleOS UI/UX. Read it before changing a page or creating a new one.
+- `docs/DESIGN_SYSTEM.md` is the source of truth for HRM UI/UX. Read it before changing a page or creating a new one.
 - Use `styles/theme.css` semantic tokens and shared components from `components/ui/`; avoid route-specific palette literals and styling conventions.
 - Keep the interface white-first, compact, and data-led. Blue is for primary actions and selection; status colors follow the shared semantic mapping.
 - Compose pages with `components/hrm/PageHeader.jsx`, consistent section spacing, compact tables, and responsive controls. Preserve the existing dark theme through semantic tokens.

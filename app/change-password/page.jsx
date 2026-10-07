@@ -48,8 +48,8 @@ export default function ChangePasswordPage() {
     <main className="flex min-h-dvh items-center justify-center bg-background px-4 py-10">
       <section className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
         <div className="mb-6 text-center">
-          <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">P</span>
-          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">PeopleOS · ระบบงานบุคคล</p>
+          <span className="mx-auto mb-4 grid size-12 place-items-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">HRM</span>
+          <p className="text-xs font-medium uppercase tracking-[0.08em] text-muted-foreground">HRM</p>
           <h1 className="hrm-form-title mt-2">ตั้งรหัสผ่านใหม่</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">เพื่อความปลอดภัย กรุณาเปลี่ยนรหัสผ่านเริ่มต้นก่อนเริ่มใช้งาน</p>
         </div>

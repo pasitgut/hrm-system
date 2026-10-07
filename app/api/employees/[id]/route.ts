@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireApiRole, requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { canManageEmployeeCompensation } from "@/lib/auth/rolePermissionAccess";
 import {
   employeeLifecycleResponse,
   employeeExists,
@@ -14,18 +15,19 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 // Soft-deleted employees remain fetchable by id for profile history views.
 export const GET = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiUser(request);
+  const user = await requireApiUser(request);
   const { id } = await context.params;
   if (!isValidUuid(id)) return jsonError(404, "Not found");
 
-  const item = await fetchEmployeeItemById(id);
+  const item = await fetchEmployeeItemById(id, canManageEmployeeCompensation(user));
   if (!item) return jsonError(404, "Not found");
   return NextResponse.json({ item });
 });
 
 // PATCH is the HTTP adapter for the shared employee update operation.
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  const user = await requireApiUser(request);
+  if (!canManageEmployeeCompensation(user)) return jsonError(403, "Forbidden");
   const { id } = await context.params;
   if (!isValidUuid(id)) return jsonError(404, "Not found");
   if (!(await employeeExists(id))) return jsonError(404, "Not found");
@@ -42,7 +44,8 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 
 // DELETE offboards through the shared lifecycle operation.
 export const DELETE = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  await requireApiRole(request, "supervisor", "ceo");
+  const user = await requireApiUser(request);
+  if (!canManageEmployeeCompensation(user)) return jsonError(403, "Forbidden");
   const { id } = await context.params;
   if (!isValidUuid(id)) return jsonError(404, "Not found");
 

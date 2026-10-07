@@ -1,12 +1,12 @@
 import "@/styles/globals.css";
 import { eq } from "drizzle-orm";
 import HrmShell from "@/components/hrm/HrmShell";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getCurrentUser, getUserPermissions } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
 
 export const metadata = {
-  title: "PeopleOS | ระบบงานบุคคล",
+  title: "HRM",
   description: "ระบบ HRM สำหรับจัดการพนักงาน OT วันลา ทรัพย์สิน การอนุมัติ และรายงาน",
 };
 
@@ -16,6 +16,7 @@ export default async function RootLayout({ children }) {
   // proxy.ts already redirects every other unauthenticated route to /login
   // before this layout renders.
   const user = await getCurrentUser();
+  const permissions = user ? await getUserPermissions(user.sub) : [];
 
   let employeeName = null;
   let employeeCode = null;
@@ -34,7 +35,7 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="th" data-scroll-behavior="smooth">
       <body>
-        <HrmShell user={user} employeeName={employeeName} employeeCode={employeeCode}>
+        <HrmShell user={user} permissions={permissions} employeeName={employeeName} employeeCode={employeeCode}>
           {children}
         </HrmShell>
       </body>

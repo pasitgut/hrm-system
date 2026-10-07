@@ -2,19 +2,15 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveRequests } from "@/lib/db/schema";
-import { requireApiRole, withApiAuth } from "@/lib/auth/dal";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { fetchLeaveItemById, jsonError } from "@/app/api/leave/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 const DECISIONS = new Set(["approved", "rejected"]);
 
-// Gated the same way canApproveLeave(role) resolves (supervisor/ceo); using
-// requireApiRole with the literal role list directly here so there is a
-// single place (this call) that decides who may decide a leave request —
-// mirrors app/api/ot/[id]/decision/route.ts.
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
-  const user = await requireApiRole(request, "supervisor", "ceo");
+  const user = await requireApiPermission(request, "leave.approve");
   const { id } = await context.params;
 
   let body: unknown;

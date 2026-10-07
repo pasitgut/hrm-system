@@ -1,8 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { assetAgreementTemplateInputSchema } from "@/asset-borrowing/domain/agreementTemplate";
-import { jsonError, isManagerRole, requestId } from "@/app/api/asset-requests/_shared";
-import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { jsonError, requestId } from "@/app/api/asset-requests/_shared";
+import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates } from "@/lib/db/schema";
 
@@ -24,8 +24,7 @@ function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
 }
 
 async function authorized(request: NextRequest, id: string) {
-  const user = await requireApiUser(request);
-  if (!isManagerRole(user.role)) return { response: jsonError(403, "Only a supervisor or CEO can manage Agreements") } as const;
+  await requireApiPermission(request, "assets.manage");
   if (!requestId(id)) return { response: jsonError(400, "Invalid Agreement template id") } as const;
   const [template] = await db.select().from(assetAgreementTemplates).where(eq(assetAgreementTemplates.id, id));
   if (!template) return { response: jsonError(404, "Agreement template not found") } as const;

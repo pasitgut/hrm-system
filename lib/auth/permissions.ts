@@ -1,33 +1,69 @@
-import type { Role } from "@/lib/auth/session";
+export const PERMISSIONS = [
+  { key: "employees.manage", group: "พนักงาน", label: "จัดการพนักงาน", description: "เพิ่ม แก้ไข และจัดการข้อมูลพนักงาน" },
+  { key: "ot.approve", group: "OT", label: "อนุมัติ OT", description: "ตรวจสอบและอนุมัติคำขอ OT" },
+  { key: "ot.view_company", group: "OT", label: "ดู OT ของทุกคน", description: "ดูตารางและสรุป OT ระดับบริษัท" },
+  { key: "leave.approve", group: "วันลา", label: "อนุมัติวันลา", description: "ตรวจสอบและอนุมัติคำขอลา" },
+  { key: "leave.view_company", group: "วันลา", label: "ดูวันลาของทุกคน", description: "ดูคำขอและสรุปวันลาระดับบริษัท" },
+  { key: "leave_types.manage", group: "วันลา", label: "จัดการประเภทการลา", description: "เพิ่ม แก้ไข และปิดใช้ประเภทการลา" },
+  { key: "assets.manage", group: "ทรัพย์สิน", label: "จัดการทรัพย์สิน", description: "ดูและจัดการคำขอยืม รวมถึง Agreement" },
+  { key: "settings.manage", group: "ระบบ", label: "จัดการตั้งค่าระบบ", description: "จัดการแผนก ตำแหน่ง และข้อมูลหลักอื่น ๆ" },
+  { key: "users.permissions.manage", group: "ระบบ", label: "จัดการสิทธิ์ผู้ใช้", description: "กำหนดสิทธิ์การใช้งานให้บัญชีผู้ใช้" },
+] as const;
 
-// Single source of truth for role -> capability checks. supervisor and ceo
-// currently share identical OT permissions; kept as functions (not inlined
-// role-string comparisons) so a future split is a one-line change.
+export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
 
-export function canApproveOT(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function hasPermission(permissions: unknown, permission: PermissionKey): boolean {
+  return Array.isArray(permissions) && permissions.includes(permission);
 }
 
-export function canViewCompanyOt(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function hasAnyPermission(permissions: unknown, ...keys: PermissionKey[]): boolean {
+  return keys.some((key) => hasPermission(permissions, key));
 }
 
-export function canApproveLeave(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function canApproveOT(permissions: unknown): boolean {
+  return hasPermission(permissions, "ot.approve");
 }
 
-export function canApproveAssetLoan(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function canViewCompanyOt(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "ot.view_company", "ot.approve");
 }
 
-export function canManageEmployees(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function canApproveLeave(permissions: unknown): boolean {
+  return hasPermission(permissions, "leave.approve");
 }
 
-export function canManageAssets(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function canViewCompanyLeave(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "leave.view_company", "leave.approve");
 }
 
-export function canManageSettings(role: Role): boolean {
-  return role === "supervisor" || role === "ceo";
+export function canApproveAssetLoan(permissions: unknown): boolean {
+  return hasPermission(permissions, "assets.manage");
+}
+
+export function canManageEmployees(permissions: unknown): boolean {
+  return hasPermission(permissions, "employees.manage");
+}
+
+export function canManageAssets(permissions: unknown): boolean {
+  return hasPermission(permissions, "assets.manage");
+}
+
+export function canManageSettings(permissions: unknown): boolean {
+  return hasPermission(permissions, "settings.manage");
+}
+
+export function canManageLeaveTypes(permissions: unknown): boolean {
+  return hasPermission(permissions, "leave_types.manage");
+}
+
+export function canManageUserPermissions(permissions: unknown): boolean {
+  return hasPermission(permissions, "users.permissions.manage");
+}
+
+export function canOpenSettings(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "settings.manage", "leave_types.manage", "users.permissions.manage");
+}
+
+export function canApproveAnything(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "ot.approve", "leave.approve", "assets.manage");
 }
