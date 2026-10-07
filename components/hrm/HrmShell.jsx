@@ -8,6 +8,7 @@ import {
   RiDashboardLine,
   RiArchiveLine,
   RiFileChartLine,
+  RiFileTextLine,
   RiLogoutBoxRLine,
   RiMoneyDollarCircleLine,
   RiMoonLine,
@@ -23,7 +24,7 @@ import {
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
-import { canApproveAnything, canOpenSettings } from "@/lib/auth/permissions";
+import { canApproveAnything, canOpenSettings, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
 
 const RoleContext = createContext(null);
@@ -174,13 +175,17 @@ export default function HrmShell({ children, user = null, permissions = [], empl
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
         : pathname === "/assets" ? "assets"
-        : pathname === "/employees" ? "employees"
-          : pathname === "/approvals" ? "approvals"
-            : pathname === "/reports" ? "reports"
-              : pathname === "/settings" ? "settings"
-                : "overview";
+          : pathname === "/employees" ? "employees"
+          : pathname === "/documents" ? "documents"
+            : pathname === "/approvals" ? "approvals"
+              : pathname === "/reports" ? "reports"
+                : pathname === "/settings" ? "settings"
+                  : "overview";
   const groups = useMemo(() => {
     const nextGroups = baseGroups.map((group) => ({ ...group, items: [...group.items] }));
+    if (canViewEmployeeDocuments(permissions)) {
+      nextGroups[1].items.splice(1, 0, { key: "documents", label: "เอกสาร", icon: RiFileTextLine, href: "/documents" });
+    }
     if (canApproveAnything(permissions)) {
       nextGroups[1].items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
     }
