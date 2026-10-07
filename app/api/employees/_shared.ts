@@ -23,6 +23,7 @@ export const employeeSelectColumns = {
   otWeekdayMultiplier: employees.otWeekdayMultiplier,
   otHolidayMultiplier: employees.otHolidayMultiplier,
   workHoursPerDay: employees.workHoursPerDay,
+  weeklyHolidays: employees.weeklyHolidays,
   nickname: employees.nickname,
   citizenId: employees.citizenId,
   firstNameEn: employees.firstNameEn,
@@ -59,6 +60,7 @@ type EmployeeRow = {
   otWeekdayMultiplier: number;
   otHolidayMultiplier: number;
   workHoursPerDay: number;
+  weeklyHolidays: number[];
   nickname: string | null;
   citizenId: string | null;
   firstNameEn: string | null;
@@ -140,6 +142,7 @@ export function toEmployeeItemDto(row: EmployeeRow, includeCompensation = false)
       workHoursPerDay: row.workHoursPerDay,
     } : {}),
     nickname: row.nickname,
+    weeklyHolidays: row.weeklyHolidays,
     citizenId: row.citizenId,
     firstNameEn: row.firstNameEn,
     lastNameEn: row.lastNameEn,
@@ -214,6 +217,12 @@ export function isValidDateStr(value: unknown): value is string {
 
 export function isValidUuid(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
+function parseWeeklyHolidays(value: unknown): number[] | undefined {
+  if (!Array.isArray(value) || value.some((day) => !Number.isInteger(day) || day < 0 || day > 6)) return undefined;
+  if (new Set(value).size !== value.length) return undefined;
+  return [...value].sort((a, b) => a - b);
 }
 
 // Optional lookup ids are null/blank when a master item has been removed.
@@ -343,6 +352,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     otWeekdayMultiplier,
     otHolidayMultiplier,
     workHoursPerDay,
+    weeklyHolidays,
     startDate,
     endDate,
     departmentId,
@@ -377,10 +387,12 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
   const otWeekdayMultiplierValue = parseMultiplier(otWeekdayMultiplier, otRateDefaults.weekdayMultiplier);
   const otHolidayMultiplierValue = parseMultiplier(otHolidayMultiplier, otRateDefaults.holidayMultiplier);
   const workHoursPerDayValue = parseWorkHours(workHoursPerDay, 8);
+  const weeklyHolidaysValue = weeklyHolidays === undefined ? [] : parseWeeklyHolidays(weeklyHolidays);
   if (baseSalaryValue === undefined || (typeof baseSalaryValue === "number" && baseSalaryValue < 0)) return lifecycleFailure("invalid", "Invalid baseSalary");
   if (otWeekdayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid weekday OT multiplier");
   if (otHolidayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid holiday OT multiplier");
   if (workHoursPerDayValue === undefined) return lifecycleFailure("invalid", "Invalid work hours per day");
+  if (weeklyHolidaysValue === undefined) return lifecycleFailure("invalid", "weeklyHolidays must contain unique weekday numbers from 0 to 6");
   if (typeof codeInput !== "string" || !/^\d{4}$/.test(codeInput.trim())) {
     return lifecycleFailure("invalid", "code must be exactly 4 digits");
   }
@@ -412,6 +424,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     otWeekdayMultiplier: otWeekdayMultiplierValue,
     otHolidayMultiplier: otHolidayMultiplierValue,
     workHoursPerDay: workHoursPerDayValue,
+    weeklyHolidays: weeklyHolidaysValue,
     nickname: (nickname as string) || null,
     citizenId: (citizenId as string) || null,
     firstNameEn: (firstNameEn as string) || null,
@@ -490,6 +503,11 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
     const value = parseWorkHours(body.workHoursPerDay, 8);
     if (value === undefined) return lifecycleFailure("invalid", "Invalid work hours per day");
     values.workHoursPerDay = value;
+  }
+  if ("weeklyHolidays" in body) {
+    const value = parseWeeklyHolidays(body.weeklyHolidays);
+    if (value === undefined) return lifecycleFailure("invalid", "weeklyHolidays must contain unique weekday numbers from 0 to 6");
+    values.weeklyHolidays = value;
   }
   if ("firstName" in body) {
     if (typeof body.firstName !== "string" || !body.firstName.trim()) return lifecycleFailure("invalid", "firstName cannot be empty");

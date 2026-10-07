@@ -103,6 +103,7 @@ export const employees = pgTable(
     otWeekdayMultiplier: numeric("ot_weekday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(1.5),
     otHolidayMultiplier: numeric("ot_holiday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(3),
     workHoursPerDay: numeric("work_hours_per_day", { precision: 5, scale: 2, mode: "number" }).notNull().default(8),
+    weeklyHolidays: integer("weekly_holidays").array().notNull().default(sql`'{}'::integer[]`),
     nickname: varchar("nickname", { length: 100 }),
     citizenId: varchar("citizen_id", { length: 20 }).unique(),
     firstNameEn: varchar("first_name_en", { length: 255 }),
@@ -128,6 +129,7 @@ export const employees = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("employees_weekly_holidays_valid", sql`${t.weeklyHolidays} <@ ARRAY[0, 1, 2, 3, 4, 5, 6]::integer[]`),
     index("employees_department_id_idx").on(t.departmentId),
     index("employees_position_id_idx").on(t.positionId),
     index("employees_employment_status_id_idx").on(t.employmentStatusId),

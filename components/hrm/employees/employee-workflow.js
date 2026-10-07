@@ -17,6 +17,7 @@ function validateEmployeeForm(form, employee, canEditProfile, canEditCompensatio
     if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return "รูปแบบอีเมลไม่ถูกต้อง";
     if (!form.startDate) return "กรุณากรอกวันที่เริ่มงาน";
     if (employee && !employee.isActive && !form.endDate) return "กรุณาระบุวันที่สิ้นสุดการทำงาน";
+    if (!Array.isArray(form.weeklyHolidays) || form.weeklyHolidays.some((day) => !Number.isInteger(day) || day < 0 || day > 6) || new Set(form.weeklyHolidays).size !== form.weeklyHolidays.length) return "กรุณาเลือกวันหยุดประจำสัปดาห์ให้ถูกต้อง";
   }
   if (canEditCompensation) {
     if (form.baseSalary !== "" && (!Number.isFinite(Number(form.baseSalary)) || Number(form.baseSalary) < 0)) return "ฐานเงินเดือนต้องเป็นตัวเลขตั้งแต่ 0 บาทขึ้นไป";
@@ -48,6 +49,7 @@ function employeeRequestBody(form, employee, lookups, canEditProfile, canEditCom
     otWeekdayMultiplier: Number(form.otWeekdayMultiplier),
     otHolidayMultiplier: Number(form.otHolidayMultiplier),
     workHoursPerDay: Number(form.workHoursPerDay),
+    weeklyHolidays: [...form.weeklyHolidays],
     startDate: form.startDate,
     ...(employee ? { endDate: form.endDate || null } : {}),
     departmentId: form.departmentId ? Number(form.departmentId) : null,

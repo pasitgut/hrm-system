@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Chip } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Select, SelectItem } from "@/components/ui/select";
 import { useHrmRole } from "@/components/hrm/HrmShell";
@@ -74,7 +75,23 @@ const blankForm = {
   otWeekdayMultiplier: "1.5",
   otHolidayMultiplier: "3",
   workHoursPerDay: "8",
+  weeklyHolidays: [],
 };
+
+const WEEKLY_DAYS = [
+  { value: 1, label: "วันจันทร์" },
+  { value: 2, label: "วันอังคาร" },
+  { value: 3, label: "วันพุธ" },
+  { value: 4, label: "วันพฤหัสบดี" },
+  { value: 5, label: "วันศุกร์" },
+  { value: 6, label: "วันเสาร์" },
+  { value: 0, label: "วันอาทิตย์" },
+];
+
+function weeklyHolidayLabel(days) {
+  if (!Array.isArray(days) || days.length === 0) return "ยังไม่ได้กำหนด";
+  return WEEKLY_DAYS.filter((day) => days.includes(day.value)).map((day) => day.label).join(", ");
+}
 
 function todayStr(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -205,7 +222,6 @@ export default function EmployeeModule() {
   const canManageCompensation = canManageEmployeeCompensation({ permissions });
   const canViewCompensation = canViewEmployeeCompensation(permissions);
   const canEditEmployee = canUpdateProfile || canManageCompensation;
-  const canEditProfileForm = editing ? canUpdateProfile : canCreate;
   const canViewDocuments = canViewEmployeeDocuments(permissions);
   const canUploadDocuments = canUploadEmployeeDocuments(permissions);
   const canShareDocuments = canShareEmployeeDocuments(permissions);
@@ -228,6 +244,7 @@ export default function EmployeeModule() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const canEditProfileForm = editing ? canUpdateProfile : canCreate;
   const [form, setForm] = useState(blankForm);
   const [otRateDefaults, setOtRateDefaults] = useState({ weekdayMultiplier: "1.5", holidayMultiplier: "3" });
   const [otRateSettingsLoaded, setOtRateSettingsLoaded] = useState(false);
@@ -348,6 +365,16 @@ export default function EmployeeModule() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function toggleWeeklyHoliday(day) {
+    setForm((current) => {
+      const selectedDays = Array.isArray(current.weeklyHolidays) ? current.weeklyHolidays : [];
+      const weeklyHolidays = selectedDays.includes(day)
+        ? selectedDays.filter((value) => value !== day)
+        : [...selectedDays, day];
+      return { ...current, weeklyHolidays };
+    });
+  }
+
   async function openAdd() {
     let defaults = otRateDefaults;
     if (!otRateSettingsLoaded) {
@@ -392,6 +419,7 @@ export default function EmployeeModule() {
       otWeekdayMultiplier: String(employee.otWeekdayMultiplier ?? 1.5),
       otHolidayMultiplier: String(employee.otHolidayMultiplier ?? 3),
       workHoursPerDay: String(employee.workHoursPerDay ?? 8),
+      weeklyHolidays: Array.isArray(employee.weeklyHolidays) ? [...employee.weeklyHolidays] : [],
       departmentId: employee.department ? String(employee.department.id) : "",
       positionId: employee.position ? String(employee.position.id) : "",
       employmentTypeId: employee.employmentType ? String(employee.employmentType.id) : "",
@@ -688,6 +716,34 @@ export default function EmployeeModule() {
           </SelectField>
           <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
           {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
+          <fieldset className="sm:col-span-2 min-w-0">
+            <legend className="text-sm font-medium text-foreground">วันหยุดประจำสัปดาห์</legend>
+            <p id="employee-weekly-holidays-help" className="mt-1 text-xs leading-5 text-muted-foreground">เลือกได้มากกว่าหนึ่งวัน หากยังไม่กำหนดให้เว้นว่าง</p>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {WEEKLY_DAYS.map((day) => {
+                const isSelected = Array.isArray(form.weeklyHolidays) && form.weeklyHolidays.includes(day.value);
+                const checkboxId = `employee-weekly-holiday-${day.value}`;
+                return (
+                  <label
+                    key={day.value}
+                    htmlFor={checkboxId}
+                    className={cn(
+                      "flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-ring",
+                      isSelected ? "border-primary bg-primary/5 text-foreground" : "border-border bg-background text-foreground hover:bg-muted",
+                    )}
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      isSelected={isSelected}
+                      onChange={() => toggleWeeklyHoliday(day.value)}
+                      aria-describedby="employee-weekly-holidays-help"
+                    />
+                    <span>{day.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
             </>
           ) : (
             <p className="sm:col-span-2 text-sm text-muted-foreground">บัญชีนี้จัดการได้เฉพาะข้อมูลค่าตอบแทนของพนักงาน</p>
@@ -766,6 +822,7 @@ export default function EmployeeModule() {
               <div><dt className="text-xs text-muted-foreground">ตำแหน่ง</dt><dd className="mt-1 text-sm text-foreground">{selected.position?.name || "-"}</dd></div>
               <div><dt className="text-xs text-muted-foreground">ประเภทการจ้าง</dt><dd className="mt-1 text-sm text-foreground">{selected.employmentType?.name || "-"}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันที่เริ่มงาน</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.startDate)}</dd></div>
+              <div><dt className="text-xs text-muted-foreground">วันหยุดประจำสัปดาห์</dt><dd className="mt-1 text-sm text-foreground">{weeklyHolidayLabel(selected.weeklyHolidays)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">อายุงาน</dt><dd className="mt-1 text-sm tabular-nums text-foreground">{formatEmploymentTenure(selected, tenureAsOf)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันที่สิ้นสุดงาน</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.endDate)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">วันเกิด</dt><dd className="mt-1 text-sm text-foreground">{formatThaiDate(selected.birthDate)}</dd></div>

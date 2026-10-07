@@ -113,6 +113,13 @@
       "when": 1791590400000,
       "tag": "0015_employee_documents_drive_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0016_employee_weekly_holidays",
+      "breakpoints": true
     }
   ]
 }
