@@ -1,6 +1,10 @@
 # Leave report PDFs
 
-Leave reports use approved leave requests from the application database and render on the server as A4 PDFs with the local Noto Sans Thai fonts. The existing Reports page layout, period controls, scope radios, sorting controls, annual switches, and PDF button are preserved. The Leave tab sends the selected settings to `/api/reports/leave`.
+Leave reports use approved leave requests from the application database and render on the server as A4 PDFs with embedded TH Sarabun New fonts (`public/THSarabunNew.ttf` and `public/THSarabunNew-Bold.ttf`). The existing Reports page layout, period controls, scope radios, sorting controls, annual switches, and PDF button are preserved. The Leave tab sends the selected settings to `/api/reports/leave`.
+
+## Printed layout
+
+PDF pages follow the legacy report format: timestamp at the top left, company centered, page number at the top right, no footer, 20 pt left/right/bottom margins, 12 pt summary table text, dark slate header rows, and thin gray grid lines. Summary columns wrap long type labels while keeping totals readable; detail pages repeat the employee identity and table headings. The company monthly summary was compared with the supplied reference, and the October 2026 live PDF was visually checked.
 
 ## Report contents and calculations
 
@@ -46,6 +50,6 @@ The live smoke only runs `SELECT` queries and closes its database connection. Do
 
 ## Verification record
 
-- `npx tsc --noEmit --incremental false` passes. The six targeted leave test files pass (16 tests); the six OT regression files also pass (20 tests) after the shared renderer change.
-- All 12 leave variants and the long-reason fixture were rendered. pypdf extracted text from every page; no blank pages were found, and sentinel `LEAVEEND7A3C` survives extraction from the three-page long-reason PDF. pypdfium2 renders were visually inspected for the monthly company table, extra-type annual columns, annual month pages, employee identity on detailed continuation pages, and long-reason overflow.
-- The read-only October 2026 application database smoke returned 1 employee and 1 approved request. Totals were sick 0 days, personal 0 days, birthday 1 day, total 1 day. The generated `%PDF-` file is 14,979 bytes at `output/pdf/leave-reports/leave-monthly-2026-10.pdf`; the script performed zero database writes. The parent also inspected this one-page PDF against the supplied reference.
+- `npx tsc --noEmit --incremental false` passed after the formatting revision. No unit tests were run for this format-only pass.
+- Generated 13 fixture PDFs (12 variants and 1 long-reason stress file), totaling 146 A4 pages. pypdf found text on every page and no blank pages; `LEAVEEND7A3C` survives extraction from the five-page stress PDF. pypdfium2 renders were inspected for the company summary, individual summary/detail, annual month columns, annual month pages, the long-reason overflow, and live October output.
+- The read-only October 2026 application database smoke returned 1 employee and 1 approved request: sick 0 days, personal 0 days, birthday 1 day, total 1 day. The generated `%PDF-` file is 69,987 bytes at `output/pdf/leave-reports/leave-monthly-2026-10.pdf`; the script performed zero database writes. The parent also checked this one-page PDF against the supplied reference.

@@ -1,11 +1,9 @@
 import {
   bangkokParts,
-  formatBangkokDate,
   formatOtHours,
   THAI_MONTHS,
   type OtReportEmployeeModel,
   type OtReportModel,
-  type OtReportMonth,
   type OtReportRequest,
   type OtReportTotals,
 } from "./model";
@@ -18,12 +16,9 @@ export type OtReportDocument = {
   sortRules: readonly OtReportSortRule[];
 };
 
-export type OtReportMarkup = {
-  html: string;
-  headerTemplate: string;
-  footerTemplate: string;
-};
+export type OtReportMarkup = { html: string; headerTemplate: string; footerTemplate: string };
 
+const CONTENT_WIDTH_PT = 555.28;
 const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
 }[char]!));
@@ -33,335 +28,312 @@ function localDateLabel(value: string) {
   return `${day} ${THAI_MONTHS[month - 1]} ${year}`;
 }
 
-function prettyGeneratedAt(value: string) {
-  const date = new Date(value);
-  const part = bangkokParts(date);
-  return `${formatBangkokDate(date)} ${String(part.hour).padStart(2, "0")}:${String(part.minute).padStart(2, "0")}`;
+function shortDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 }
 
-function totalsCells(totals: OtReportTotals) {
-  return `<td class="numeric">${formatOtHours(totals.weekdayMs)}</td>
-    <td class="numeric">${formatOtHours(totals.holidayMs)}</td>
-    <td class="numeric">${formatOtHours(totals.unknownMs)}</td>
-    <td class="numeric total">${formatOtHours(totals.totalMs)}</td>`;
+function generatedAtLabel(value: string) {
+  const part = bangkokParts(new Date(value));
+  const day = String(part.day).padStart(2, "0");
+  const month = String(part.month).padStart(2, "0");
+  return `ข้อมูล ณ วันที่: ${day}/${month}/${part.year} ${String(part.hour).padStart(2, "0")}:${String(part.minute).padStart(2, "0")}`;
 }
 
-function totalsSummary(totals: OtReportTotals, label = "รวม OT ที่อนุมัติ") {
-  return `<div class="totals-strip"><span>${escapeHtml(label)}</span>
-    <span>${escapeHtml(OT_REPORT_LABELS.weekdays)} <b>${formatOtHours(totals.weekdayMs)}</b> ชม.</span>
-    <span>${escapeHtml(OT_REPORT_LABELS.holidays)} <b>${formatOtHours(totals.holidayMs)}</b> ชม.</span>
-    <span>${escapeHtml(OT_REPORT_LABELS.unknown)} <b>${formatOtHours(totals.unknownMs)}</b> ชม.</span>
-    <span class="total">${escapeHtml(OT_REPORT_LABELS.total)} <b>${formatOtHours(totals.totalMs)}</b> ชม.</span>
-  </div>`;
-}
-
-function employeeInfo(employee: OtReportEmployeeModel) {
-  return `<div class="employee-meta"><strong>${escapeHtml(employee.name)}</strong>
-    <span>รหัส ${escapeHtml(employee.employee.code)}</span>
-    <span>${escapeHtml(employee.employee.departmentName || "ไม่ระบุแผนก")}</span>
-    <span>${escapeHtml(employee.employee.positionName || "ไม่ระบุตำแหน่ง")}</span></div>`;
-}
-
-function employeeSummaryTable(employees: OtReportEmployeeModel[], title?: string) {
-  const rows = employees.map((entry) => `<tr>
-    <td class="code">${escapeHtml(entry.employee.code)}</td>
-    <td>${escapeHtml(entry.name)}</td>
-    ${totalsCells(entry.totals)}
-  </tr>`).join("");
-  return `${title ? `<h3 class="group-title">${escapeHtml(title)}</h3>` : ""}
-    <table class="summary-table">
-      <thead><tr><th class="code">รหัสพนักงาน</th><th>ชื่อ - สกุล</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.weekdays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.holidays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.unknown)} (ชม.)</th><th class="numeric">รวม (ชม.)</th></tr></thead>
-      <tbody>${rows || `<tr><td class="empty" colspan="6">ไม่มีพนักงานในช่วงเวลานี้</td></tr>`}</tbody>
-    </table>`;
-}
-
-function departmentSections(employees: OtReportEmployeeModel[]) {
-  if (!employees.length) return employeeSummaryTable([], "ไม่มีพนักงานในช่วงเวลานี้");
-  const groups = new Map<string, OtReportEmployeeModel[]>();
-  for (const employee of employees) {
-    const name = employee.employee.departmentName || "ไม่ระบุแผนก";
-    groups.set(name, [...(groups.get(name) ?? []), employee]);
+function reportTitle(variant: OtReportVariant, model: OtReportModel) {
+  if (variant === "yearly-all-month-columns" || variant === "yearly-individual-month-columns" || variant === "yearly-individual-month-columns-detail") {
+    return `รายงานโอทีรายปี ${model.year}`;
   }
-  return [...groups.entries()]
-    .sort(([a], [b]) => a.localeCompare(b, "th", { sensitivity: "base" }))
-    .map(([department, group]) => employeeSummaryTable(group, `แผนก: ${department}`))
-    .join("");
+  if (variant.startsWith("monthly")) {
+    return `รายงานโอที (เดือน ${THAI_MONTHS[(model.month ?? 1) - 1]} ${model.year})`;
+  }
+  return `รายงานโอที (ปี ${model.year})`;
 }
 
-function monthEmployeeSummaryTable(employees: OtReportEmployeeModel[], month: OtReportMonth, title?: string) {
+function periodLabel(model: OtReportModel) {
+  return `ตั้งแต่ วันที่ ${localDateLabel(model.periodStart)} ถึง วันที่ ${localDateLabel(model.periodEnd)}`;
+}
+
+function mainHeading(title: string, range: string, compact = false) {
+  return `<div class="document-heading ${compact ? "compact" : ""}"><h1>${escapeHtml(title)}</h1><p class="period">${escapeHtml(range)}</p></div>`;
+}
+
+function titleOnlyHeading(title: string) {
+  return `<div class="document-heading title-only"><h1>${escapeHtml(title)}</h1></div>`;
+}
+
+function employeeLabel(employee: OtReportEmployeeModel) {
+  return `${employee.name} - ${employee.employee.positionName || "ไม่ระบุตำแหน่ง"} - ${employee.employee.departmentName || "ไม่ระบุแผนก"}`;
+}
+
+function totalCells(totals: OtReportTotals, includeUnknown: boolean) {
+  const fields = [totals.weekdayMs, totals.holidayMs, ...(includeUnknown ? [totals.unknownMs] : []), totals.totalMs];
+  return fields.map((duration, index) => {
+    const total = index === fields.length - 1;
+    return `<td class="numeric ${total ? "total" : ""}">${total || duration > 0 ? formatOtHours(duration) : ""}</td>`;
+  }).join("");
+}
+
+function emptyTotals(): OtReportTotals {
+  return { weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0 };
+}
+
+function summaryTable(
+  employees: OtReportEmployeeModel[],
+  options: { includeUnknown: boolean; year: number; displayMonth?: number; totalsMonth?: number; emptyLabel?: string },
+) {
+  const includeMonth = options.displayMonth !== undefined;
+  const metricCount = options.includeUnknown ? 4 : 3;
+  const monthWidth = includeMonth ? 50 : 0;
+  const codeWidth = 60;
+  const metricWidth = 70;
+  const nameWidth = CONTENT_WIDTH_PT - monthWidth - codeWidth - metricCount * metricWidth;
+  const cols = [
+    ...(includeMonth ? [`<col style="width:${monthWidth}pt">`] : []),
+    `<col style="width:${codeWidth}pt"><col style="width:${nameWidth.toFixed(2)}pt">`,
+    ...Array.from({ length: metricCount }, () => `<col style="width:${metricWidth}pt">`),
+  ].join("");
   const rows = employees.map((entry) => {
-    const totals = entry.months.find((item) => item.month === month.month)?.totals ?? {
-      weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0,
-    };
-    return `<tr><td class="code">${escapeHtml(entry.employee.code)}</td><td>${escapeHtml(entry.name)}</td>${totalsCells(totals)}</tr>`;
+    const monthData = options.totalsMonth === undefined ? undefined : entry.months.find((item) => item.month === options.totalsMonth);
+    const totals = monthData?.totals ?? (options.totalsMonth === undefined ? entry.totals : emptyTotals());
+    return `<tr>${includeMonth ? `<td class="month-cell">${escapeHtml(THAI_MONTHS[options.displayMonth! - 1])} ${options.year}</td>` : ""}<td class="code">${escapeHtml(entry.employee.code)}</td><td class="name">${escapeHtml(entry.name)}</td>${totalCells(totals, options.includeUnknown)}</tr>`;
   }).join("");
-  return `${title ? `<h3 class="group-title">${escapeHtml(title)}</h3>` : ""}
-    <table class="summary-table">
-      <thead><tr><th class="code">รหัสพนักงาน</th><th>ชื่อ - สกุล</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.weekdays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.holidays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.unknown)} (ชม.)</th><th class="numeric">รวม (ชม.)</th></tr></thead>
-      <tbody>${rows || `<tr><td class="empty" colspan="6">ไม่มีพนักงานในช่วงเวลานี้</td></tr>`}</tbody>
-    </table>`;
+  const emptyCells = (includeMonth ? 1 : 0) + 2 + metricCount;
+  const heading = [
+    ...(includeMonth ? ["เดือน"] : []),
+    "รหัสพนักงาน", "ชื่อ - สกุล",
+    `${OT_REPORT_LABELS.weekdays} (ชม.)`, `${OT_REPORT_LABELS.holidays} (ชม.)`,
+    ...(options.includeUnknown ? [`${OT_REPORT_LABELS.unknown} (ชม.)`] : []),
+    "รวม (ชม.)",
+  ];
+  return `<table class="summary-table"><colgroup>${cols}</colgroup>
+    <thead><tr>${heading.map((label, index) => `<th class="${index >= heading.length - metricCount ? "numeric" : ""}">${escapeHtml(label)}</th>`).join("")}</tr></thead>
+    <tbody>${rows || `<tr><td class="empty" colspan="${emptyCells}">${escapeHtml(options.emptyLabel ?? "ไม่มีพนักงานในช่วงเวลานี้")}</td></tr>`}</tbody>
+  </table>`;
 }
 
-function departmentMonthSections(employees: OtReportEmployeeModel[], month: OtReportMonth) {
-  if (!employees.length) return monthEmployeeSummaryTable([], month, "ไม่มีพนักงานในช่วงเวลานี้");
+function departmentSections(
+  employees: OtReportEmployeeModel[],
+  includeUnknown: boolean,
+  options: { year: number; displayMonth?: number; totalsMonth?: number },
+) {
   const groups = new Map<string, OtReportEmployeeModel[]>();
   for (const employee of employees) {
-    const name = employee.employee.departmentName || "ไม่ระบุแผนก";
-    groups.set(name, [...(groups.get(name) ?? []), employee]);
+    const department = employee.employee.departmentName || "ไม่ระบุแผนก";
+    groups.set(department, [...(groups.get(department) ?? []), employee]);
+  }
+  if (!groups.size) {
+    return `<section class="department">${summaryTable([], { includeUnknown, ...options })}</section>`;
   }
   return [...groups.entries()]
     .sort(([a], [b]) => a.localeCompare(b, "th", { sensitivity: "base" }))
-    .map(([department, group]) => monthEmployeeSummaryTable(group, month, `แผนก: ${department}`))
+    .map(([department, group]) => `<section class="department"><h2 class="group-title">แผนก: ${escapeHtml(department)}</h2>${summaryTable(group, { includeUnknown, ...options })}</section>`)
     .join("");
 }
 
-function monthlyTotals(employees: OtReportEmployeeModel[], monthNumber: number): OtReportTotals {
-  const totals: OtReportTotals = { weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0 };
-  for (const employee of employees) {
-    const source = employee.months.find((item) => item.month === monthNumber)?.totals;
-    if (!source) continue;
-    totals.weekdayMs += source.weekdayMs;
-    totals.holidayMs += source.holidayMs;
-    totals.unknownMs += source.unknownMs;
-    totals.totalMs += source.totalMs;
-    totals.requestCount += source.requestCount;
-  }
-  return totals;
-}
-
-function monthColumnTable(employees: OtReportEmployeeModel[], year: number) {
-  const months = employees[0]?.months ?? THAI_MONTHS.map((label, index) => ({
-    month: index + 1, label,
-    totals: { weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0 },
-    requests: [],
-  }));
-  const rows = months.flatMap((month) => employees.length
-    ? employees.map((employee) => {
-      const totals = employee.months.find((item) => item.month === month.month)?.totals ?? {
-        weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0,
-      };
-      return `<tr><td>${escapeHtml(month.label)} ${year}</td>
-        <td class="code">${escapeHtml(employee.employee.code)}</td><td>${escapeHtml(employee.name)}</td>
-        <td class="numeric">${formatOtHours(totals.weekdayMs)}</td><td class="numeric">${formatOtHours(totals.holidayMs)}</td><td class="numeric">${formatOtHours(totals.unknownMs)}</td><td class="numeric total">${formatOtHours(totals.totalMs)}</td>
-      </tr>`;
+function monthColumnsTable(employees: OtReportEmployeeModel[], year: number, includeUnknown: boolean, showRepeatedMonth = false) {
+  const metricCount = includeUnknown ? 4 : 3;
+  const fixedMonth = 50;
+  const fixedCode = 60;
+  const fixedMetrics = metricCount * 70;
+  const name = CONTENT_WIDTH_PT - fixedMonth - fixedCode - fixedMetrics;
+  const cols = `<col style="width:${fixedMonth}pt"><col style="width:${fixedCode}pt"><col style="width:${name.toFixed(2)}pt">${Array.from({ length: metricCount }, () => `<col style="width:70pt">`).join("")}`;
+  const rows = THAI_MONTHS.flatMap((label, index) => employees.length
+    ? employees.map((employee, employeeIndex) => {
+      const totals = employee.months.find((item) => item.month === index + 1)?.totals ?? emptyTotals();
+      const monthCell = showRepeatedMonth || employeeIndex === 0 ? `${label} ${year}` : "";
+      return `<tr><td class="month-cell">${escapeHtml(monthCell)}</td><td class="code">${escapeHtml(employee.employee.code)}</td><td class="name">${escapeHtml(employee.name)}</td>${totalCells(totals, includeUnknown)}</tr>`;
     })
-    : [`<tr><td>${escapeHtml(month.label)} ${year}</td><td>—</td><td>ไม่มีพนักงาน</td><td class="numeric">0.0</td><td class="numeric">0.0</td><td class="numeric">0.0</td><td class="numeric total">0.0</td></tr>`]).join("");
-  return `<table class="month-columns-table">
-    <thead><tr><th>เดือน</th><th class="code">รหัส</th><th>ชื่อ - สกุล</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.weekdays)}</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.holidays)}</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.unknown)}</th><th class="numeric">รวม (ชม.)</th></tr></thead>
-    <tbody>${rows || `<tr><td class="empty" colspan="7">ไม่มีพนักงานในช่วงเวลานี้</td></tr>`}</tbody>
+    : [`<tr><td class="month-cell">${escapeHtml(`${label} ${year}`)}</td><td></td><td class="name">ไม่มีพนักงานในช่วงเวลานี้</td>${totalCells(emptyTotals(), includeUnknown)}</tr>`]).join("");
+  const headings = ["เดือน", "รหัสพนักงาน", "ชื่อ - สกุล", `${OT_REPORT_LABELS.weekdays} (ชม.)`, `${OT_REPORT_LABELS.holidays} (ชม.)`,
+    ...(includeUnknown ? [`${OT_REPORT_LABELS.unknown} (ชม.)`] : []), "รวม (ชม.)"];
+  const colSpan = 3 + metricCount;
+  return `<table class="month-columns-table"><colgroup>${cols}</colgroup>
+    <thead><tr>${headings.map((label, index) => `<th class="${index >= headings.length - metricCount ? "numeric" : ""}">${escapeHtml(label)}</th>`).join("")}</tr></thead>
+    <tbody>${rows || `<tr><td class="empty" colspan="${colSpan}">ไม่มีพนักงานในช่วงเวลานี้</td></tr>`}</tbody>
   </table>`;
 }
 
-function individualMonthColumnTable(employee: OtReportEmployeeModel, year: number) {
-  const rows = employee.months.map((month) => `<tr>
-    <td>${escapeHtml(month.label)} ${year}</td>${totalsCells(month.totals)}
-  </tr>`).join("");
-  return `<table class="summary-table">
-    <thead><tr><th>เดือน</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.weekdays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.holidays)} (ชม.)</th><th class="numeric">${escapeHtml(OT_REPORT_LABELS.unknown)} (ชม.)</th><th class="numeric">รวม (ชม.)</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+function localDateTimeLabel(request: OtReportRequest) {
+  return request.startDate === request.endDate
+    ? shortDate(request.startDate)
+    : `${shortDate(request.startDate)} - ${shortDate(request.endDate)}`;
 }
 
-function requestRows(requests: OtReportRequest[], withMonth: boolean) {
+function documentHeaderRows(report: OtReportDocument, employee: OtReportEmployeeModel, colSpan: number, monthLabel?: string) {
+  const title = report.variant === "monthly-individual-detail" || report.variant.endsWith("detail")
+    ? "รายงานโอที"
+    : reportTitle(report.variant, report.model);
+  const yearRange = periodLabel(report.model);
+  return `<tr class="doc-title-row"><th colspan="${colSpan}"><h1>${escapeHtml(title)}</h1></th></tr>
+    <tr class="doc-period-row"><th colspan="${colSpan}"><p>${escapeHtml(yearRange)}</p></th></tr>
+    ${monthLabel ? `<tr class="month-label-row"><th colspan="${colSpan}">${escapeHtml(monthLabel)}</th></tr>` : ""}
+    <tr class="employee-heading-row"><th colspan="${colSpan}">${escapeHtml(employeeLabel(employee))}</th></tr>
+    <tr class="employee-divider-row"><th colspan="${colSpan}"></th></tr>
+    <tr class="detail-spacer-row"><th colspan="${colSpan}"></th></tr>`;
+}
+
+function detailColumnGroup() {
+  return `<colgroup><col style="width:50pt"><col style="width:55pt"><col style="width:40pt"><col style="width:40pt"><col style="width:35pt"><col style="width:40pt"><col style="width:40pt"><col style="width:35pt"><col style="width:170.28pt"><col style="width:50pt"></colgroup>`;
+}
+
+function detailHeading(report: OtReportDocument, employee: OtReportEmployeeModel, columns: number, monthLabel?: string) {
+  return documentHeaderRows(report, employee, columns, monthLabel);
+}
+
+function detailedTotalsTable(totals: OtReportTotals, includeUnknown: boolean) {
+  const rows: [string, number][] = [
+    ["รวมโอทีวันทำงาน", totals.weekdayMs],
+    ["รวมโอทีวันหยุด", totals.holidayMs],
+    ...(includeUnknown ? [["รวมโอทีไม่ระบุประเภท", totals.unknownMs] as [string, number]] : []),
+    ["รวมโอทีทั้งหมด", totals.totalMs],
+  ];
+  return `<table class="detail-totals"><colgroup><col style="width:200pt"><col style="width:100pt"></colgroup><tbody>${rows.map(([label, value], index) => {
+    const total = index === rows.length - 1;
+    return `<tr class="${total ? "grand-total" : ""}"><td>${escapeHtml(label)}</td><td class="numeric">${formatOtHours(value)} ชม.</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+
+function detailRows(requests: OtReportRequest[]) {
   return requests.map((request) => {
-    const month = withMonth ? `<td class="month-cell">${escapeHtml(THAI_MONTHS[request.month - 1])}</td>` : "";
-    const date = request.endDate !== request.startDate
-      ? `${localDateLabel(request.startDate)} - ${localDateLabel(request.endDate)}`
-      : localDateLabel(request.startDate);
-    const time = request.endDate !== request.startDate
-      ? `${request.startTime} - ${localDateLabel(request.endDate)} ${request.endTime}`
-      : `${request.startTime} - ${request.endTime}`;
-    const type = request.overtimeType === "weekday" ? OT_REPORT_LABELS.weekdays
-      : request.overtimeType === "holiday" ? OT_REPORT_LABELS.holidays : OT_REPORT_LABELS.unknown;
-    const typeClass = request.overtimeType === "unknown" ? "type-unknown" : "";
-    return `<tr class="detail-row">${month}<td class="date-cell">${escapeHtml(date)}</td><td class="time-cell">${escapeHtml(time)}</td><td class="${typeClass}">${escapeHtml(type)}</td><td class="numeric">${formatOtHours(request.durationMs)}</td><td class="reason">${escapeHtml(request.reason)}</td></tr>`;
+    const month = THAI_MONTHS[request.month - 1];
+    const date = localDateTimeLabel(request);
+    const work = request.overtimeType === "weekday";
+    const holiday = request.overtimeType === "holiday";
+    return `<tr class="detail-row"><td class="center month-cell">${escapeHtml(month)}</td>
+      <td class="center date-cell">${escapeHtml(date)}</td>
+      <td class="center">${work ? escapeHtml(request.startTime) : ""}</td>
+      <td class="center">${work ? escapeHtml(request.endTime) : ""}</td>
+      <td class="numeric">${work ? formatOtHours(request.durationMs) : ""}</td>
+      <td class="center">${holiday ? escapeHtml(request.startTime) : ""}</td>
+      <td class="center">${holiday ? escapeHtml(request.endTime) : ""}</td>
+      <td class="numeric">${holiday ? formatOtHours(request.durationMs) : ""}</td>
+      <td class="reason">${escapeHtml(request.reason)}</td><td class="center">อนุมัติแล้ว</td></tr>`;
   }).join("");
 }
 
-function detailTable(requests: OtReportRequest[], employee: OtReportEmployeeModel, withMonth = false) {
-  const rows = requestRows(requests, withMonth);
-  const colspan = withMonth ? 6 : 5;
-  const monthHeader = withMonth ? "<th class=\"month-cell\">เดือน</th>" : "";
-  const widths = withMonth ? ["12%", "16%", "17%", "13%", "12%", "30%"] : ["17%", "18%", "13%", "12%", "40%"];
-  const columns = `<colgroup>${widths.map((width) => `<col style="width:${width}">`).join("")}</colgroup>`;
-  return `<table class="detail-table ${withMonth ? "with-month" : ""}">
-    ${columns}
-    <thead><tr class="repeat-employee"><th colspan="${colspan}">${escapeHtml(employee.employee.code)} · ${escapeHtml(employee.name)}</th></tr>
-      <tr>${monthHeader}<th>วันที่</th><th>เวลา OT</th><th>ประเภท</th><th class="numeric">ชั่วโมง</th><th>งานที่ทำ / เหตุผล</th></tr></thead>
-    <tbody>${rows || `<tr><td class="empty" colspan="${colspan}">ไม่มีรายการ OT ที่อนุมัติในช่วงนี้</td></tr>`}</tbody>
+function knownDetailTable(
+  report: OtReportDocument,
+  employee: OtReportEmployeeModel,
+  requests: OtReportRequest[],
+  totals: OtReportTotals,
+  includeTotals: boolean,
+  monthLabel?: string,
+) {
+  const known = requests.filter((request) => request.overtimeType !== "unknown");
+  const emptyRow = `<tr><td class="empty" colspan="10">ไม่มีรายการ OT ที่อนุมัติในช่วงนี้</td></tr>`;
+  return `<table class="detail-table">${detailColumnGroup()}<thead>${detailHeading(report, employee, 10, monthLabel)}
+      <tr class="detail-groups"><th></th><th></th><th></th><th>วันทำงาน</th><th></th><th></th><th>วันหยุด</th><th></th><th></th><th></th></tr>
+      <tr class="detail-labels"><th>เดือน</th><th>วันที่</th><th>เริ่ม</th><th>ถึง</th><th>ชม.</th><th>เริ่ม</th><th>ถึง</th><th>ชม.</th><th>งานที่ทำ</th><th>สถานะ</th></tr>
+    </thead><tbody>${detailRows(known) || (requests.some((request) => request.overtimeType === "unknown") ? "" : emptyRow)}</tbody>
+    ${includeTotals ? `<tfoot><tr><td colspan="10">${detailedTotalsTable(totals, false)}</td></tr></tfoot>` : ""}
   </table>`;
 }
 
-function monthDetailBlock(employee: OtReportEmployeeModel, month: OtReportMonth, year: number, pageStart: boolean) {
-  return `<section class="month-detail ${pageStart ? "page-start" : ""}">
-    ${employeeInfo(employee)}<h3>${escapeHtml(month.label)} ${year}</h3>
-    ${detailTable(month.requests, employee)}
-    ${totalsSummary(month.totals, `รวมเดือน${month.label}`)}
-  </section>`;
+function unknownDetailTable(report: OtReportDocument, employee: OtReportEmployeeModel, requests: OtReportRequest[], totals: OtReportTotals, monthLabel?: string) {
+  const unknown = requests.filter((request) => request.overtimeType === "unknown");
+  if (!unknown.length) return "";
+  const widths = `<colgroup><col style="width:50pt"><col style="width:55pt"><col style="width:40pt"><col style="width:40pt"><col style="width:45pt"><col style="width:275.28pt"><col style="width:50pt"></colgroup>`;
+  const rows = unknown.map((request) => `<tr class="detail-row"><td class="center">${escapeHtml(THAI_MONTHS[request.month - 1])}</td><td class="center">${escapeHtml(localDateTimeLabel(request))}</td><td class="center">${escapeHtml(request.startTime)}</td><td class="center">${escapeHtml(request.endTime)}</td><td class="numeric">${formatOtHours(request.durationMs)}</td><td class="reason">${escapeHtml(request.reason)}</td><td class="center">อนุมัติแล้ว</td></tr>`).join("");
+  return `<h2 class="unknown-heading">รายการ OT ที่ไม่ระบุประเภท</h2><table class="unknown-detail-table">${widths}<thead>${detailHeading(report, employee, 7, monthLabel)}
+    <tr class="detail-labels"><th>เดือน</th><th>วันที่</th><th>เริ่ม</th><th>ถึง</th><th>ชม.</th><th>งานที่ทำ · ไม่ระบุประเภท</th><th>สถานะ</th></tr>
+    </thead><tbody>${rows}</tbody><tfoot><tr><td colspan="7">${detailedTotalsTable(totals, true)}</td></tr></tfoot></table>`;
 }
 
-function employeeAnnualPage(employee: OtReportEmployeeModel, pageStart: boolean, body: string, heading: string) {
-  return `<section class="employee-report ${pageStart ? "page-start" : ""}">
-    ${employeeInfo(employee)}<h2 class="section-title">${escapeHtml(heading)}</h2>${body}
-  </section>`;
+function detailTable(report: OtReportDocument, employee: OtReportEmployeeModel, requests: OtReportRequest[], totals: OtReportTotals, monthLabel?: string) {
+  const hasUnknown = requests.some((request) => request.overtimeType === "unknown");
+  const known = requests.some((request) => request.overtimeType !== "unknown");
+  const knownTable = known || !hasUnknown ? knownDetailTable(report, employee, requests, totals, !hasUnknown, monthLabel) : "";
+  const unknownTable = unknownDetailTable(report, employee, requests, totals, monthLabel);
+  return knownTable + unknownTable;
 }
 
-function overviewHtml(report: OtReportDocument) {
-  const { model } = report;
+function summaryDocument(report: OtReportDocument) {
+  const model = report.model;
   const definition = getOtReportDefinition(report.variant)!;
-  const allEmployees = sortOtReportEmployees(model.employees, report.sortRules);
-  if (report.variant === "monthly-all" || report.variant === "yearly-all") {
-    return departmentSections(allEmployees) + totalsSummary(model.totals);
-  }
+  const employees = sortOtReportEmployees(model.employees, report.sortRules);
+  const title = reportTitle(report.variant, model);
+  const range = periodLabel(model);
   if (report.variant === "yearly-all-month-columns") {
-    return monthColumnTable(allEmployees, model.year) + totalsSummary(model.totals);
-  }
-  if (report.variant === "yearly-all-month-pages") {
-    const months = allEmployees[0]?.months ?? THAI_MONTHS.map((label, index) => ({
-      month: index + 1, label,
-      totals: { weekdayMs: 0, holidayMs: 0, unknownMs: 0, totalMs: 0, requestCount: 0 },
-      requests: [],
-    }));
-    const monthly = months.map((month, index) => `<section class="month-report ${index ? "page-start" : ""}">
-      <h2 class="section-title">${escapeHtml(month.label)} ${model.year}</h2>
-      ${departmentMonthSections(allEmployees, month)}
-      ${totalsSummary(monthlyTotals(allEmployees, month.month), `รวมเดือน${month.label}`)}
-    </section>`).join("");
-    const annual = `<section class="annual-summary page-start"><h2 class="section-title">สรุปทั้งปี ${model.year}</h2>${departmentSections(allEmployees)}${totalsSummary(model.totals)}</section>`;
-    return monthly + annual;
-  }
-  if (report.variant === "monthly-individual") {
-    return allEmployees.map((employee, index) => employeeAnnualPage(
-      employee, index > 0, totalsSummary(employee.totals, "สรุป OT ที่อนุมัติ"), `สรุป OT · ${model.periodLabel}`,
-    )).join("");
-  }
-  if (report.variant === "yearly-individual") {
-    return allEmployees.map((employee, index) => employeeAnnualPage(
-      employee, index > 0, totalsSummary(employee.totals, "สรุป OT ที่อนุมัติทั้งปี"), `สรุป OT รายปี ${model.year}`,
-    )).join("");
+    return `${titleOnlyHeading(title)}${monthColumnsTable(employees, model.year, model.hasUnknownType)}`;
   }
   if (report.variant === "yearly-individual-month-columns") {
-    return allEmployees.map((employee, index) => employeeAnnualPage(
-      employee, index > 0, individualMonthColumnTable(employee, model.year) + totalsSummary(employee.totals), `สรุป OT รายเดือน · ปี ${model.year}`,
-    )).join("");
+    return employees.map((employee, index) => `<section class="individual-block ${index ? "page-start" : ""}">${titleOnlyHeading(title)}${monthColumnsTable([employee], model.year, model.hasUnknownType, true)}</section>`).join("");
+  }
+  if (report.variant === "yearly-all-month-pages") {
+    const months = THAI_MONTHS.map((label, index) => `<section class="month-page ${index ? "page-start" : ""}">
+      ${mainHeading(title, range)}<h2 class="month-heading">${escapeHtml(label)} ${model.year}</h2>
+      ${departmentSections(employees, model.hasUnknownType, { year: model.year, totalsMonth: index + 1 })}</section>`).join("");
+    const annual = `<section class="month-page page-start">${mainHeading(title, range)}${departmentSections(employees, model.hasUnknownType, { year: model.year })}</section>`;
+    return months + annual;
   }
   if (report.variant === "yearly-individual-month-pages") {
-    return allEmployees.map((employee, employeeIndex) => {
-      const months = employee.months.map((month, monthIndex) => `<section class="month-report ${monthIndex ? "page-start" : ""}">
-        ${employeeInfo(employee)}
-        <h2 class="section-title">${escapeHtml(month.label)} ${model.year}</h2>
-        ${monthEmployeeSummaryTable([employee], month)}
-        ${totalsSummary(month.totals, `รวมเดือน${month.label}`)}
-      </section>`).join("");
-      const annual = `<section class="annual-summary page-start">${employeeInfo(employee)}<h2 class="section-title">สรุปทั้งปี ${model.year}</h2>${totalsSummary(employee.totals, "สรุป OT ที่อนุมัติทั้งปี")}</section>`;
-      return `<section class="employee-report ${employeeIndex ? "page-start" : ""}">${months}${annual}</section>`;
+    return employees.flatMap((employee, employeeIndex) => {
+      const months = THAI_MONTHS.map((label, index) => {
+        const pageStart = employeeIndex > 0 || index > 0;
+        return `<section class="month-page ${pageStart ? "page-start" : ""}">${mainHeading(title, range)}
+          <h2 class="month-heading">${escapeHtml(label)} ${model.year}</h2>
+          ${departmentSections([employee], model.hasUnknownType, { year: model.year, totalsMonth: index + 1 })}</section>`;
+      });
+      return [...months, `<section class="month-page page-start">${mainHeading(title, range)}${departmentSections([employee], model.hasUnknownType, { year: model.year })}</section>`];
     }).join("");
   }
-  if (definition.scope === "individual") return "";
-  return departmentSections(allEmployees) + totalsSummary(model.totals);
+  const month = definition.period === "monthly" ? model.month ?? 1 : undefined;
+  if (report.variant === "monthly-individual") {
+    return employees.map((employee, index) => `<section class="individual-block ${index ? "page-start" : ""}">${mainHeading(title, range)}${departmentSections([employee], model.hasUnknownType, { year: model.year, displayMonth: month, totalsMonth: month })}</section>`).join("");
+  }
+  if (report.variant === "yearly-individual") {
+    return employees.map((employee, index) => `<section class="individual-block ${index ? "page-start" : ""}">${mainHeading(title, range)}${departmentSections([employee], model.hasUnknownType, { year: model.year })}</section>`).join("");
+  }
+  return `${mainHeading(title, range)}${departmentSections(employees, model.hasUnknownType, { year: model.year, totalsMonth: month })}`;
 }
 
-function monthlyAllHtml(report: OtReportDocument) {
+function detailDocument(report: OtReportDocument) {
   const employees = sortOtReportEmployees(report.model.employees, report.sortRules);
-  return departmentSections(employees) + totalsSummary(report.model.totals);
-}
-
-function detailHtml(report: OtReportDocument) {
-  const { model } = report;
-  const employees = sortOtReportEmployees(model.employees, report.sortRules);
-  if (report.variant === "monthly-individual-detail") {
-    return employees.map((employee, index) => {
-      const month = employee.months[0];
-      return employeeAnnualPage(
-        employee,
-        index > 0,
-        detailTable(month?.requests ?? [], employee) + totalsSummary(employee.totals),
-        `รายการ OT รายวัน · ${model.periodLabel}`,
-      );
-    }).join("");
-  }
-  if (report.variant === "yearly-individual-detail" || report.variant === "yearly-individual-month-columns-detail") {
-    const withMonth = report.variant === "yearly-individual-month-columns-detail";
-    return employees.map((employee, index) => {
-      const requests = employee.months.flatMap((month) => month.requests);
-      return employeeAnnualPage(
-        employee,
-        index > 0,
-        detailTable(requests, employee, withMonth) + totalsSummary(employee.totals),
-        `รายการ OT รายวัน · ปี ${model.year}`,
-      );
-    }).join("");
-  }
   if (report.variant === "yearly-individual-month-pages-detail") {
-    return employees.map((employee, employeeIndex) => {
-      const months = employee.months.map((month, monthIndex) => monthDetailBlock(employee, month, model.year, monthIndex > 0)).join("");
-      const annual = `<section class="annual-summary page-start">${employeeInfo(employee)}<h2 class="section-title">สรุปทั้งปี ${model.year}</h2>${totalsSummary(employee.totals, "สรุป OT ที่อนุมัติทั้งปี")}</section>`;
-      return `<section class="employee-report ${employeeIndex ? "page-start" : ""}">${months}${annual}</section>`;
+    return employees.flatMap((employee, employeeIndex) => {
+      const monthPages = employee.months.map((month, monthIndex) => {
+        const pageStart = employeeIndex > 0 || monthIndex > 0;
+        return `<section class="detail-page ${pageStart ? "page-start" : ""}">${detailTable(report, employee, month.requests, month.totals, `${month.label} ${report.model.year}`)}</section>`;
+      });
+      const annual = `<section class="detail-page page-start"><div class="detail-final-heading"><h1>รายงานโอที</h1><p>${escapeHtml(periodLabel(report.model))}</p><strong>${escapeHtml(employeeLabel(employee))}</strong></div>${detailedTotalsTable(employee.totals, report.model.hasUnknownType)}</section>`;
+      return [...monthPages, annual];
     }).join("");
   }
-  return monthlyAllHtml(report);
-}
-
-function reportTitle(variant: OtReportVariant) {
-  if (variant.startsWith("monthly")) return "รายงาน OT รายเดือน";
-  return "รายงาน OT รายปี";
-}
-
-function reportBody(report: OtReportDocument) {
-  const definition = getOtReportDefinition(report.variant)!;
-  const { model } = report;
-  const range = `ตั้งแต่วันที่ ${localDateLabel(model.periodStart)} ถึงวันที่ ${localDateLabel(model.periodEnd)}`;
-  const employeeCount = model.employees.length;
-  const unknownNotice = model.hasUnknownType
-    ? `<p class="warning">มีรายการ ${escapeHtml(OT_REPORT_LABELS.unknown)} ${formatOtHours(model.totals.unknownMs)} ชั่วโมง ซึ่งรวมในยอดรวมแล้ว</p>`
-    : "";
-  const employeeLabel = definition.scope === "all"
-    ? `พนักงานที่อยู่ในช่วงงวดหรือมีรายการ OT ที่เข้าเงื่อนไข ${employeeCount} คน`
-    : `พนักงาน ${employeeCount} คน`;
-  const scopeNotice = definition.scope === "individual" && employeeCount > 1
-    ? "เริ่มส่วนของพนักงานแต่ละคนในหน้าใหม่"
-    : "";
-  const body = definition.detail ? detailHtml(report) : overviewHtml(report);
-  return `<main>
-    <div class="document-heading"><p class="eyebrow">${escapeHtml(OT_REPORT_LABELS.company)}</p>
-      <h1>${escapeHtml(reportTitle(report.variant))}</h1>
-      <p class="period">${escapeHtml(model.periodLabel)} · ${escapeHtml(range)}</p>
-      <p class="meta">เฉพาะรายการ OT ที่อนุมัติแล้ว · จัดงวดตามวันที่เริ่ม OT ในเวลา Asia/Bangkok</p>
-      <p class="meta">สร้างเมื่อ ${escapeHtml(prettyGeneratedAt(model.generatedAt))}</p>
-      <p class="meta">${escapeHtml(employeeLabel)}${scopeNotice ? ` · ${escapeHtml(scopeNotice)}` : ""}</p>
-      ${unknownNotice}
-    </div>
-    ${body || `<p class="empty-document">ไม่มีข้อมูลตามตัวเลือกนี้</p>`}
-    <p class="data-note">ชั่วโมงคำนวณจากเวลาสิ้นสุดลบเวลาเริ่มตามข้อมูลที่บันทึก ไม่มีการหักเวลาพัก · แผนกและตำแหน่งเป็นข้อมูลปัจจุบัน</p>
-  </main>`;
+  return employees.map((employee, index) => {
+    const requests = report.variant.startsWith("monthly")
+      ? employee.months[0]?.requests ?? []
+      : employee.months.flatMap((month) => month.requests);
+    return `<section class="detail-page ${index > 0 ? "page-start" : ""}">${detailTable(report, employee, requests, employee.totals)}</section>`;
+  }).join("");
 }
 
 function styles() {
-  return `*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:Thai,sans-serif;font-size:9px;line-height:1.45;color:#202a35;background:#fff}main{width:100%}.document-heading{text-align:center;margin:0 0 15px;padding-bottom:10px;border-bottom:1px solid #cfd5dc}.eyebrow{font-size:10px;font-weight:700;margin:0 0 4px}.document-heading h1{font-size:17px;line-height:1.3;margin:0 0 3px}.period{font-size:11px;font-weight:700;margin:2px 0}.meta{font-size:8px;color:#667085;margin:2px 0}.warning{margin:6px auto 0;max-width:90%;padding:5px 8px;border:1px solid #e7c48a;background:#fff8eb;color:#7a4b08;text-align:left}.section-title{font-size:12px;margin:10px 0 7px}.group-title{font-size:9px;margin:12px 0 4px;font-weight:700}.employee-report{margin:0}.employee-meta{display:flex;flex-wrap:wrap;gap:3px 12px;align-items:baseline;border-bottom:1px solid #cfd5dc;padding:0 0 6px;margin:0 0 8px}.employee-meta strong{font-size:11px}.employee-meta span{color:#667085;font-size:8px}.totals-strip{display:flex;flex-wrap:wrap;justify-content:space-between;gap:5px 12px;margin:9px 0 12px;padding:7px 8px;border:1px solid #cfd5dc;background:#f6f7f8;font-size:8px;page-break-inside:avoid;break-inside:avoid}.totals-strip .total{font-weight:700}.totals-strip b{font-variant-numeric:tabular-nums}table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 8px}thead{display:table-header-group}tfoot{display:table-row-group}th,td{border:1px solid #cfd5dc;padding:4px 5px;vertical-align:top;overflow-wrap:anywhere}th{background:#34434c;color:#fff;font-size:10px;font-weight:700;text-align:left}td{font-size:10px}.detail-table .repeat-employee th{background:#f1f4f7;color:#202a35;font-size:10px}.detail-table .repeat-employee th{border-bottom:0}.detail-table thead tr:nth-child(2) th{border-top:0}tr{page-break-inside:avoid;break-inside:avoid}.summary-table .code{width:15%}.summary-table th:nth-child(2){width:29%}.numeric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.summary-table .numeric{width:14%}.total{font-weight:700}.empty{text-align:center!important;color:#667085;padding:12px}.month-columns-table th:first-child{width:13%}.month-columns-table .code{width:10%}.month-columns-table th:nth-child(3){width:24%}.month-columns-table .numeric{width:13%}.month-cell{width:12%;font-weight:700}.date-cell{width:16%}.time-cell{width:17%;font-variant-numeric:tabular-nums}.detail-table th:nth-child(4){width:13%}.detail-table th:nth-child(5){width:12%}.detail-table th:nth-child(6){width:42%}.detail-table:not(.with-month) th:nth-child(1){width:17%}.detail-table:not(.with-month) th:nth-child(2){width:18%}.detail-table:not(.with-month) th:nth-child(3){width:13%}.detail-table:not(.with-month) th:nth-child(4){width:12%}.detail-table:not(.with-month) th:nth-child(5){width:40%}.detail-row{page-break-inside:auto;break-inside:auto}.detail-row td{page-break-inside:auto;break-inside:auto}.reason{overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap}.type-unknown{color:#7a4b08;font-weight:700}.month-report{margin:0}.page-start{break-before:page;page-break-before:always}.employee-report.page-start{display:block}.month-detail h3{font-size:10px;margin:0 0 6px}.data-note{font-size:7px;color:#667085;border-top:1px solid #e4e7eb;padding-top:5px;margin:14px 0 0}.empty-document{text-align:center;padding:20px;color:#667085}@media print{.page-start{break-before:page;page-break-before:always}thead{display:table-header-group}tr{page-break-inside:avoid;break-inside:avoid}.detail-row,.detail-row td{page-break-inside:auto;break-inside:auto}}`;
+  return `*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:THSarabunNew,sans-serif;font-size:12pt;line-height:1.2;color:#000;background:#fff}main{width:100%}
+    .document-heading{text-align:center;margin:0 0 32.2pt}.document-heading.compact{margin-bottom:26.2pt}.document-heading.title-only{margin-bottom:33.2pt}.document-heading h1{font-size:18pt;line-height:1.2;font-weight:700;margin:0 0 1pt}.document-heading .period{font-size:14pt;font-weight:400;line-height:1.15;margin:0}.month-heading{font-size:14pt;line-height:1.2;font-weight:700;margin:0 0 14pt}
+    .department{margin:0 0 11.414pt;break-inside:auto}.group-title{font-size:14pt;line-height:1.2;font-weight:700;color:#37474f;margin:0 0 4pt}.summary-table,.month-columns-table,.detail-table,.unknown-detail-table{width:100%;border-collapse:collapse;table-layout:fixed;margin:0}
+    th,td{border:.5pt solid #bdbdbd;padding:3.7pt 4pt;vertical-align:middle;overflow-wrap:anywhere;font-weight:400}.summary-table th,.month-columns-table th{height:23.612pt;background:#37474f;color:#fff;font-size:12pt;line-height:1.1;font-weight:700;text-align:center}.summary-table td,.month-columns-table td{height:23.612pt;font-size:12pt;line-height:1.1}.summary-table .name,.month-columns-table .name{white-space:normal;overflow-wrap:anywhere}.summary-table .code,.month-columns-table .code{white-space:nowrap}.numeric{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}th.numeric{text-align:center;white-space:normal}.month-cell,.center{text-align:center}.summary-table td.numeric,.month-columns-table td.numeric{font-weight:400}.summary-table td.total,.month-columns-table td.total{font-weight:400}.empty{text-align:center!important;padding:9pt!important}
+    .month-columns-table th{white-space:normal}.month-columns-table td{overflow-wrap:normal}.month-columns-table .name{white-space:normal}
+    .detail-page{width:100%;break-inside:auto}.detail-table,.unknown-detail-table{margin:0}.detail-table th,.unknown-detail-table th{font-size:10pt;line-height:1;vertical-align:middle;text-align:center;padding:2pt 2pt;border:.5pt solid #bdbdbd}.detail-table td,.unknown-detail-table td{font-size:10pt;line-height:1.18;padding:2.2pt 2.5pt;border:.5pt solid #bdbdbd;vertical-align:middle}.detail-table .doc-title-row th,.unknown-detail-table .doc-title-row th{background:#fff;color:#111;border:0;padding:10pt 0 0;height:32pt}.detail-table .doc-title-row h1,.unknown-detail-table .doc-title-row h1{font-family:THSarabunNew,sans-serif;font-size:18pt;font-weight:700;line-height:22pt;margin:0}.detail-table .doc-period-row th,.unknown-detail-table .doc-period-row th{background:#fff;color:#111;border:0;height:16.85pt;padding:0;font-weight:400}.detail-table .doc-period-row p,.unknown-detail-table .doc-period-row p{font-size:14pt;font-weight:400;line-height:16.85pt;margin:0}.detail-table .employee-heading-row th,.unknown-detail-table .employee-heading-row th{background:#fff;color:#111;border:0;height:23pt;padding:0;font-size:16pt;font-weight:700;line-height:20pt}.detail-table .employee-divider-row th,.unknown-detail-table .employee-divider-row th{height:7.3pt;padding:0;border:0;border-bottom:1pt solid #111;background:#fff}.detail-table .detail-spacer-row th,.unknown-detail-table .detail-spacer-row th{height:17.5pt;padding:0;border:0;background:#fff}
+    .detail-table .detail-groups th{height:17.01pt;background:#37474f;color:#fff;font-weight:700}.detail-table .detail-labels th,.unknown-detail-table .detail-labels th{height:17.01pt;background:#37474f;color:#fff;font-weight:700}.detail-table td.center,.unknown-detail-table td.center,.detail-table td.numeric,.unknown-detail-table td.numeric,.detail-totals td.numeric{text-align:center}.detail-table td.reason,.unknown-detail-table td.reason{text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}.detail-table tr.detail-row,.unknown-detail-table tr.detail-row{break-inside:auto;page-break-inside:auto}.detail-table tr.detail-row td,.unknown-detail-table tr.detail-row td{break-inside:auto;page-break-inside:auto}.detail-table td.empty{height:auto}.unknown-heading{font-size:12pt;font-weight:700;margin:12pt 0 3pt}
+    .detail-table>tfoot>tr>td,.unknown-detail-table>tfoot>tr>td{border:0;padding:0;background:#fff}.detail-totals{width:300pt;margin:15pt auto 0;border-collapse:collapse;table-layout:fixed;break-inside:avoid;page-break-inside:avoid}.detail-totals td{height:25.01pt;border:.5pt solid #bdbdbd;font-size:10pt;line-height:1.1;padding:3pt 5pt}.detail-totals td:first-child{font-weight:700}.detail-totals .grand-total td{background:#eee;font-weight:700}.month-label-row th,.detail-final-heading{text-align:center;font-weight:700;font-size:14pt;line-height:1.2}.detail-final-heading{margin-bottom:8pt;border-bottom:1pt solid #111;padding-bottom:8pt}.detail-final-heading h1{font-size:18pt;line-height:1.2;margin:0 0 1pt}.detail-final-heading p{font-size:14pt;font-weight:400;line-height:1.15;margin:0 0 3pt}.detail-final-heading strong{font-size:16pt}
+    .page-start{break-before:page;page-break-before:always}@media print{thead{display:table-header-group}tfoot{display:table-row-group}.page-start{break-before:page;page-break-before:always}.department,.detail-page{break-inside:auto}.detail-table tr.detail-row,.unknown-detail-table tr.detail-row{break-inside:auto;page-break-inside:auto}}`;
 }
 
 function pageHeader(report: OtReportDocument, fontRegularBase64: string, fontBoldBase64: string) {
-  const title = `${reportTitle(report.variant)} · ${report.model.periodLabel}`;
-  return `<style>@font-face{font-family:Thai;src:url(data:font/ttf;base64,${fontRegularBase64})}@font-face{font-family:Thai;src:url(data:font/ttf;base64,${fontBoldBase64});font-weight:700}</style><div style="font-family:Thai,sans-serif;font-size:8px;width:100%;padding:0 10mm;color:#667085;display:flex;justify-content:space-between;align-items:center"><span>${escapeHtml(OT_REPORT_LABELS.company)}</span><span>${escapeHtml(title)}</span></div>`;
+  const fontCss = `<style>@font-face{font-family:THSarabunNew;src:url(data:font/ttf;base64,${fontRegularBase64})}@font-face{font-family:THSarabunNew;src:url(data:font/ttf;base64,${fontBoldBase64});font-weight:700}</style>`;
+  const generated = generatedAtLabel(report.model.generatedAt);
+  const company = OT_REPORT_LABELS.company;
+  return `${fontCss}<div style="font-family:THSarabunNew,sans-serif;box-sizing:border-box;width:100%;margin:0;padding:7.5pt 20pt 0;display:flex;align-items:center;color:#616161;font-size:10pt;line-height:1;white-space:nowrap"><span style="width:33.333%;text-align:left">${escapeHtml(generated)}</span><span style="width:33.333%;text-align:center;color:#616161;font-size:14pt;font-weight:700">${escapeHtml(company)}</span><span style="width:33.333%;text-align:right">หน้า <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
 }
 
-function pageFooter(fontRegularBase64: string, fontBoldBase64: string) {
-  return `<style>@font-face{font-family:Thai;src:url(data:font/ttf;base64,${fontRegularBase64})}@font-face{font-family:Thai;src:url(data:font/ttf;base64,${fontBoldBase64});font-weight:700}</style><div style="font-family:Thai,sans-serif;font-size:8px;width:100%;padding:0 10mm;color:#667085;text-align:center">หน้า <span class="pageNumber"></span> / <span class="totalPages"></span></div>`;
-}
-
-export function createOtReportMarkup(
-  report: OtReportDocument,
-  fontRegularBase64: string,
-  fontBoldBase64: string,
-): OtReportMarkup {
+export function createOtReportMarkup(report: OtReportDocument, fontRegularBase64: string, fontBoldBase64: string): OtReportMarkup {
+  const definition = getOtReportDefinition(report.variant)!;
+  const body = definition.detail ? detailDocument(report) : summaryDocument(report);
   const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><style>
-    @font-face{font-family:Thai;src:url(data:font/ttf;base64,${fontRegularBase64})} @font-face{font-family:Thai;font-weight:700;src:url(data:font/ttf;base64,${fontBoldBase64})}
+    @font-face{font-family:THSarabunNew;src:url(data:font/ttf;base64,${fontRegularBase64})}@font-face{font-family:THSarabunNew;font-weight:700;src:url(data:font/ttf;base64,${fontBoldBase64})}
     ${styles()}
-    .detail-table.with-month th:nth-child(6){width:30%}
-  </style></head><body>${reportBody(report)}</body></html>`;
-  return {
-    html,
-    headerTemplate: pageHeader(report, fontRegularBase64, fontBoldBase64),
-    footerTemplate: pageFooter(fontRegularBase64, fontBoldBase64),
-  };
+  </style></head><body><main>${body}</main></body></html>`;
+  const footerTemplate = `<div style="font-family:THSarabunNew,sans-serif;width:100%"></div>`;
+  return { html, headerTemplate: pageHeader(report, fontRegularBase64, fontBoldBase64), footerTemplate };
 }

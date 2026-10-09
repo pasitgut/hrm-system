@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { sqlClient } from "@/lib/db/client";
 import { createOtReportModel } from "@/lib/reports/ot/service";
 import { getOtReportPeriod, otReportExportSchema } from "@/lib/reports/ot/options";
@@ -28,6 +30,10 @@ try {
   const signature = pdf.subarray(0, 5).toString("ascii");
   if (signature !== "%PDF-") throw new Error("PDF signature check failed");
   const period = getOtReportPeriod(year, month);
+  const outputDirectory = path.join(process.cwd(), "output", "pdf", "ot-reports");
+  await mkdir(outputDirectory, { recursive: true });
+  const destination = path.join(outputDirectory, `ot-monthly-${year}-${String(month).padStart(2, "0")}.pdf`);
+  await writeFile(destination, pdf);
 
   process.stdout.write(`${JSON.stringify({
     variant: input.variant,
@@ -39,6 +45,7 @@ try {
     requests: model.totals.requestCount,
     pdfSignature: signature,
     pdfBytes: pdf.byteLength,
+    destination: path.relative(process.cwd(), destination),
     writesPerformed: 0,
   })}\n`);
 } catch {

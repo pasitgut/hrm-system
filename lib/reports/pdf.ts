@@ -17,10 +17,10 @@ function publicAsset(name: string) {
 }
 
 async function reportFonts() {
-  const regularPath = publicAsset("NotoSansThai-Regular.ttf");
-  const boldPath = publicAsset("NotoSansThai-Bold.ttf");
+  const regularPath = publicAsset("THSarabunNew.ttf");
+  const boldPath = publicAsset("THSarabunNew-Bold.ttf");
   if (!existsSync(regularPath) || !existsSync(boldPath)) {
-    throw new Error("Thai PDF font files are missing");
+    throw new Error("TH Sarabun New PDF font files are missing");
   }
   const [regularFont, boldFont] = await Promise.all([readFile(regularPath), readFile(boldPath)]);
   return { regular: regularFont.toString("base64"), bold: boldFont.toString("base64") };
@@ -39,7 +39,7 @@ async function renderPdf(markup: { html: string; headerTemplate: string; footerT
     await page.emulateMedia({ media: "print" });
     const fontsReady = await page.evaluate(async () => {
       await document.fonts.ready;
-      return document.fonts.check("9px Thai") && document.fonts.check("700 9px Thai");
+      return document.fonts.check("12px THSarabunNew") && document.fonts.check("700 12px THSarabunNew");
     });
     if (!fontsReady) throw new Error("Thai fonts did not load in the PDF renderer");
     const bytes = await page.pdf({
@@ -48,7 +48,7 @@ async function renderPdf(markup: { html: string; headerTemplate: string; footerT
       displayHeaderFooter: true,
       headerTemplate: markup.headerTemplate,
       footerTemplate: markup.footerTemplate,
-      margin: { top: "16mm", right: "10mm", bottom: "14mm", left: "10mm" },
+      margin: { top: "0.708333in", right: "0.277778in", bottom: "0.277778in", left: "0.277778in" },
       preferCSSPageSize: true,
     });
     return Buffer.from(bytes);
