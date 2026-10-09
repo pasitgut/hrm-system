@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 import { createOtReportMarkup, type OtReportDocument } from "./ot/template";
+import { createLeaveReportMarkup, type LeaveReportDocument } from "./leave/template";
 
 export class PdfRendererUnavailableError extends Error {
   constructor() {
@@ -15,14 +16,17 @@ function publicAsset(name: string) {
   return path.join(process.cwd(), "public", name);
 }
 
-export async function renderOtReportPdf(report: OtReportDocument): Promise<Buffer> {
+async function reportFonts() {
   const regularPath = publicAsset("NotoSansThai-Regular.ttf");
   const boldPath = publicAsset("NotoSansThai-Bold.ttf");
   if (!existsSync(regularPath) || !existsSync(boldPath)) {
     throw new Error("Thai PDF font files are missing");
   }
   const [regularFont, boldFont] = await Promise.all([readFile(regularPath), readFile(boldPath)]);
-  const markup = createOtReportMarkup(report, regularFont.toString("base64"), boldFont.toString("base64"));
+  return { regular: regularFont.toString("base64"), bold: boldFont.toString("base64") };
+}
+
+async function renderPdf(markup: { html: string; headerTemplate: string; footerTemplate: string }): Promise<Buffer> {
   const executable = chromium.executablePath();
   if (!existsSync(executable)) throw new PdfRendererUnavailableError();
 
@@ -57,4 +61,14 @@ export async function renderOtReportPdf(report: OtReportDocument): Promise<Buffe
   } finally {
     if (browser) await browser.close().catch(() => undefined);
   }
+}
+
+export async function renderOtReportPdf(report: OtReportDocument): Promise<Buffer> {
+  const fonts = await reportFonts();
+  return renderPdf(createOtReportMarkup(report, fonts.regular, fonts.bold));
+}
+
+export async function renderLeaveReportPdf(report: LeaveReportDocument): Promise<Buffer> {
+  const fonts = await reportFonts();
+  return renderPdf(createLeaveReportMarkup(report, fonts.regular, fonts.bold));
 }

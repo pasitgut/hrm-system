@@ -95,7 +95,7 @@ function getCurrentPeriod() {
   };
 }
 
-function getOtReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail }) {
+function getReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail }) {
   if (periodType === "custom") return null;
   let variant;
   if (periodType === "monthly") {
@@ -251,8 +251,9 @@ export default function ReportsModule() {
   });
   const duplicateSortFields = new Set(sortRules.map((rule) => rule.field)).size !== sortRules.length;
   const sortRulesInvalid = sortRules.length > 4 || duplicateSortFields;
-  const otReportVariant = getOtReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail });
-  const exportSupported = reportType === "ot" && periodType !== "custom" && Boolean(otReportVariant);
+  const reportVariant = getReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail });
+  const reportSupported = reportType === "ot" || reportType === "leave";
+  const exportSupported = reportSupported && periodType !== "custom" && Boolean(reportVariant);
   const yearNumber = Number(year);
   const canExport = exportSupported
     && !optionsLoading
@@ -267,15 +268,23 @@ export default function ReportsModule() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setOptionsLoading(true);
+    setEmployees([]);
+    setSelectedEmployeeIds([]);
+    setCanViewCompany(false);
     setOptionsError("");
-    fetch("/api/reports/ot/options", { signal: controller.signal, cache: "no-store" })
+    if (reportType !== "ot" && reportType !== "leave") {
+      setOptionsLoading(false);
+      return () => controller.abort();
+    }
+    setOptionsLoading(true);
+    fetch(`/api/reports/${reportType}/options`, { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || "ไม่สามารถโหลดรายชื่อพนักงานได้");
         return payload;
       })
       .then((payload) => {
+        if (controller.signal.aborted) return;
         const allowedEmployees = Array.isArray(payload.employees) ? payload.employees : [];
         setEmployees(allowedEmployees);
         setCanViewCompany(payload.canViewCompany === true);
@@ -285,13 +294,13 @@ export default function ReportsModule() {
         }
       })
       .catch((error) => {
-        if (error.name !== "AbortError") setOptionsError(error.message || "ไม่สามารถโหลดรายชื่อพนักงานได้");
+        if (error.name !== "AbortError" && !controller.signal.aborted) setOptionsError(error.message || "ไม่สามารถโหลดรายชื่อพนักงานได้");
       })
       .finally(() => {
         if (!controller.signal.aborted) setOptionsLoading(false);
       });
     return () => controller.abort();
-  }, [optionsAttempt]);
+  }, [optionsAttempt, reportType]);
 
   function updateSortRule(id, updates) {
     setSortRules((current) => current.map((rule) => (rule.id === id ? { ...rule, ...updates } : rule)));
@@ -346,19 +355,19 @@ export default function ReportsModule() {
   }
 
   async function downloadReport() {
-    if (!canExport || !otReportVariant) return;
+    if (!canExport || !reportVariant || !reportSupported) return;
     setIsExporting(true);
     setExportNotice("");
     setExportNoticeIsError(false);
     const payload = {
-      variant: otReportVariant,
+      variant: reportVariant,
       year: yearNumber,
       ...(periodType === "monthly" ? { month: Number(month) } : {}),
       ...(scope === "individual" ? { employeeIds: selectedEmployeeIds } : {}),
-      sortRules: sortRules.map(({ field, direction }) => ({ field: field === "metric" ? "hours" : field, direction })),
+      sortRules: sortRules.map(({ field, direction }) => ({ field: field === "metric" ? (reportType === "leave" ? "days" : "hours") : field, direction })),
     };
     try {
-      const response = await fetch("/api/reports/ot/export", {
+      const response = await fetch(`/api/reports/${reportType}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -373,7 +382,7 @@ export default function ReportsModule() {
       const blob = await response.blob();
       if (blob.type !== "application/pdf" || blob.size < 5) throw new Error("เซิร์ฟเวอร์ส่งไฟล์รายงานไม่ถูกต้อง");
       const disposition = response.headers.get("content-disposition") || "";
-      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `ot-report-${otReportVariant}-${yearNumber}.pdf`;
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `${reportType}-report-${reportVariant}-${yearNumber}.pdf`;
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -515,7 +524,7 @@ export default function ReportsModule() {
               </label>
             ))}
           </fieldset>
-          {reportType === "ot" && optionsError ? (
+          {(reportType === "ot" || reportType === "leave") && optionsError ? (
             <div className="flex flex-wrap items-center gap-2" role="alert">
               <p className="text-xs leading-5 text-status-danger">{optionsError}</p>
               <Button type="button" variant="outline" size="sm" className="min-h-9" onClick={() => {
@@ -524,7 +533,7 @@ export default function ReportsModule() {
               }}>ลองโหลดรายชื่ออีกครั้ง</Button>
             </div>
           ) : null}
-          {reportType === "ot" && scope === "individual" ? (
+          {(reportType === "ot" || reportType === "leave") && scope === "individual" ? (
             <div className="space-y-2.5 border-t border-border pt-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs font-medium text-foreground">เลือกพนักงาน · {selectedEmployeeCount}/100</p>
@@ -580,7 +589,7 @@ export default function ReportsModule() {
               <ReportSwitchOption
                 id="report-daily-detail"
                 label="แสดงรายละเอียดรายวัน"
-                description="แสดงรายการ OT พร้อมวันที่ เวลา ชั่วโมง และเหตุผลของแต่ละคำขอ"
+                description={reportType === "leave" ? "แสดงวันที่ ประเภท ช่วงเวลา จำนวนวัน และเหตุผลของแต่ละรายการ" : "แสดงรายการ OT พร้อมวันที่ เวลา ชั่วโมง และเหตุผลของแต่ละคำขอ"}
                 isSelected={showDetail}
                 onChange={setShowDetail}
               />
@@ -648,7 +657,7 @@ export default function ReportsModule() {
                 isSelected={separateMonthColumns}
                 onChange={(selected) => {
                   setSeparateMonthColumns(selected);
-                  if (reportType === "ot" && selected) setAppendMonthlyDetails(false);
+                  if ((reportType === "ot" || reportType === "leave") && selected) setAppendMonthlyDetails(false);
                 }}
               />
             ) : null}
@@ -659,7 +668,7 @@ export default function ReportsModule() {
               isSelected={appendMonthlyDetails}
               onChange={(selected) => {
                 setAppendMonthlyDetails(selected);
-                if (reportType === "ot" && selected) setSeparateMonthColumns(false);
+                if ((reportType === "ot" || reportType === "leave") && selected) setSeparateMonthColumns(false);
               }}
             />
           </div>
@@ -699,10 +708,10 @@ export default function ReportsModule() {
             </Button>
             <p className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
               <RiInformationLine className="size-4 shrink-0" aria-hidden="true" />
-              {reportType !== "ot"
+              {reportType === "bonus"
                 ? "รายงานหมวดนี้ยังไม่พร้อมส่งออก"
                 : periodType === "custom"
-                  ? "รายงาน OT รองรับช่วงเวลาแบบรายเดือนหรือรายปี"
+                  ? `รายงาน${reportType === "leave" ? "วันลา" : " OT"}รองรับช่วงเวลาแบบรายเดือนหรือรายปี`
                   : optionsError
                     ? "โหลดรายชื่อพนักงานไม่สำเร็จ กรุณาลองโหลดอีกครั้ง"
                     : optionsLoading
@@ -712,8 +721,8 @@ export default function ReportsModule() {
                         : sortRulesInvalid
                           ? "แก้ไขเงื่อนไขเรียงลำดับที่ซ้ำกันก่อนสร้างรายงาน"
                           : isExporting
-                            ? "กำลังเตรียมไฟล์รายงาน OT"
-                            : "รวมเฉพาะรายการ OT ที่อนุมัติแล้ว"}
+                            ? `กำลังเตรียมไฟล์รายงาน${reportType === "leave" ? "วันลา" : " OT"}`
+                            : reportType === "leave" ? "รวมเฉพาะรายการวันลาที่อนุมัติแล้ว" : "รวมเฉพาะรายการ OT ที่อนุมัติแล้ว"}
             </p>
           </div>
         </CardContent>
@@ -745,7 +754,12 @@ export default function ReportsModule() {
         onSelectionChange={(key) => {
           const nextType = String(key);
           setReportType(nextType);
-          if (nextType === "ot" && separateMonthColumns && appendMonthlyDetails) setAppendMonthlyDetails(false);
+          setEmployees([]);
+          setSelectedEmployeeIds([]);
+          setCanViewCompany(false);
+          setOptionsError("");
+          setOptionsLoading(nextType === "ot" || nextType === "leave");
+          if ((nextType === "ot" || nextType === "leave") && separateMonthColumns && appendMonthlyDetails) setAppendMonthlyDetails(false);
           setExportNotice("");
           setExportNoticeIsError(false);
         }}
