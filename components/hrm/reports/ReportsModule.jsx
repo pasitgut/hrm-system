@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   RiAddLine,
   RiCalendarLine,
@@ -14,11 +14,14 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { PageHeader } from "@/components/hrm/PageHeader";
 import { cn } from "@/lib/utils";
+import { OT_REPORT_VARIANTS } from "@/lib/reports/ot/options";
 
 const reportTypes = [
   { id: "ot", label: "โอที", description: "ชั่วโมงทำงานล่วงเวลา", icon: RiTimerLine },
@@ -90,6 +93,20 @@ function getCurrentPeriod() {
     year: parts.find((part) => part.type === "year")?.value || "2026",
     month: parts.find((part) => part.type === "month")?.value || "01",
   };
+}
+
+function getOtReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail }) {
+  if (periodType === "custom") return null;
+  let variant;
+  if (periodType === "monthly") {
+    variant = scope === "all" ? "monthly-all" : showDetail ? "monthly-individual-detail" : "monthly-individual";
+  } else {
+    variant = `yearly-${scope}`;
+    if (separateMonthColumns) variant += "-month-columns";
+    else if (appendMonthlyDetails) variant += "-month-pages";
+    if (scope === "individual" && showDetail) variant += "-detail";
+  }
+  return OT_REPORT_VARIANTS.some((item) => item.id === variant) ? variant : null;
 }
 
 function SelectField({ id, label, value, onChange, options, ariaLabel }) {
@@ -207,7 +224,18 @@ export default function ReportsModule() {
   const [sortRules, setSortRules] = useState([{ id: 1, field: "position", direction: "desc" }]);
   const [separateMonthColumns, setSeparateMonthColumns] = useState(false);
   const [appendMonthlyDetails, setAppendMonthlyDetails] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
   const [exportNotice, setExportNotice] = useState("");
+  const [exportNoticeIsError, setExportNoticeIsError] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [canViewCompany, setCanViewCompany] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [selectionError, setSelectionError] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
   const nextSortId = useRef(2);
 
   const fields = sortingFields[reportType];
@@ -215,19 +243,153 @@ export default function ReportsModule() {
   const endValue = Number(endYear) * 12 + Number(endMonth);
   const customPeriodInvalid = periodType === "custom" && startValue > endValue;
   const selectedReport = reportTypes.find((item) => item.id === reportType);
+  const selectedEmployees = employees.filter((employee) => selectedEmployeeIds.includes(employee.id));
+  const selectedEmployeeCount = selectedEmployeeIds.length;
+  const visibleEmployees = employees.filter((employee) => {
+    const term = employeeSearch.trim().toLocaleLowerCase("th");
+    return !term || `${employee.code} ${employee.name} ${employee.departmentName}`.toLocaleLowerCase("th").includes(term);
+  });
+  const duplicateSortFields = new Set(sortRules.map((rule) => rule.field)).size !== sortRules.length;
+  const sortRulesInvalid = sortRules.length > 4 || duplicateSortFields;
+  const otReportVariant = getOtReportVariant({ periodType, scope, separateMonthColumns, appendMonthlyDetails, showDetail });
+  const exportSupported = reportType === "ot" && periodType !== "custom" && Boolean(otReportVariant);
+  const yearNumber = Number(year);
+  const canExport = exportSupported
+    && !optionsLoading
+    && !optionsError
+    && !isExporting
+    && !customPeriodInvalid
+    && Number.isInteger(yearNumber)
+    && yearNumber >= 2000
+    && yearNumber <= 2100
+    && !sortRulesInvalid
+    && (scope === "all" || (selectedEmployeeCount > 0 && selectedEmployeeCount <= 100));
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setOptionsLoading(true);
+    setOptionsError("");
+    fetch("/api/reports/ot/options", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "ไม่สามารถโหลดรายชื่อพนักงานได้");
+        return payload;
+      })
+      .then((payload) => {
+        const allowedEmployees = Array.isArray(payload.employees) ? payload.employees : [];
+        setEmployees(allowedEmployees);
+        setCanViewCompany(payload.canViewCompany === true);
+        if (payload.canViewCompany !== true) {
+          setScope("individual");
+          setSelectedEmployeeIds(allowedEmployees[0]?.id ? [allowedEmployees[0].id] : []);
+        }
+      })
+      .catch((error) => {
+        if (error.name !== "AbortError") setOptionsError(error.message || "ไม่สามารถโหลดรายชื่อพนักงานได้");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setOptionsLoading(false);
+      });
+    return () => controller.abort();
+  }, [optionsAttempt]);
 
   function updateSortRule(id, updates) {
     setSortRules((current) => current.map((rule) => (rule.id === id ? { ...rule, ...updates } : rule)));
   }
 
   function addSortRule() {
+    if (sortRules.length >= 4) {
+      setExportNotice("เพิ่มเงื่อนไขการเรียงได้ไม่เกิน 4 รายการ");
+      setExportNoticeIsError(true);
+      return;
+    }
+    const nextField = fields.find((field) => !sortRules.some((rule) => rule.field === field.id));
+    if (!nextField) {
+      setExportNotice("เลือกเงื่อนไขการเรียงแต่ละรายการให้ไม่ซ้ำกัน");
+      setExportNoticeIsError(true);
+      return;
+    }
     const id = nextSortId.current;
     nextSortId.current += 1;
-    setSortRules((current) => [...current, { id, field: "name", direction: "asc" }]);
+    setSortRules((current) => [...current, { id, field: nextField.id, direction: "asc" }]);
   }
 
   function removeSortRule(id) {
     setSortRules((current) => current.filter((rule) => rule.id !== id));
+  }
+
+  function toggleEmployee(employeeId, checked) {
+    setSelectionError("");
+    if (!checked) {
+      setSelectedEmployeeIds((current) => current.filter((id) => id !== employeeId));
+      return;
+    }
+    if (selectedEmployeeIds.includes(employeeId)) return;
+    if (selectedEmployeeIds.length >= 100) {
+      setSelectionError("เลือกพนักงานได้ไม่เกิน 100 คนต่อไฟล์");
+      return;
+    }
+    setSelectedEmployeeIds((current) => current.includes(employeeId) ? current : [...current, employeeId]);
+  }
+
+  function setFilteredEmployees(checked) {
+    const filteredIds = visibleEmployees.map((employee) => employee.id);
+    setSelectionError("");
+    if (!checked) {
+      setSelectedEmployeeIds((current) => current.filter((id) => !filteredIds.includes(id)));
+      return;
+    }
+    const pending = filteredIds.filter((id) => !selectedEmployeeIds.includes(id));
+    const available = Math.max(0, 100 - selectedEmployeeIds.length);
+    setSelectedEmployeeIds((current) => [...current, ...pending.slice(0, available).filter((id) => !current.includes(id))]);
+    if (pending.length > available) setSelectionError("เลือกพนักงานได้ไม่เกิน 100 คนต่อไฟล์");
+  }
+
+  async function downloadReport() {
+    if (!canExport || !otReportVariant) return;
+    setIsExporting(true);
+    setExportNotice("");
+    setExportNoticeIsError(false);
+    const payload = {
+      variant: otReportVariant,
+      year: yearNumber,
+      ...(periodType === "monthly" ? { month: Number(month) } : {}),
+      ...(scope === "individual" ? { employeeIds: selectedEmployeeIds } : {}),
+      sortRules: sortRules.map(({ field, direction }) => ({ field: field === "metric" ? "hours" : field, direction })),
+    };
+    try {
+      const response = await fetch("/api/reports/ot/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const contentType = response.headers.get("content-type") || "";
+        const message = contentType.includes("application/json")
+          ? (await response.json()).error
+          : "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้";
+        throw new Error(message || "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้");
+      }
+      const blob = await response.blob();
+      if (blob.type !== "application/pdf" || blob.size < 5) throw new Error("เซิร์ฟเวอร์ส่งไฟล์รายงานไม่ถูกต้อง");
+      const disposition = response.headers.get("content-disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `ot-report-${otReportVariant}-${yearNumber}.pdf`;
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      setExportNotice("ดาวน์โหลด PDF แล้ว");
+      setExportNoticeIsError(false);
+    } catch (error) {
+      setExportNotice(error.message || "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้");
+      setExportNoticeIsError(true);
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const monthLabel = (value) => months.find((item) => item.id === value)?.label || "";
@@ -336,7 +498,14 @@ export default function ReportsModule() {
                   name="report-scope"
                   value={option.id}
                   checked={scope === option.id}
-                  onChange={() => setScope(option.id)}
+                  disabled={option.id === "all" && !canViewCompany}
+                  onChange={() => {
+                    setScope(option.id);
+                    setExportNotice("");
+                    setExportNoticeIsError(false);
+                    setSelectionError("");
+                    if (option.id === "all") setShowDetail(false);
+                  }}
                   className="size-4 shrink-0 accent-primary"
                 />
                 <span className="min-w-0">
@@ -346,6 +515,77 @@ export default function ReportsModule() {
               </label>
             ))}
           </fieldset>
+          {reportType === "ot" && optionsError ? (
+            <div className="flex flex-wrap items-center gap-2" role="alert">
+              <p className="text-xs leading-5 text-status-danger">{optionsError}</p>
+              <Button type="button" variant="outline" size="sm" className="min-h-9" onClick={() => {
+                setOptionsError("");
+                setOptionsAttempt((current) => current + 1);
+              }}>ลองโหลดรายชื่ออีกครั้ง</Button>
+            </div>
+          ) : null}
+          {reportType === "ot" && scope === "individual" ? (
+            <div className="space-y-2.5 border-t border-border pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-medium text-foreground">เลือกพนักงาน · {selectedEmployeeCount}/100</p>
+                {canViewCompany ? (
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" className="min-h-9" onClick={() => setFilteredEmployees(true)} disabled={optionsLoading || !visibleEmployees.length}>เลือกผลการค้นหา</Button>
+                    <Button type="button" variant="ghost" size="sm" className="min-h-9" onClick={() => setSelectedEmployeeIds([])} disabled={!selectedEmployeeCount}>ล้าง</Button>
+                  </div>
+                ) : null}
+              </div>
+              {canViewCompany ? (
+                <Input
+                  id="report-employee-search"
+                  label="ค้นหาด้วยรหัส ชื่อ หรือแผนก"
+                  type="search"
+                  value={employeeSearch}
+                  onChange={setEmployeeSearch}
+                  placeholder="ค้นหาพนักงาน"
+                />
+              ) : null}
+              <div className="max-h-44 overflow-y-auto rounded-md border border-border bg-background" role="group" aria-label="รายชื่อพนักงานสำหรับรายงาน">
+                {optionsLoading ? (
+                  <p className="px-3 py-3 text-xs text-muted-foreground" role="status">กำลังโหลดรายชื่อพนักงาน…</p>
+                ) : optionsError ? (
+                  <p className="px-3 py-3 text-xs text-muted-foreground">กรุณาลองโหลดรายชื่ออีกครั้ง</p>
+                ) : visibleEmployees.length ? visibleEmployees.map((employee) => {
+                  const checkboxId = `report-employee-${employee.id}`;
+                  return (
+                    <label key={employee.id} htmlFor={checkboxId} className="flex min-h-10 cursor-pointer items-center gap-2.5 border-b border-border px-3 py-2 last:border-0">
+                      <Checkbox
+                        id={checkboxId}
+                        aria-label={`${employee.code} ${employee.name}`}
+                        isSelected={selectedEmployeeIds.includes(employee.id)}
+                        isDisabled={!canViewCompany}
+                        onChange={(checked) => toggleEmployee(employee.id, checked)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-medium text-foreground">{employee.name}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{employee.code} · {employee.departmentName}</span>
+                      </span>
+                    </label>
+                  );
+                }) : (
+                  <p className="px-3 py-3 text-xs text-muted-foreground">ไม่พบพนักงานตามคำค้นหา</p>
+                )}
+              </div>
+              {selectedEmployees.length ? (
+                <p className="text-[11px] leading-4 text-muted-foreground" aria-live="polite">
+                  เลือกแล้ว {selectedEmployeeCount} คน · {selectedEmployees.map((employee) => employee.code).join(", ")}
+                </p>
+              ) : null}
+              {selectionError ? <p role="alert" className="text-xs text-status-danger">{selectionError}</p> : null}
+              <ReportSwitchOption
+                id="report-daily-detail"
+                label="แสดงรายละเอียดรายวัน"
+                description="แสดงรายการ OT พร้อมวันที่ เวลา ชั่วโมง และเหตุผลของแต่ละคำขอ"
+                isSelected={showDetail}
+                onChange={setShowDetail}
+              />
+            </div>
+          ) : null}
         </ReportSection>
       </div>
 
@@ -377,11 +617,15 @@ export default function ReportsModule() {
               ยังไม่มีเงื่อนไข ระบบจะใช้ลำดับเริ่มต้นเมื่อสร้างรายงาน
             </p>
           )}
+          {sortRulesInvalid ? (
+            <p role="alert" className="text-xs leading-5 text-status-danger">เลือกเงื่อนไขเรียงลำดับไม่ซ้ำกันและไม่เกิน 4 รายการ</p>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
             leadingIcon={RiAddLine}
             onClick={addSortRule}
+            disabled={sortRules.length >= 4 || !fields.some((field) => !sortRules.some((rule) => rule.field === field.id))}
             className="min-h-10 text-primary"
           >
             เพิ่มเงื่อนไขการเรียง
@@ -402,7 +646,10 @@ export default function ReportsModule() {
                 label="แยกคอลัมน์เดือน (Table View)"
                 description="แสดงตารางต่อเนื่องตลอดทั้งปี"
                 isSelected={separateMonthColumns}
-                onChange={setSeparateMonthColumns}
+                onChange={(selected) => {
+                  setSeparateMonthColumns(selected);
+                  if (reportType === "ot" && selected) setAppendMonthlyDetails(false);
+                }}
               />
             ) : null}
             <ReportSwitchOption
@@ -410,7 +657,10 @@ export default function ReportsModule() {
               label="แนบหน้ารายเดือน"
               description="เพิ่มหน้าแยกรายละเอียดแต่ละเดือนต่อท้ายสรุป"
               isSelected={appendMonthlyDetails}
-              onChange={setAppendMonthlyDetails}
+              onChange={(selected) => {
+                setAppendMonthlyDetails(selected);
+                if (reportType === "ot" && selected) setSeparateMonthColumns(false);
+              }}
             />
           </div>
         </ReportSection>
@@ -441,21 +691,41 @@ export default function ReportsModule() {
               type="button"
               size="lg"
               leadingIcon={RiFilePdf2Line}
-              onClick={() => setExportNotice("ตั้งค่ารายงานแล้ว ส่วนการดึงข้อมูลและสร้างไฟล์ PDF จะเชื่อมต่อในขั้นตอนถัดไป")}
-              disabled={customPeriodInvalid}
+              onClick={downloadReport}
+              disabled={!canExport}
               className="w-full sm:w-auto"
             >
-              สร้างรายงาน PDF
+              {isExporting ? "กำลังสร้าง PDF…" : "สร้างรายงาน PDF"}
             </Button>
             <p className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
               <RiInformationLine className="size-4 shrink-0" aria-hidden="true" />
-              ยังไม่ได้เชื่อมต่อการดึงข้อมูลและสร้าง PDF
+              {reportType !== "ot"
+                ? "รายงานหมวดนี้ยังไม่พร้อมส่งออก"
+                : periodType === "custom"
+                  ? "รายงาน OT รองรับช่วงเวลาแบบรายเดือนหรือรายปี"
+                  : optionsError
+                    ? "โหลดรายชื่อพนักงานไม่สำเร็จ กรุณาลองโหลดอีกครั้ง"
+                    : optionsLoading
+                      ? "กำลังโหลดสิทธิ์และรายชื่อพนักงาน"
+                      : scope === "individual" && !selectedEmployeeCount
+                        ? "เลือกพนักงานอย่างน้อยหนึ่งคนก่อนสร้างรายงาน"
+                        : sortRulesInvalid
+                          ? "แก้ไขเงื่อนไขเรียงลำดับที่ซ้ำกันก่อนสร้างรายงาน"
+                          : isExporting
+                            ? "กำลังเตรียมไฟล์รายงาน OT"
+                            : "รวมเฉพาะรายการ OT ที่อนุมัติแล้ว"}
             </p>
           </div>
         </CardContent>
       </Card>
       {exportNotice ? (
-        <p role="status" className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm leading-5 text-foreground">
+        <p
+          role={exportNoticeIsError ? "alert" : "status"}
+          className={cn(
+            "rounded-lg border px-4 py-3 text-sm leading-5",
+            exportNoticeIsError ? "border-status-danger/20 bg-status-danger/5 text-status-danger" : "border-primary/20 bg-primary/5 text-foreground",
+          )}
+        >
           {exportNotice}
         </p>
       ) : null}
@@ -470,7 +740,16 @@ export default function ReportsModule() {
         description="เลือกหมวด ช่วงเวลา และรูปแบบก่อนส่งออก"
       />
 
-      <Tabs selectedKey={reportType} onSelectionChange={(key) => setReportType(String(key))}>
+      <Tabs
+        selectedKey={reportType}
+        onSelectionChange={(key) => {
+          const nextType = String(key);
+          setReportType(nextType);
+          if (nextType === "ot" && separateMonthColumns && appendMonthlyDetails) setAppendMonthlyDetails(false);
+          setExportNotice("");
+          setExportNoticeIsError(false);
+        }}
+      >
         <TabList
           aria-label="หมวดรายงาน"
           className="grid w-full grid-cols-3 gap-2 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none"
