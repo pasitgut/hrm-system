@@ -27,7 +27,7 @@ describe("OtRequestPanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onUpdated = vi.fn();
 
-    render(<OtRequestPanel role="supervisor" onUpdated={onUpdated} />);
+    render(<OtRequestPanel role="supervisor" permissions={["ot.approve"]} onUpdated={onUpdated} />);
 
     expect(await screen.findByText("ปิดงานระบบ")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "ไม่อนุมัติ" }));
@@ -43,7 +43,7 @@ describe("OtRequestPanel", () => {
   it("keeps decision actions hidden from employees", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ items: [request] }) }));
 
-    render(<OtRequestPanel role="employee" />);
+    render(<OtRequestPanel role="employee" permissions={[]} />);
 
     expect(await screen.findByText("ปิดงานระบบ")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "อนุมัติ" })).not.toBeInTheDocument();

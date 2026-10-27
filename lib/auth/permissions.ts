@@ -1,4 +1,8 @@
 export const PERMISSIONS = [
+  { key: "salary_slips.view", group: "สลิปเงินเดือน", label: "ดูสลิปเงินเดือน", description: "ดูสลิปและประวัติการแก้ไขของพนักงานทุกคน" },
+  { key: "salary_slips.import", group: "สลิปเงินเดือน", label: "นำเข้าสลิปเงินเดือน", description: "นำเข้า Excel จับคู่พนักงาน และบันทึกสลิป" },
+  { key: "salary_slips.replace", group: "สลิปเงินเดือน", label: "แทนที่สลิปเงินเดือน", description: "ยืนยันแทนที่ยอดเดิมโดยเก็บประวัติรุ่น" },
+  { key: "salary_slips.export", group: "สลิปเงินเดือน", label: "ส่งออกสลิปเงินเดือน", description: "ดาวน์โหลด PDF และ Excel" },
   { key: "employees.profile.view", group: "พนักงาน", label: "ดูรายชื่อและประวัติพนักงาน", description: "เปิดดูข้อมูลทั่วไปของพนักงาน โดยข้อมูลค่าตอบแทนแยกสิทธิ์ต่างหาก" },
   { key: "employees.profile.create", group: "พนักงาน", label: "เพิ่มพนักงาน", description: "สร้างประวัติพนักงานและบัญชีเข้าใช้งาน" },
   { key: "employees.profile.update", group: "พนักงาน", label: "แก้ไขข้อมูลพนักงาน", description: "แก้ไขประวัติและข้อมูลการทำงาน โดยไม่รวมข้อมูลค่าตอบแทน" },

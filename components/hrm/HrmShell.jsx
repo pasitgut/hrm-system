@@ -25,6 +25,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
 import {
+  hasPermission,
   canAccessEmployeeDocuments,
   canApproveAnything,
   canManageAssetTemplates,
@@ -66,6 +67,7 @@ const baseGroups = [
     label: "ข้อมูลและรายงาน",
     items: [
       { key: "payroll", label: "เงินเดือน", icon: RiMoneyDollarCircleLine, href: "/payroll" },
+      { key: "salary-slips", label: "สลิปเงินเดือน", icon: RiFileTextLine, href: "/salary-slips" },
       { key: "reports", label: "รายงาน", icon: RiFileChartLine, href: "/reports" },
     ],
   },
@@ -187,6 +189,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const active = pathname === "/ot" ? "ot"
+    : pathname.startsWith("/salary-slips") ? "salary-slips"
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
         : pathname === "/assets" ? "assets"
@@ -205,6 +208,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
         if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
         if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
         if (item.key === "payroll") return canViewEmployeeCompensation(permissions);
+        if (item.key === "salary-slips") return hasPermission(permissions, "salary_slips.view");
         if (item.key === "reports") return canViewReports(permissions);
         return true;
       }),

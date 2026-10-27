@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employeeDocuments, users } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
-import { canDeleteEmployeeDocuments, canShareEmployeeDocuments } from "@/lib/auth/permissions";
+import { canDeleteEmployeeDocuments, canShareEmployeeDocuments, canViewEmployeeDocuments } from "@/lib/auth/permissions";
 import { isUuid } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import { deleteEmployeeDocumentFromDrive, GoogleDriveError } from "@/lib/google-drive";

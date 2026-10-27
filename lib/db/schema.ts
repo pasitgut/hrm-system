@@ -249,6 +249,43 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Salary slips are independent of the payroll mockup and employee compensation.
+export const salarySlipImports = pgTable("salary_slip_imports", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  files: jsonb("files").$type<import("@/lib/salary-slips/model").ImportFile[]>().notNull(),
+  rows: jsonb("rows").$type<import("@/lib/salary-slips/model").ImportRow[]>().notNull(),
+  committedAt: timestamp("committed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const salarySlips = pgTable("salary_slips", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id),
+  year: integer("year").notNull(),
+  month: smallint("month").notNull(),
+  revision: integer("revision").notNull().default(1),
+  data: jsonb("data").$type<import("@/lib/salary-slips/model").SlipData>().notNull(),
+  incomeTotal: numeric("income_total", { precision: 12, scale: 2 }).notNull(),
+  deductionTotal: numeric("deduction_total", { precision: 12, scale: 2 }).notNull(),
+  netPay: numeric("net_pay", { precision: 12, scale: 2 }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("salary_slips_employee_period_unique").on(t.employeeId, t.year, t.month),
+  check("salary_slips_month_valid", sql`${t.month} BETWEEN 1 AND 12`),
+  check("salary_slips_year_valid", sql`${t.year} BETWEEN 1900 AND 2200`),
+  check("salary_slips_revision_valid", sql`${t.revision} > 0`),
+]);
+export const salarySlipVersions = pgTable("salary_slip_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  slipId: uuid("slip_id").notNull().references(() => salarySlips.id),
+  importId: uuid("import_id").notNull().references(() => salarySlipImports.id),
+  revision: integer("revision").notNull(),
+  data: jsonb("data").$type<import("@/lib/salary-slips/model").SlipData>().notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("salary_slip_versions_revision_unique").on(t.slipId, t.revision)]);
+
 export const employeeDocuments = pgTable(
   "employee_documents",
   {

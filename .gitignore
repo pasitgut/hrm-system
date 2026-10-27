@@ -16,5 +16,6 @@
 
 # misc
 *.log
+/.local-data/
 .DS_Store
 Thumbs.db
