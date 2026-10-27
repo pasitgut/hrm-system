@@ -6,6 +6,9 @@ const PAGE_CONTENT_WIDTH = 555.28;
 const GRID_COLOR = "#bdbdbd";
 const HEADER_COLOR = "#37474f";
 const FONT = "THSarabunNew";
+const TABLE_HORIZONTAL_PADDING = 1.5;
+const TABLE_VERTICAL_LINE_WIDTH = 0.5;
+const DETAIL_REASON_ROW_LIMIT = 400;
 
 type PdfCell = string | Record<string, any>;
 type PdfNode = Record<string, any>;
@@ -82,10 +85,46 @@ function spanningTextRow(text: string, columns: number, options: PdfNode = {}): 
   return [{ text, colSpan: columns, ...options }, ...Array.from({ length: columns - 1 }, () => "")];
 }
 
+function fitTableWidths(widths: Array<number | string>): Array<number | string> {
+  if (!widths.every((width) => typeof width === "number")) return widths;
+
+  const totalWidth = widths.reduce<number>((total, width) => total + Number(width), 0);
+  if (Math.abs(totalWidth - PAGE_CONTENT_WIDTH) > 0.01) return widths;
+
+  const columnCount = widths.length;
+  const tableInsets = columnCount * TABLE_HORIZONTAL_PADDING * 2 + (columnCount + 1) * TABLE_VERTICAL_LINE_WIDTH;
+  const availableColumnWidth = PAGE_CONTENT_WIDTH - tableInsets;
+  const scale = availableColumnWidth / totalWidth;
+  return widths.map((width) => Number(width) * scale);
+}
+
+function splitDetailReason(reason: string): string[] {
+  const characters = Array.from(reason);
+  if (characters.length <= DETAIL_REASON_ROW_LIMIT) return [reason];
+
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < characters.length) {
+    let end = Math.min(start + DETAIL_REASON_ROW_LIMIT, characters.length);
+    if (end < characters.length) {
+      const preferredBreak = start + Math.floor(DETAIL_REASON_ROW_LIMIT * 0.65);
+      for (let index = end - 1; index >= preferredBreak; index -= 1) {
+        if (/\s/.test(characters[index])) {
+          end = index + 1;
+          break;
+        }
+      }
+    }
+    chunks.push(characters.slice(start, end).join(""));
+    start = end;
+  }
+  return chunks;
+}
+
 function tableNode(widths: Array<number | string>, body: PdfCell[][], headerRows = 0, margin: number[] = [0, 0, 0, 8]): PdfNode {
   return {
     table: {
-      widths,
+      widths: fitTableWidths(widths),
       body,
       ...(headerRows ? { headerRows, keepWithHeaderRows: 1 } : {}),
     },
@@ -349,6 +388,7 @@ function detailTable(report: OtReportPdfDocument, employee: OtReportPdfEmployee,
   requests.forEach((request) => {
     const weekday = request.overtimeType === "weekday";
     const holiday = request.overtimeType === "holiday";
+    const reasonChunks = splitDetailReason(request.reason ?? "");
     body.push([
       detailCell(THAI_MONTHS[request.month - 1]),
       detailCell(detailDateLabel(request)),
@@ -358,9 +398,16 @@ function detailTable(report: OtReportPdfDocument, employee: OtReportPdfEmployee,
       detailCell(holiday ? request.startTime : ""),
       detailCell(holiday ? request.endTime : ""),
       detailCell(holiday ? formatOtHours(request.durationMs) : "", "right"),
-      detailCell(request.reason, "left"),
+      detailCell(reasonChunks[0], "left"),
       detailCell("อนุมัติแล้ว"),
     ]);
+    reasonChunks.slice(1).forEach((reasonChunk) => {
+      body.push([
+        ...Array.from({ length: 8 }, () => detailCell("")),
+        detailCell(reasonChunk, "left"),
+        detailCell(""),
+      ]);
+    });
   });
 
   if (!requests.length) {
@@ -384,15 +431,23 @@ function unknownDetailTable(report: OtReportPdfDocument, employee: OtReportPdfEm
   ];
 
   unknown.forEach((request) => {
+    const reasonChunks = splitDetailReason(request.reason ?? "");
     rows.push([
       detailCell(THAI_MONTHS[request.month - 1]),
       detailCell(detailDateLabel(request)),
       detailCell(request.startTime),
       detailCell(request.endTime),
       detailCell(formatOtHours(request.durationMs), "right"),
-      detailCell(request.reason, "left"),
+      detailCell(reasonChunks[0], "left"),
       detailCell("อนุมัติแล้ว"),
     ]);
+    reasonChunks.slice(1).forEach((reasonChunk) => {
+      rows.push([
+        ...Array.from({ length: 5 }, () => detailCell("")),
+        detailCell(reasonChunk, "left"),
+        detailCell(""),
+      ]);
+    });
   });
 
   return tableNode([50, 55, 40, 40, 45, 275.28, 50], rows, 6 + (monthLabel ? 1 : 0), [0, 0, 0, 8]);
@@ -512,11 +567,11 @@ export function createOtReportPdfDefinition(report: OtReportPdfDocument) {
 
 export const OT_PDF_TABLE_LAYOUT = {
   hLineWidth: () => 0.5,
-  vLineWidth: () => 0.5,
+  vLineWidth: () => TABLE_VERTICAL_LINE_WIDTH,
   hLineColor: () => GRID_COLOR,
   vLineColor: () => GRID_COLOR,
-  paddingLeft: () => 4,
-  paddingRight: () => 4,
+  paddingLeft: () => TABLE_HORIZONTAL_PADDING,
+  paddingRight: () => TABLE_HORIZONTAL_PADDING,
   paddingTop: () => 2,
   paddingBottom: () => 2,
 };

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createOtReportPdfDefinition } from "./pdfmake";
+import { createOtReportPdfDefinition, OT_PDF_TABLE_LAYOUT } from "./pdfmake";
 import { THAI_MONTHS, type OtReportEmployeeModel, type OtReportModel } from "./model";
 import type { OtReportVariant } from "./options";
 
-function sampleReport(variant: OtReportVariant, month: number | null = null) {
+function sampleReport(variant: OtReportVariant, month: number | null = null, weekdayReason = "ตรวจงานหน้างาน") {
   const weekdayRequest = {
     id: "request-weekday",
     employeeId: "employee-1",
@@ -16,7 +16,7 @@ function sampleReport(variant: OtReportVariant, month: number | null = null) {
     month: 1,
     overtimeType: "weekday" as const,
     durationMs: 5_400_000,
-    reason: "ตรวจงานหน้างาน",
+    reason: weekdayReason,
   };
   const unknownRequest = {
     ...weekdayRequest,
@@ -111,6 +111,35 @@ describe("createOtReportPdfDefinition", () => {
     expect(unknownTable).toBeDefined();
     expect(JSON.stringify(definition.content)).toContain("ตรวจงานหน้างาน");
     expect(JSON.stringify(definition.content)).toContain("เตรียมเอกสาร");
+  });
+
+  it("keeps every table inside the printable page width after cell padding and grid lines", () => {
+    const definition = createOtReportPdfDefinition(sampleReport("yearly-individual-detail"));
+    const tables = collectTableNodes(definition.content);
+
+    for (const node of tables) {
+      const columns = node.table.widths.length;
+      const declaredWidth = node.table.widths.reduce<number>((total, width) => total + Number(width), 0);
+      const insets = columns * (OT_PDF_TABLE_LAYOUT.paddingLeft() + OT_PDF_TABLE_LAYOUT.paddingRight())
+        + (columns + 1) * OT_PDF_TABLE_LAYOUT.vLineWidth();
+
+      expect(declaredWidth + insets).toBeLessThanOrEqual(555.28 + 0.01);
+    }
+  });
+
+  it("splits long OT reasons across continuation rows without dropping text", () => {
+    const reason = `Long reason ${"work detail ".repeat(80)}OTEND9F4C`;
+    const definition = createOtReportPdfDefinition(sampleReport("yearly-individual-detail", null, reason));
+    const detailTable = collectTableNodes(definition.content)
+      .find((node) => node.table.widths.length === 10 && node.table.headerRows === 7);
+    const reasonChunks = detailTable?.table.body.slice(7).map((row) => {
+      const reasonCell = row[8] as { text?: string };
+      return reasonCell.text ?? "";
+    }).filter(Boolean) ?? [];
+
+    expect(reasonChunks.length).toBeGreaterThan(1);
+    expect(reasonChunks.join("")).toBe(reason);
+    expect(Math.max(...reasonChunks.map((chunk) => Array.from(chunk).length))).toBeLessThanOrEqual(400);
   });
 
   it("keeps the yearly individual month pages and annual summary on separate pages", () => {
