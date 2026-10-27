@@ -8,6 +8,7 @@ const HEADER_COLOR = "#37474f";
 const FONT = "THSarabunNew";
 const TABLE_HORIZONTAL_PADDING = 1.5;
 const TABLE_VERTICAL_LINE_WIDTH = 0.5;
+const MONTH_COLUMN_WIDTH = 82;
 const DETAIL_REASON_ROW_LIMIT = 400;
 
 type PdfCell = string | Record<string, any>;
@@ -154,7 +155,7 @@ function summaryTable(
 ): PdfNode {
   const includeMonth = options.displayMonth !== undefined;
   const metricCount = options.includeUnknown ? 4 : 3;
-  const monthWidth = includeMonth ? 50 : 0;
+  const monthWidth = includeMonth ? MONTH_COLUMN_WIDTH : 0;
   const codeWidth = 60;
   const metricWidth = 70;
   const nameWidth = PAGE_CONTENT_WIDTH - monthWidth - codeWidth - metricCount * metricWidth;
@@ -220,7 +221,7 @@ function departmentNodes(
 
 function monthColumnsTable(employees: OtReportPdfEmployee[], year: number, includeUnknown: boolean, repeatMonth = false): PdfNode {
   const metricCount = includeUnknown ? 4 : 3;
-  const fixedMonth = 50;
+  const fixedMonth = MONTH_COLUMN_WIDTH;
   const fixedCode = 60;
   const metricWidth = 70;
   const nameWidth = PAGE_CONTENT_WIDTH - fixedMonth - fixedCode - metricCount * metricWidth;

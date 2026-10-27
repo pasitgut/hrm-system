@@ -127,6 +127,14 @@ describe("createOtReportPdfDefinition", () => {
     }
   });
 
+  it("leaves enough room for full Thai month labels in month-column reports", () => {
+    const definition = createOtReportPdfDefinition(sampleReport("yearly-all-month-columns"));
+    const monthTable = collectTableNodes(definition.content)
+      .find((node) => node.table.widths.length === 7 && node.table.headerRows === 1 && node.table.body.length === 13);
+
+    expect(Number(monthTable?.table.widths[0])).toBeGreaterThan(70);
+  });
+
   it("splits long OT reasons across continuation rows without dropping text", () => {
     const reason = `Long reason ${"work detail ".repeat(80)}OTEND9F4C`;
     const definition = createOtReportPdfDefinition(sampleReport("yearly-individual-detail", null, reason));
