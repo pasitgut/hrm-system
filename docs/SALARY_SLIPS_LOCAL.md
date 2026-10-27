@@ -6,7 +6,7 @@
 
 1. เปิด Docker Desktop และ PostgreSQL (`docker compose up -d postgres`)
 2. ตรวจ `.env` ให้ `DATABASE_URL` ชี้ฐานข้อมูล Local และตั้ง `JWT_SECRET`
-3. รัน `npm install`, `npm run db:migrate` และ `npm run salary-slips:install-browser`
+3. รัน `npm install` และ `npm run db:migrate`
 4. เปิด `npm run dev` แล้วเข้าสู่ระบบ
 5. ที่ตั้งค่า → สิทธิ์ผู้ใช้ ให้ผู้ดูแลเลือกกลุ่ม **สลิปเงินเดือน** ให้บัญชี HR: ดู, นำเข้า, แทนที่, ส่งออก ตามงานที่รับผิดชอบ (สิทธิ์ไม่ได้เปิดให้อัตโนมัติ)
 6. เปิดเมนู **สลิปเงินเดือน** แล้วนำเข้า Excel
@@ -28,7 +28,7 @@
 ## ส่งออกและยอดสะสม
 
 เลือกปีและสลิปที่ต้องการ แล้วดาวน์โหลด PDF หรือ Excel (สูงสุด 240 สลิปต่อครั้ง สำหรับ 20 คน × 12 เดือน)
-PDF ใช้ Chromium และฟอนต์ไทยในโปรเจกต์ หนึ่งสลิปต่อหน้า A4 แนวนอน ส่วน Excel ใช้แม่แบบเดิม หนึ่ง worksheet ต่อพนักงาน เรียงเดือนในแผ่นเดียว
+PDF สร้างด้วย PDFMake และฟอนต์ Noto Sans Thai ที่รวมอยู่ในโปรเจกต์ หนึ่งสลิปต่อหน้า A4 แนวนอน ไม่ต้องติดตั้ง Chromium ส่วน Excel ใช้แม่แบบเดิม หนึ่ง worksheet ต่อพนักงาน เรียงเดือนในแผ่นเดียว
 
 ยอดสะสมรวมรายได้ ภาษี ประกันสังคม และกองทุน ตั้งแต่มกราคมถึงเดือนสลิปในปีเดียวกัน รวมเฉพาะข้อมูลที่บันทึก หากมีเดือนขาดจะแจ้งก่อนส่งออก การแก้งวดก่อนหน้ามีผลต่อเอกสารที่สร้างใหม่
 วันที่จ่ายใช้วันสุดท้ายของเดือนตามระบบเดิม
@@ -38,4 +38,14 @@ PDF ใช้ Chromium และฟอนต์ไทยในโปรเจก
 ต้นฉบับอยู่ใน `.local-data/salary-slips/` (เปลี่ยนได้ด้วย `SALARY_SLIPS_STORAGE_DIR`) ซึ่งไม่อยู่ใน Git หรือ public URL เก็บต้นฉบับและประวัติไว้โดยไม่ลบอัตโนมัติ ผลส่งออกสร้างในหน่วยความจำและไม่เก็บถาวร
 สำรองฐานข้อมูล PostgreSQL และโฟลเดอร์ต้นฉบับคู่กัน ก่อนย้ายเครื่องหรือแก้ไขโครงสร้าง
 
-หากสร้าง PDF ไม่ได้ ให้รัน `npm run salary-slips:install-browser` แล้วลองใหม่ หรือดาวน์โหลด Excel แทน หากฐานข้อมูลยังไม่มีตาราง ให้รัน `npm run db:migrate` หลังเปิด PostgreSQL
+หากสร้าง PDF ไม่ได้ ให้ตรวจว่าฟอนต์ใน `public/NotoSansThai-Regular.ttf` และ `public/NotoSansThai-Bold.ttf` อยู่ครบ จากนั้นตรวจ log ของ API หากฐานข้อมูลยังไม่มีตาราง ให้รัน `npm run db:migrate` หลังเปิด PostgreSQL
+
+## ตรวจ PDFMake ในเครื่อง
+
+สร้างสลิปตัวอย่างหนึ่งหน้าโดยไม่ใช้ฐานข้อมูลหรือ Chromium:
+
+```powershell
+npx tsx scripts/verify-salary-slip-pdf-fixture.ts
+```
+
+หากต้องการเก็บไฟล์ทดสอบแยกจาก `output/` ให้ส่งโฟลเดอร์ปลายทางเป็น argument แรก เช่น `npx tsx scripts/verify-salary-slip-pdf-fixture.ts tmp/pdfmake-qa` ชุดทดสอบโมดูลสลิปและ export API ใช้ `npm test -- lib/salary-slips app/api/salary-slips`.

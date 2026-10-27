@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { assertLeaveReportExportAccess, getLeaveReportAccess, LeaveReportAccessError } from "@/lib/reports/leave/access";
-import { PdfRendererUnavailableError, renderLeaveReportPdf } from "@/lib/reports/pdf";
+import { renderLeaveReportPdf } from "@/lib/reports/pdf";
 import { getLeaveReportDefinition, leaveReportExportSchema } from "@/lib/reports/leave/options";
 import { createLeaveReportModel, LeaveReportServiceError } from "@/lib/reports/leave/service";
 
@@ -55,9 +55,6 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     });
   } catch (error) {
     if (error instanceof LeaveReportServiceError) return NextResponse.json({ error: error.message }, { status: error.status });
-    if (error instanceof PdfRendererUnavailableError) {
-      return NextResponse.json({ error: "ยังไม่ได้ติดตั้ง Chromium สำหรับสร้าง PDF กรุณาติดตั้งด้วยคำสั่ง npx playwright install chromium" }, { status: 503 });
-    }
     console.error("Leave report PDF generation failed", error);
     return NextResponse.json({ error: "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้" }, { status: 500 });
   }

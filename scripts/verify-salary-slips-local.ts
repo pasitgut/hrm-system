@@ -1,14 +1,13 @@
-// Local, isolated QA. Never touches the development database or existing accounts.
+// Local, isolated API and PDFMake QA. Never touches the development database or existing accounts.
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { eq, inArray } from "drizzle-orm";
-import { chromium } from "playwright";
 import { db, sqlClient } from "@/lib/db/client";
 import { employees, users, salarySlips, salarySlipImports, salarySlipVersions } from "@/lib/db/schema";
 import { createSessionToken, COOKIE_NAME } from "@/lib/auth/session";
 import { fixtureData, fixtureWorkbook } from "@/tests/setup/salary-slips";
-import { createExcel, createPdf, documentHtml } from "@/lib/salary-slips/documents";
+import { createExcel, createPdf } from "@/lib/salary-slips/documents";
 import { withCumulative } from "@/lib/salary-slips/model";
 import { removeSource } from "@/lib/salary-slips/storage";
 
@@ -19,57 +18,70 @@ assert(["localhost", "127.0.0.1"].includes(new URL(baseUrl).hostname));
 const output = path.join(process.cwd(), ".local-data/salary-slips-verification");
 await mkdir(output, { recursive: true });
 const permissions = ["salary_slips.view", "salary_slips.import", "salary_slips.replace", "salary_slips.export"];
-const [employee] = await db.insert(employees).values({ code: "VFY1", firstName: "พนักงานทดสอบ", lastName: "สลิป", startDate: "2026-01-01" }).returning();
-const [user] = await db.insert(users).values({ employeeId: employee.id, email: `salary-verify-${employee.id}@example.invalid`, passwordHash: "disabled-verification-account", permissions }).returning();
-let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+let employeeId: string | undefined;
+let userId: string | undefined;
+let token = "";
+
 try {
-  browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  await context.addCookies([{ name: COOKIE_NAME, value: await createSessionToken({ sub: user.id, employeeId: employee.id, email: user.email, role: "employee", permissions }), url: baseUrl }]);
-  const page = await context.newPage();
-  const pageErrors: string[] = []; page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto(`${baseUrl}/salary-slips/import`);
-  await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[type="file"]')?.disabled === false);
-  await page.getByLabel("ไฟล์รายรับ–รายหัก (.xlsx)").setInputFiles({ name: "verify.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: await fixtureWorkbook((sheet) => { sheet.getCell("B10").value = "VFY1"; }) });
-  await page.getByRole("button", { name: "อ่านไฟล์และตรวจสอบ" }).click();
-  await page.getByRole("heading", { name: "ตรวจสอบ 1 รายการ" }).waitFor();
-  await page.screenshot({ path: path.join(output, "import-desktop.png"), fullPage: true });
-  await page.getByRole("button", { name: "ยืนยันบันทึกทั้งชุด" }).click();
-  await page.waitForURL(`${baseUrl}/salary-slips`);
-  await page.getByRole("link", { name: "รายละเอียด", exact: true }).last().click();
-  await page.getByRole("heading", { name: /สลิปของ/ }).waitFor();
-  await page.screenshot({ path: path.join(output, "detail-desktop.png"), fullPage: true });
-  const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("button", { name: "ดาวน์โหลด PDF", exact: true }).click();
-  const download = await downloadEvent; await download.saveAs(path.join(output, "downloaded-slip.pdf"));
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForFunction(() => getComputedStyle(document.querySelector("main")!.parentElement!).paddingLeft === "0px");
-  await page.screenshot({ path: path.join(output, "detail-mobile.png"), fullPage: true });
-  assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "No page-level overflow on mobile");
-  await page.goto(`${baseUrl}/salary-slips`); await page.getByRole("link", { name: "รายละเอียด", exact: true }).last().waitFor();
-  await page.screenshot({ path: path.join(output, "list-mobile.png"), fullPage: true });
-  assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-  await page.getByRole("button", { name: "ใช้ธีมมืด" }).click();
-  await page.screenshot({ path: path.join(output, "list-mobile-dark.png"), fullPage: true });
-  assert.deepEqual(pageErrors, [], "Browser has no uncaught errors");
-  const items = withCumulative(Array.from({ length: 20 }, (_, employeeIndex) => Array.from({ length: 12 }, (_, index) => ({ id: `${employeeIndex}:${index}`, employeeId: String(employeeIndex), revision: 1, data: fixtureData({ code: `T${String(employeeIndex).padStart(3, "0")}`, name: `พนักงานทดสอบ ${employeeIndex + 1}`, month: index + 1 }) }))).flat());
+  const [employee] = await db.insert(employees).values({ code: "VFY1", firstName: "พนักงานทดสอบ", lastName: "สลิป", startDate: "2026-01-01" }).returning();
+  employeeId = employee.id;
+  const [user] = await db.insert(users).values({ employeeId: employee.id, email: `salary-verify-${employee.id}@example.invalid`, passwordHash: "disabled-verification-account", permissions }).returning();
+  userId = user.id;
+  token = await createSessionToken({ sub: user.id, employeeId: employee.id, email: user.email, role: "employee", permissions });
+
+  const headers = { cookie: `${COOKIE_NAME}=${token}`, origin: baseUrl };
+  const form = new FormData();
+  const workbook = await fixtureWorkbook((sheet) => { sheet.getCell("B10").value = "VFY1"; });
+  form.append("files", new File([new Uint8Array(workbook)], "verify.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+  const imported = await fetch(new URL("/api/salary-slips/imports", baseUrl), { method: "POST", headers, body: form });
+  if (imported.status !== 201) throw new Error(`Import API returned ${imported.status}: ${await imported.text()}`);
+  const preview = await imported.json();
+  assert.equal(preview.rows.length, 1);
+  assert.ok(preview.id);
+
+  const committed = await fetch(new URL(`/api/salary-slips/imports/${preview.id}/commit`, baseUrl), {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ selections: [{ key: preview.rows[0].key, employeeId, expectedRevision: 0, replace: false }] }),
+  });
+  if (committed.status !== 200) throw new Error(`Commit API returned ${committed.status}: ${await committed.text()}`);
+  assert.equal((await committed.json()).inserted, 1);
+  const [storedSlip] = await db.select().from(salarySlips).where(eq(salarySlips.employeeId, employeeId));
+  assert.ok(storedSlip, "The local import created a salary slip");
+
+  const download = await fetch(new URL("/api/salary-slips/export", baseUrl), {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ year: 2026, ids: [storedSlip.id], format: "pdf", acknowledgeMissing: true }),
+  });
+  if (download.status !== 200) throw new Error(`PDF export API returned ${download.status}: ${await download.text()}`);
+  const downloadedPdf = Buffer.from(await download.arrayBuffer());
+  assert.equal(downloadedPdf.subarray(0, 5).toString("ascii"), "%PDF-");
+  await writeFile(path.join(output, "downloaded-slip.pdf"), downloadedPdf);
+
+  const items = withCumulative(Array.from({ length: 20 }, (_, employeeIndex) => Array.from({ length: 12 }, (_, index) => ({
+    id: `${employeeIndex}:${index}`,
+    employeeId: String(employeeIndex),
+    revision: 1,
+    data: fixtureData({ code: `T${String(employeeIndex).padStart(3, "0")}`, name: `พนักงานทดสอบ ${employeeIndex + 1}`, month: index + 1 }),
+  }))).flat());
   const started = Date.now();
-  const excel = await createExcel(items), pdf = await createPdf(items);
-  assert.equal((pdf.toString("latin1").match(/\/Type \/Page\b/g) ?? []).length, 240, "Exactly one PDF page per slip");
+  const [excel, pdf] = await Promise.all([createExcel(items), createPdf(items)]);
+  const pageObjects = pdf.toString("latin1").match(/\/Type\s*\/Page\b/g) ?? [];
+  assert.equal(pageObjects.length, 240, "Exactly one PDF page per salary slip");
   await writeFile(path.join(output, "20-employees-12-months.xlsx"), excel);
   await writeFile(path.join(output, "20-employees-12-months.pdf"), pdf);
-  await page.setViewportSize({ width: 1120, height: 760 });
-  await page.setContent(await documentHtml([items[0]])); await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: path.join(output, "document-preview.png"), fullPage: true });
-  console.log(JSON.stringify({ ui: "passed", slips: items.length, pdfPages: 240, generationMs: Date.now() - started, excelBytes: excel.length, pdfBytes: pdf.length, output }));
+  console.log(JSON.stringify({ api: "passed", slips: items.length, pdfPages: pageObjects.length, generationMs: Date.now() - started, excelBytes: excel.length, pdfBytes: pdf.length, output }));
 } finally {
-  await browser?.close();
-  const ownSlips = await db.select({ id: salarySlips.id }).from(salarySlips).where(eq(salarySlips.employeeId, employee.id));
-  if (ownSlips.length) await db.delete(salarySlipVersions).where(inArray(salarySlipVersions.slipId, ownSlips.map((slip) => slip.id)));
-  await db.delete(salarySlips).where(eq(salarySlips.employeeId, employee.id));
-  const imports = await db.select().from(salarySlipImports).where(eq(salarySlipImports.createdBy, user.id));
-  await db.delete(salarySlipImports).where(eq(salarySlipImports.createdBy, user.id));
-  await Promise.allSettled(imports.flatMap((batch) => batch.files.map((file) => removeSource(file.path))));
-  await db.delete(users).where(eq(users.id, user.id)); await db.delete(employees).where(eq(employees.id, employee.id));
+  if (employeeId && userId) {
+    const ownSlips = await db.select({ id: salarySlips.id }).from(salarySlips).where(eq(salarySlips.employeeId, employeeId));
+    if (ownSlips.length) await db.delete(salarySlipVersions).where(inArray(salarySlipVersions.slipId, ownSlips.map((slip) => slip.id)));
+    await db.delete(salarySlips).where(eq(salarySlips.employeeId, employeeId));
+    const imports = await db.select().from(salarySlipImports).where(eq(salarySlipImports.createdBy, userId));
+    await db.delete(salarySlipImports).where(eq(salarySlipImports.createdBy, userId));
+    await Promise.allSettled(imports.flatMap((batch) => batch.files.map((file) => removeSource(file.path))));
+    await db.delete(users).where(eq(users.id, userId));
+    await db.delete(employees).where(eq(employees.id, employeeId));
+  }
   await sqlClient.end();
 }

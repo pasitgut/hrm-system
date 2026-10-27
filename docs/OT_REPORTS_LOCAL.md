@@ -6,10 +6,10 @@
 
 1. ตั้งค่า `DATABASE_URL` ให้ชี้ไปยังฐานข้อมูลของแอป
 2. ติดตั้งแพ็กเกจด้วย `npm install`
-3. ติดตั้ง Chromium สำหรับ Playwright ด้วย `npx playwright install chromium`
+3. รัน `npm install` และ `npm run db:migrate`
 4. เริ่ม Next.js ด้วย `npm run dev` แล้วเปิด `/reports`
 
-PDF ฝังฟอนต์ TH Sarabun New จาก `public/THSarabunNew.ttf` และ `public/THSarabunNew-Bold.ttf` และจัดหน้า A4 ตามรูปแบบรายงานเดิม: ส่วนหัวแสดงเวลา บริษัท และเลขหน้า, ตารางพื้นสีเทาเข้ม เส้นกริดบาง และระยะขอบ 20 pt ซ้าย/ขวา/ล่าง โดยไม่มีส่วนท้ายหน้า รายงานรายละเอียดแสดงหัวพนักงานและหัวตารางซ้ำเมื่อขึ้นหน้าใหม่ หากเซิร์ฟเวอร์ไม่มี Chromium การส่งออกรายงานจะแสดงข้อผิดพลาดให้ติดตั้งเบราว์เซอร์
+PDF สร้างด้วย PDFMake และฝังฟอนต์ TH Sarabun New จาก `public/THSarabunNew.ttf` และ `public/THSarabunNew-Bold.ttf` จัดหน้า A4 ตามรูปแบบรายงานเดิม: ส่วนหัวแสดงเวลา บริษัท และเลขหน้า, ตารางพื้นสีเทาเข้ม เส้นกริดบาง และระยะขอบ 20 pt ซ้าย/ขวา/ล่าง โดยไม่มีส่วนท้ายหน้า รายงานรายละเอียดแสดงหัวพนักงานและหัวตารางซ้ำเมื่อขึ้นหน้าใหม่ ไม่ต้องติดตั้ง Chromium
 
 ## รูปแบบรายงาน OT
 
@@ -66,7 +66,7 @@ PDF ฝังฟอนต์ TH Sarabun New จาก `public/THSarabunNew.ttf` 
 
 ```powershell
 npx tsc --noEmit --incremental false
-npx vitest run lib/reports/ot/model.test.ts lib/reports/ot/options.test.ts lib/reports/ot/access.test.ts lib/reports/ot/template.test.ts app/api/reports/ot/export/route.test.ts app/api/reports/ot/options/route.test.ts
+npx vitest run lib/reports/ot/model.test.ts lib/reports/ot/options.test.ts lib/reports/ot/access.test.ts lib/reports/ot/pdfmake.test.ts app/api/reports/ot/export/route.test.ts app/api/reports/ot/options/route.test.ts
 ```
 
 สร้าง PDF fixture ครบ 12 รูปแบบและ PDF stress test สำหรับเหตุผลภาษาไทยที่ยาวหลายหน้า:
@@ -87,7 +87,6 @@ npx tsx --env-file-if-exists=.env scripts/verify-ot-report-live.ts
 
 ## ผลตรวจสอบรูปแบบ PDF
 
-- `npx tsc --noEmit --incremental false` ผ่านหลังปรับรูปแบบครั้งนี้ ไม่มีการรันชุดทดสอบในรอบแก้ไขรูปแบบนี้
-- สร้าง fixture 13 ไฟล์ (12 รูปแบบและ 1 stress test) รวม 172 หน้า ตรวจด้วย pypdf ว่าทุกหน้าเป็น A4 และมีข้อความ ไม่มีหน้าเปล่า; sentinel `OTEND9F4C` อยู่ใน PDF stress test ซึ่งมี 5 หน้า
-- ใช้ pypdfium2 ตรวจภาพหน้าแรกของรูปแบบรายงานและตรวจหน้าต่อของรายงานรายละเอียด เทียบตารางสรุป 16 พนักงานกับภาพอ้างอิงเดิม และตรวจ PDF ตัวอย่างจริงเดือนตุลาคม
-- read-only smoke test สำหรับตุลาคม 2026 อ่านพนักงาน 1 คนและคำขอ OT ที่อนุมัติ 4 รายการ ประเภททั้งหมดไม่ระบุ รวม 8.0 ชั่วโมง สร้างไฟล์ `%PDF-` ขนาด 75,553 bytes ที่ `output/pdf/ot-reports/ot-monthly-2026-10.pdf`; ฐานข้อมูลไม่มีการเขียน
+- PDFMake สร้าง fixture ครบ 12 รูปแบบและ 1 stress test รวม 175 หน้า A4; pypdf ตรวจว่าไม่มีหน้าเปล่า และ sentinel `OTEND9F4C` อยู่ใน PDF stress test 7 หน้า
+- ตรวจภาพรายงานสรุปรายเดือน รายละเอียดรายปี และหน้าต้น/ท้ายของ stress test ด้วย pypdfium2
+- ชุดทดสอบ PDFMake ของ OT ผ่านร่วมกับชุดทดสอบ Leave และ Salary ตามบันทึกในงาน migration; ไม่ได้รัน live database smoke ในรอบนี้

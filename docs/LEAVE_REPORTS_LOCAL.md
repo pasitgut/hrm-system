@@ -1,6 +1,6 @@
 # Leave report PDFs
 
-Leave reports use approved leave requests from the application database and render on the server as A4 PDFs with embedded TH Sarabun New fonts (`public/THSarabunNew.ttf` and `public/THSarabunNew-Bold.ttf`). The existing Reports page layout, period controls, scope radios, sorting controls, annual switches, and PDF button are preserved. The Leave tab sends the selected settings to `/api/reports/leave`.
+Leave reports use approved leave requests from the application database and render on the server as A4 PDFs with PDFMake and TH Sarabun New fonts (`public/THSarabunNew.ttf` and `public/THSarabunNew-Bold.ttf`). PDF creation does not require Chromium. The existing Reports page layout, period controls, scope radios, sorting controls, annual switches, and PDF button are preserved. The Leave tab sends the selected settings to `/api/reports/leave`.
 
 ## Printed layout
 
@@ -31,7 +31,7 @@ Run the targeted checks without resetting or seeding a database:
 
 ```powershell
 npx tsc --noEmit --incremental false
-npx vitest run lib/reports/leave/model.test.ts lib/reports/leave/options.test.ts lib/reports/leave/access.test.ts lib/reports/leave/template.test.ts app/api/reports/leave/export/route.test.ts app/api/reports/leave/options/route.test.ts
+npx vitest run lib/reports/leave/model.test.ts lib/reports/leave/options.test.ts lib/reports/leave/access.test.ts lib/reports/leave/pdfmake.test.ts app/api/reports/leave/export/route.test.ts app/api/reports/leave/options/route.test.ts
 ```
 
 Generate synthetic fixture PDFs, including all twelve variants, extra active and inactive types, a half-day, month/year overlaps, and a long reason:
@@ -50,6 +50,6 @@ The live smoke only runs `SELECT` queries and closes its database connection. Do
 
 ## Verification record
 
-- `npx tsc --noEmit --incremental false` passed after the formatting revision. No unit tests were run for this format-only pass.
-- Generated 13 fixture PDFs (12 variants and 1 long-reason stress file), totaling 146 A4 pages. pypdf found text on every page and no blank pages; `LEAVEEND7A3C` survives extraction from the five-page stress PDF. pypdfium2 renders were inspected for the company summary, individual summary/detail, annual month columns, annual month pages, the long-reason overflow, and live October output.
-- The read-only October 2026 application database smoke returned 1 employee and 1 approved request: sick 0 days, personal 0 days, birthday 1 day, total 1 day. The generated `%PDF-` file is 69,987 bytes at `output/pdf/leave-reports/leave-monthly-2026-10.pdf`; the script performed zero database writes. The parent also checked this one-page PDF against the supplied reference.
+- PDFMake generated all 12 variants plus one long-reason fixture, totaling 152 A4 pages. pypdf confirmed there are no blank pages and the `LEAVEEND7A3C` sentinel remains in the seven-page stress PDF.
+- pypdfium2 renders were inspected for the monthly company summary, annual month columns, individual detail pages, and the long-reason continuation and totals page.
+- `npx tsc --noEmit --incremental false` and the targeted PDFMake unit tests passed. A live database smoke was not run during this renderer migration.

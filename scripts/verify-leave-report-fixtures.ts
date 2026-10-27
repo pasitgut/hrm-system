@@ -6,7 +6,10 @@ import { renderLeaveReportPdf } from "@/lib/reports/pdf";
 
 const year = 2026;
 const monthlyPeriod = 10;
-const outputDirectory = path.join(process.cwd(), "output", "pdf", "leave-report-fixtures");
+const qaDirectory = process.env.PDFMAKE_QA_DIR ?? process.argv[2];
+const outputDirectory = qaDirectory
+  ? path.join(path.resolve(qaDirectory), "leave-report-fixtures")
+  : path.join(process.cwd(), "output", "pdf", "leave-report-fixtures");
 const generatedAt = new Date("2026-10-09T04:30:00.000Z");
 const selectedIds = new Set([1, 2, 3].map((number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`));
 const departments = ["ฝ่ายตรวจสอบ", "แผนกคลังสินค้า", "สำนักงาน", "ฝ่ายผลิต"];

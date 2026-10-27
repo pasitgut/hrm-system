@@ -19,7 +19,6 @@ vi.mock("@/lib/reports/leave/service", () => ({
 }));
 vi.mock("@/lib/reports/pdf", () => ({
   renderLeaveReportPdf: mocks.renderPdf,
-  PdfRendererUnavailableError: class PdfRendererUnavailableError extends Error {},
 }));
 
 import { POST } from "./route";

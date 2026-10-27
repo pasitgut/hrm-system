@@ -92,6 +92,9 @@ describe("salary slip integration", () => {
     const exported = await EXPORT(request("/api/salary-slips/export", token, { ...body, acknowledgeMissing: true }));
     expect(exported.status).toBe(200); expect(exported.headers.get("Cache-Control")).toBe("no-store");
     expect((await exported.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+    const pdf = await EXPORT(request("/api/salary-slips/export", token, { ...body, format: "pdf", acknowledgeMissing: true }));
+    expect(pdf.status).toBe(200); expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString("ascii")).toBe("%PDF-");
   });
   it("rejects cross-origin mutations", async () => {
     const { token } = await hr();

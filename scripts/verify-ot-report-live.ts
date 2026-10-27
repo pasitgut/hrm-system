@@ -49,7 +49,7 @@ try {
     writesPerformed: 0,
   })}\n`);
 } catch {
-  process.stderr.write("Live OT report smoke failed. Check the main DATABASE_URL, schema and Playwright browser installation.\n");
+  process.stderr.write("Live OT report smoke failed. Check the main DATABASE_URL, schema and configured PDF fonts.\n");
   process.exitCode = 1;
 } finally {
   await sqlClient.end();

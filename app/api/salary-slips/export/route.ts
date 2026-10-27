@@ -14,12 +14,7 @@ export const POST = salaryRoute(async (request) => {
   const items = (await slipsWithCumulative(body.year)).filter((item) => ids.has(item.id)).sort((a, b) => a.data.code.localeCompare(b.data.code) || a.data.month - b.data.month);
   if (items.length !== ids.size) throw new SlipError("สลิปที่เลือกต้องมีอยู่และอยู่ในปีเดียวกัน");
   if (items.some((item) => item.missingMonths.length) && !body.acknowledgeMissing) return NextResponse.json({ error: "ประวัติบางเดือนยังไม่ครบ ยอดสะสมจะรวมเฉพาะข้อมูลที่บันทึก", missing: items.filter((item) => item.missingMonths.length).map((item) => ({ name: item.data.name, month: item.data.month, missingMonths: item.missingMonths })) }, { status: 409 });
-  let buffer: Buffer;
-  try { buffer = body.format === "pdf" ? await createPdf(items) : await createExcel(items); }
-  catch (error) {
-    if (body.format === "pdf" && /Executable doesn't exist/.test((error as Error).message)) throw new SlipError("ยังไม่ได้ติดตั้ง Chromium กรุณารัน npm run salary-slips:install-browser แล้วลองใหม่ หรือดาวน์โหลด Excel", 503);
-    throw error;
-  }
+  const buffer: Buffer = body.format === "pdf" ? await createPdf(items) : await createExcel(items);
   return new Response(new Uint8Array(buffer), { headers: {
     "Content-Type": body.format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "Content-Disposition": `attachment; filename="salary-slips-${body.year}.${body.format}"`,

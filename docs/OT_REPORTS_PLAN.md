@@ -1,5 +1,7 @@
 # แผนระบบรายงาน OT เป็น PDF
 
+สถานะปัจจุบัน: ใช้ PDFMake ทั้งฝั่ง API และ browser client แล้ว การสร้างไฟล์ PDF ไม่ต้องติดตั้ง Playwright หรือ Chromium
+
 ## เป้าหมายและขอบเขต
 
 เชื่อมหน้ารายงาน `/reports` กับข้อมูล OT จริงใน PostgreSQL และดาวน์โหลด PDF จากเซิร์ฟเวอร์ได้ครบ 12 รูปแบบตามตัวอย่างใน `report-example` เริ่มเฉพาะ OT ใช้ส่วนดึงข้อมูล/จัดกลุ่ม/เรนเดอร์แยกกันเพื่อขยายรายงานวันลาและเบี้ยขยันภายหลังได้ รายงานชุดนี้แสดงชั่วโมง ไม่เพิ่มข้อมูลเงินเดือนหรือค่า OT ที่ตัวอย่างไม่ได้ร้องขอ
@@ -15,7 +17,7 @@
 - ตัวอย่างแยกพนักงานเลือกคนเดียว ระบบใหม่ต้องเลือกพนักงานได้จริง และเมื่อเลือกหลายคนให้เริ่มส่วนของแต่ละคนในหน้าใหม่ภายใน PDF เดียว
 - ตัวอย่างรายปีละเอียด 7, 8, 9 มีเนื้อหาหน้าแรกเหมือนกัน จึงใช้ข้อกำหนดผู้ใช้เป็นหลักเพื่อให้ทั้งสามแบบต่างกันจริง โดย 8 มีคอลัมน์เดือน และ 9 แบ่งหน้าตามเดือน
 - ฐานข้อมูลมี `overtimeRequests` พร้อมเวลาเริ่ม/สิ้นสุด ประเภท weekday/holiday เหตุผล สถานะ และพนักงาน/แผนก/ตำแหน่งอยู่แล้ว ไม่มีข้อมูลโครงการแยกเป็นฟิลด์ จึงแสดงงานที่ทำจาก reason โดยไม่แต่งข้อมูลโครงการ
-- มี Playwright และ NotoSansThai-Regular/Bold.ttf ในโปรเจกต์ สามารถสร้าง PDF ฝังฟอนต์ไทยโดยไม่พึ่งเครือข่าย ใช้แนวทางที่มีอยู่ในระบบสลิปเงินเดือนโดยไม่แก้ไฟล์งานสลิปที่ยังไม่ commit
+- มี PDFMake และฟอนต์ไทยในโปรเจกต์ จึงสร้าง PDF แบบค้นหาข้อความได้โดยไม่ต้องใช้ browser renderer
 
 ## ตารางรูปแบบที่ต้องรองรับ
 
@@ -50,12 +52,12 @@
 - `lib/reports/ot/options.ts`: รายการ 12 รูปแบบ shared contract, schema/validation, label และกติกาการเลือกงวด
 - `lib/reports/ot/model.ts`: DTO และ pure aggregation/sorting ที่ทุกแบบใช้ร่วมกัน
 - `lib/reports/ot/service.ts`: query จริงและกำหนดขอบเขตข้อมูลตามสิทธิ์
-- `lib/reports/ot/template.ts`: HTML template สำหรับ summary, continuous month table, monthly sections และ daily details
-- `lib/reports/pdf.ts`: Playwright renderer ที่ฝังฟอนต์ รอ document.fonts.ready ตั้งขนาด A4 และใส่เลขหน้า พร้อมปิด browser ใน finally
+- `lib/reports/ot/pdfmake.ts`: PDFMake document definitions สำหรับ summary, monthly sections และรายละเอียด
+- `lib/reports/pdf.ts`: เรียก PDFMake ฝั่ง Node พร้อมฟอนต์และขนาดกระดาษ A4
 - `app/api/reports/ot/options/route.ts`: รายชื่อพนักงานที่ผู้ใช้เลือกได้ โดยตรวจสิทธิ์ก่อนส่งข้อมูล
 - `app/api/reports/ot/export/route.ts`: POST รับรูปแบบ/year/month/employeeIds/sortRules ตรวจด้วย Zod แล้วคืน bytes `application/pdf` พร้อม Content-Disposition, no-store, nosniff
 - `components/hrm/reports/ReportsModule.jsx` และ component OT เพิ่มเติมตามเหมาะสม: ปุ่มดาวน์โหลดจริง ตัวเลือกครบ 12 แบบ เลือกพนักงาน ตรวจ validation loading/error/success และป้องกันกดซ้ำ
-- `docs/OT_REPORTS_LOCAL.md`: วิธีติดตั้ง Chromium วิธีใช้ ตัวเลือก การเข้าถึง และข้อจำกัดข้อมูล
+- `docs/OT_REPORTS_LOCAL.md`: วิธีใช้งาน ตัวเลือก การเข้าถึง และข้อจำกัดข้อมูล
 
 ชื่อไฟล์ย่อยปรับได้ตามความเหมาะสม แต่แยก data/model/template/renderer เพื่อไม่ผูก PDF ทุกแบบกับ UI
 
@@ -64,8 +66,8 @@
 - ทุก API ตรวจ session และ `reports.view` จากสิทธิ์ปัจจุบันในฐานข้อมูล
 - ผู้มี `ot.view_company` หรือ `ot.approve` ส่งออกข้อมูลบริษัทและเลือกพนักงานอื่นได้ ผู้มีสิทธิ์อ่าน OT ของตนเองอย่างเดียวส่งออกเฉพาะตนเองและห้ามขอ all/employeeIds ของผู้อื่น การมี reports.view เพียงอย่างเดียวไม่เพิ่มสิทธิ์อ่าน OT
 - ตรวจ UUID, year/month, รูปแบบที่เข้ากับงวด, employeeIds ที่มีอยู่จริง และจำนวน/ขนาดคำขออย่างเหมาะสม โดยไม่ตัดข้อมูลออกเงียบ ๆ
-- HTML escape ข้อความทั้งหมดและฝังฟอนต์ local ปิด network requests จาก Chromium
-- เมื่อ browser ไม่ได้ติดตั้ง แสดงข้อความแก้ไขและคืน 503 ไม่แสดง stack trace ต่อผู้ใช้
+- เก็บข้อความใน PDFMake text nodes และใช้ฟอนต์ local โดยไม่โหลด resource จากเครือข่าย
+- เมื่อสร้าง PDF ไม่สำเร็จ แสดงข้อผิดพลาดที่เหมาะสมโดยไม่แสดง stack trace ต่อผู้ใช้
 - แสดง error ใกล้ปุ่มและรักษาค่าที่เลือกไว้ ไม่เปลี่ยนหน้ารายงานเป็นสถานะสำเร็จก่อนรับ PDF จริง
 - งานเฟสนี้รองรับ monthly/yearly ตาม 12 แบบเท่านั้น ตัวเลือก custom และรายงานหมวดอื่นต้องแสดงว่ายังใช้ไม่ได้อย่างชัดเจน ไม่ใช้ปุ่มปลอมที่รายงานว่าสร้างแล้ว
 - ทำ UI ตาม `docs/DESIGN_SYSTEM.md`, shared shadcn controls, PageHeader, cn(), semantic tokens และ mobile-first
@@ -88,7 +90,3 @@
 - Render หน้าจาก PDF เป็น PNG (เครื่องนี้มี pypdfium2) แล้วตรวจภาษาไทย หัวตารางซ้ำ เลขหน้า การแบ่งหน้า ไม่มีข้อความทับ/ตัด และไม่มีหน้าว่างที่ไม่ตั้งใจ
 - สร้างและรันเฉพาะการตรวจที่จำเป็นกับ OT reports และ build/type check ที่เหมาะสม ไม่แก้งานเก่าหรือรันชุดใหญ่ซ้ำโดยไม่มีเหตุผล
 - ยอดรายงานไม่เพิ่มค่าเงินหรือสมมติชั่วโมงหักพัก เพราะ schema ปัจจุบันไม่มีข้อมูล break deduction
-
-## การมอบหมาย
-
-หลังแผนนี้พร้อม ให้ sub-agent `gpt-6-luna` effort `max` ลงมือทำครบตามแผน อ่าน AGENTS/design system/Next.js docs ก่อนเขียนโค้ด และรักษาไฟล์เปลี่ยนแปลงที่มีอยู่ก่อน โดยเฉพาะระบบสลิปเงินเดือน ห้าม commit หรือ deploy โดยไม่ร้องขอ
