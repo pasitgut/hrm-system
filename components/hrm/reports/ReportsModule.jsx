@@ -379,10 +379,19 @@ export default function ReportsModule() {
           : "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้";
         throw new Error(message || "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้");
       }
-      const blob = await response.blob();
+      let blob;
+      let filename;
+      if (reportType === "ot") {
+        const report = await response.json();
+        const { createOtReportPdf } = await import("./ot-pdf-client");
+        blob = await createOtReportPdf(report);
+        filename = report.filename || `ot-report-${reportVariant}-${yearNumber}.pdf`;
+      } else {
+        blob = await response.blob();
+        const disposition = response.headers.get("content-disposition") || "";
+        filename = disposition.match(/filename="([^"]+)"/)?.[1] || `${reportType}-report-${reportVariant}-${yearNumber}.pdf`;
+      }
       if (blob.type !== "application/pdf" || blob.size < 5) throw new Error("เซิร์ฟเวอร์ส่งไฟล์รายงานไม่ถูกต้อง");
-      const disposition = response.headers.get("content-disposition") || "";
-      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `${reportType}-report-${reportVariant}-${yearNumber}.pdf`;
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;

@@ -2,13 +2,42 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { ApiAuthError } from "@/lib/auth/dal";
 
-const { mockRequireApiUser } = vi.hoisted(() => ({ mockRequireApiUser: vi.fn() }));
+const {
+  mockRequireApiUser,
+  mockCreateOtReportModel,
+  mockLoadReportFonts,
+  mockCreateOtReportMarkup,
+  MockOtReportServiceError,
+} = vi.hoisted(() => {
+  class MockOtReportServiceError extends Error {
+    status: number;
+
+    constructor(status: number, message: string) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  return {
+    mockRequireApiUser: vi.fn(),
+    mockCreateOtReportModel: vi.fn(),
+    mockLoadReportFonts: vi.fn(),
+    mockCreateOtReportMarkup: vi.fn(),
+    MockOtReportServiceError,
+  };
+});
 
 vi.mock("@/lib/db/client", () => ({ db: {} }));
 vi.mock("@/lib/auth/dal", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/auth/dal")>();
   return { ...actual, requireApiUser: mockRequireApiUser };
 });
+vi.mock("@/lib/reports/ot/service", () => ({
+  createOtReportModel: mockCreateOtReportModel,
+  OtReportServiceError: MockOtReportServiceError,
+}));
+vi.mock("@/lib/reports/font-assets", () => ({ loadReportFonts: mockLoadReportFonts }));
+vi.mock("@/lib/reports/ot/template", () => ({ createOtReportMarkup: mockCreateOtReportMarkup }));
 
 import { POST } from "./route";
 
@@ -26,7 +55,12 @@ function post(body: unknown) {
 }
 
 describe("POST /api/reports/ot/export", () => {
-  beforeEach(() => mockRequireApiUser.mockReset());
+  beforeEach(() => {
+    mockRequireApiUser.mockReset();
+    mockCreateOtReportModel.mockReset();
+    mockLoadReportFonts.mockReset();
+    mockCreateOtReportMarkup.mockReset();
+  });
 
   it("returns 401 for an unauthenticated request", async () => {
     mockRequireApiUser.mockRejectedValueOnce(new ApiAuthError(401, "Unauthorized"));
@@ -60,5 +94,38 @@ describe("POST /api/reports/ot/export", () => {
       employeeIds: [otherId],
     }));
     expect(response.status).toBe(403);
+  });
+
+  it("returns authorized report markup for browser-side PDF generation", async () => {
+    const model = { year: 2026, employees: [] };
+    const markup = {
+      html: "<!doctype html><html><body><main>OT report</main></body></html>",
+      headerTemplate: "<div>page <span class=\"pageNumber\"></span></div>",
+      footerTemplate: "",
+    };
+    mockRequireApiUser.mockResolvedValueOnce(companyUser);
+    mockCreateOtReportModel.mockResolvedValueOnce(model);
+    mockLoadReportFonts.mockResolvedValueOnce({ regular: "regular-font", bold: "bold-font" });
+    mockCreateOtReportMarkup.mockReturnValueOnce(markup);
+
+    const response = await POST(post({ variant: "yearly-all", year: 2026 }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(await response.json()).toEqual({
+      ...markup,
+      filename: "ot-report-yearly-all-2026.pdf",
+    });
+    expect(mockCreateOtReportModel).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "yearly-all", year: 2026 }),
+      "company",
+      ownId,
+    );
+    expect(mockCreateOtReportMarkup).toHaveBeenCalledWith(
+      expect.objectContaining({ variant: "yearly-all", model }),
+      "regular-font",
+      "bold-font",
+    );
   });
 });

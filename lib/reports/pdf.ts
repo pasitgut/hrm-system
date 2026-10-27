@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { chromium } from "playwright";
+import { loadReportFonts } from "./font-assets";
 import { createOtReportMarkup, type OtReportDocument } from "./ot/template";
 import { createLeaveReportMarkup, type LeaveReportDocument } from "./leave/template";
 
@@ -10,20 +9,6 @@ export class PdfRendererUnavailableError extends Error {
     super("PDF renderer is not installed");
     this.name = "PdfRendererUnavailableError";
   }
-}
-
-function publicAsset(name: string) {
-  return path.join(process.cwd(), "public", name);
-}
-
-async function reportFonts() {
-  const regularPath = publicAsset("THSarabunNew.ttf");
-  const boldPath = publicAsset("THSarabunNew-Bold.ttf");
-  if (!existsSync(regularPath) || !existsSync(boldPath)) {
-    throw new Error("TH Sarabun New PDF font files are missing");
-  }
-  const [regularFont, boldFont] = await Promise.all([readFile(regularPath), readFile(boldPath)]);
-  return { regular: regularFont.toString("base64"), bold: boldFont.toString("base64") };
 }
 
 async function renderPdf(markup: { html: string; headerTemplate: string; footerTemplate: string }): Promise<Buffer> {
@@ -64,11 +49,11 @@ async function renderPdf(markup: { html: string; headerTemplate: string; footerT
 }
 
 export async function renderOtReportPdf(report: OtReportDocument): Promise<Buffer> {
-  const fonts = await reportFonts();
+  const fonts = await loadReportFonts();
   return renderPdf(createOtReportMarkup(report, fonts.regular, fonts.bold));
 }
 
 export async function renderLeaveReportPdf(report: LeaveReportDocument): Promise<Buffer> {
-  const fonts = await reportFonts();
+  const fonts = await loadReportFonts();
   return renderPdf(createLeaveReportMarkup(report, fonts.regular, fonts.bold));
 }
