@@ -384,14 +384,14 @@ export default function ReportsModule() {
       if (reportType === "ot") {
         const report = await response.json();
         const { createOtReportPdf } = await import("./ot-pdf-client");
-        blob = await createOtReportPdf(report);
+        blob = await createOtReportPdf(report.report);
         filename = report.filename || `ot-report-${reportVariant}-${yearNumber}.pdf`;
       } else {
         blob = await response.blob();
         const disposition = response.headers.get("content-disposition") || "";
         filename = disposition.match(/filename="([^"]+)"/)?.[1] || `${reportType}-report-${reportVariant}-${yearNumber}.pdf`;
       }
-      if (blob.type !== "application/pdf" || blob.size < 5) throw new Error("เซิร์ฟเวอร์ส่งไฟล์รายงานไม่ถูกต้อง");
+      if (blob.type !== "application/pdf" || blob.size < 5) throw new Error("ระบบสร้างไฟล์ PDF ไม่ถูกต้อง");
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;

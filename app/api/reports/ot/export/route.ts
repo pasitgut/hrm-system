@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { assertOtReportExportAccess, getOtReportAccess, OtReportAccessError } from "@/lib/reports/ot/access";
-import { loadReportFonts } from "@/lib/reports/font-assets";
-import { createOtReportMarkup } from "@/lib/reports/ot/template";
+import { createOtReportPdfPayload } from "@/lib/reports/ot/pdf-payload";
 import { getOtReportDefinition, otReportExportSchema } from "@/lib/reports/ot/options";
 import { createOtReportModel, OtReportServiceError } from "@/lib/reports/ot/service";
 
@@ -48,18 +47,20 @@ export const POST = withApiAuth(async (request: NextRequest) => {
 
   try {
     const model = await createOtReportModel(parsed.data, access.company ? "company" : "own", access.ownEmployeeId);
-    const fonts = await loadReportFonts();
-    const markup = createOtReportMarkup({ variant: parsed.data.variant, model, sortRules: parsed.data.sortRules }, fonts.regular, fonts.bold);
+    const report = createOtReportPdfPayload({ variant: parsed.data.variant, model, sortRules: parsed.data.sortRules });
     const monthPart = parsed.data.month === undefined ? "" : `-${String(parsed.data.month).padStart(2, "0")}`;
     const filename = `ot-report-${parsed.data.variant}-${parsed.data.year}${monthPart}.pdf`;
-    return NextResponse.json({ ...markup, filename }, {
+    return NextResponse.json({
+      report,
+      filename,
+    }, {
       headers: { "Cache-Control": "no-store, max-age=0" },
     });
   } catch (error) {
     if (error instanceof OtReportServiceError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    console.error("OT report markup generation failed", error);
+    console.error("OT report export data generation failed", error);
     return NextResponse.json({ error: "ไม่สามารถสร้างไฟล์รายงานได้ในขณะนี้" }, { status: 500 });
   }
 });
