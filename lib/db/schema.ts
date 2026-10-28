@@ -20,6 +20,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { WorkTrackingRecordStatus, WorkTrackingSession, WorkTrackingSubStatus } from "@/lib/work-tracking/types";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
@@ -513,5 +514,32 @@ export const assetRequestEvents = pgTable(
   (t) => [
     index("asset_request_events_request_created_idx").on(t.requestId, t.createdAt),
     check("asset_request_events_details_object", sql`jsonb_typeof(${t.details}) = 'object'`),
+  ],
+);
+
+export const workTrackingRecords = pgTable(
+  "work_tracking_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    houseNo: varchar("house_no", { length: 120 }).notNull(),
+    round: varchar("round", { length: 40 }).notNull(),
+    eventDate: date("event_date").notNull(),
+    projectText: text("project_text").notNull().default(""),
+    detail: text("detail").notNull().default(""),
+    status: varchar("status", { length: 20 }).$type<WorkTrackingRecordStatus>().notNull().default("in_progress"),
+    deliveredDate: date("delivered_date"),
+    reportStatuses: jsonb("report_statuses").$type<Record<string, string>>().notNull().default({}),
+    subStatuses: jsonb("sub_statuses").$type<WorkTrackingSubStatus[]>().notNull().default([]),
+    workers: jsonb("workers").$type<Record<string, WorkTrackingSession[]>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("work_tracking_records_house_round_date_unique").on(t.houseNo, t.round, t.eventDate),
+    index("work_tracking_records_event_date_idx").on(t.eventDate),
+    check("work_tracking_records_status_valid", sql`${t.status} IN ('in_progress', 'completed', 'delivered')`),
+    check("work_tracking_records_report_statuses_object", sql`jsonb_typeof(${t.reportStatuses}) = 'object'`),
+    check("work_tracking_records_sub_statuses_array", sql`jsonb_typeof(${t.subStatuses}) = 'array'`),
+    check("work_tracking_records_workers_object", sql`jsonb_typeof(${t.workers}) = 'object'`),
   ],
 );

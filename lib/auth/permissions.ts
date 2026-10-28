@@ -1,4 +1,7 @@
 export const PERMISSIONS = [
+  { key: "work.view", group: "ติดตามงาน", label: "ดูภาพรวมติดตามงาน", description: "ดูรายการงาน สถานะ และกำหนดส่ง" },
+  { key: "work.status.update", group: "ติดตามงาน", label: "ปรับสถานะงานย่อย", description: "เปลี่ยนสถานะการดำเนินงานของแต่ละงานย่อย" },
+  { key: "work.create", group: "ติดตามงาน", label: "สร้างรายการติดตามงาน", description: "เพิ่มรายการใหม่ในระบบติดตามงาน" },
   { key: "salary_slips.view", group: "สลิปเงินเดือน", label: "ดูสลิปเงินเดือน", description: "ดูสลิปและประวัติการแก้ไขของพนักงานทุกคน" },
   { key: "salary_slips.import", group: "สลิปเงินเดือน", label: "นำเข้าสลิปเงินเดือน", description: "นำเข้า Excel จับคู่พนักงาน และบันทึกสลิป" },
   { key: "salary_slips.replace", group: "สลิปเงินเดือน", label: "แทนที่สลิปเงินเดือน", description: "ยืนยันแทนที่ยอดเดิมโดยเก็บประวัติรุ่น" },
@@ -70,6 +73,8 @@ const LEGACY_PERMISSION_EXPANSIONS: Record<string, readonly PermissionKey[]> = {
 // Preserve current read and self-service access for existing accounts until
 // an administrator explicitly disables a grant in the permissions screen.
 const DEFAULT_GRANTS = [
+  { permission: "work.view", disabledMarker: "permissions.work_view.disabled" },
+  { permission: "work.status.update", disabledMarker: "permissions.work_status_update.disabled" },
   { permission: "employees.profile.view", disabledMarker: "permissions.employees_profile_view.disabled" },
   { permission: "ot.view_self", disabledMarker: "permissions.ot_view_self.disabled" },
   { permission: "leave.view_self", disabledMarker: "permissions.leave_view_self.disabled" },
@@ -305,6 +310,10 @@ export function canManageUserPermissions(permissions: unknown): boolean {
 
 export function canViewReports(permissions: unknown): boolean {
   return hasPermission(permissions, "reports.view");
+}
+
+export function canViewWorkTracking(permissions: unknown): boolean {
+  return hasAnyPermission(permissions, "work.view", "work.status.update", "work.create");
 }
 
 export function canOpenSettings(permissions: unknown): boolean {

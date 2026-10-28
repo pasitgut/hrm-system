@@ -19,6 +19,7 @@ import {
   RiSidebarUnfoldLine,
   RiSunLine,
   RiTimerLine,
+  RiTaskLine,
   RiUserLine,
 } from "@remixicon/react";
 import { Avatar } from "@/components/ui/avatar";
@@ -40,6 +41,7 @@ import {
   canViewOwnLeaveRequests,
   canViewOwnOtRequests,
   canViewReports,
+  canViewWorkTracking,
 } from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
 
@@ -58,6 +60,7 @@ const baseGroups = [
     label: "การทำงาน",
     items: [
       { key: "employees", label: "พนักงาน", icon: RiUserLine, href: "/employees" },
+      { key: "work", label: "ติดตามงาน", icon: RiTaskLine, href: "/work-tracking" },
       { key: "ot", label: "เวลาล่วงเวลา", icon: RiTimerLine, href: "/ot" },
       { key: "leave", label: "วันลา", icon: RiCalendarTodoLine, href: "/leave" },
       { key: "assets", label: "ทรัพย์สิน", icon: RiArchiveLine, href: "/assets" },
@@ -189,6 +192,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const active = pathname === "/ot" ? "ot"
+    : pathname.startsWith("/work-tracking") ? "work"
     : pathname.startsWith("/salary-slips") ? "salary-slips"
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
@@ -204,6 +208,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
       ...group,
       items: group.items.filter((item) => {
         if (item.key === "employees") return canViewEmployeeProfiles(permissions);
+        if (item.key === "work") return canViewWorkTracking(permissions);
         if (item.key === "ot") return canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions);
         if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
         if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
