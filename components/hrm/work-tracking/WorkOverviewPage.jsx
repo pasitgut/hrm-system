@@ -133,28 +133,36 @@ function workerEntries(item) {
 }
 
 function WorkStatusControl({ item, subStatus, canUpdate, updating, onChange }) {
+  const currentStatus = normalizeStatus(subStatus.status);
+  const hasDetail = Boolean(subStatus.detail && subStatus.detail !== "-");
+  const tone = currentStatus === "completed"
+    ? "border-status-success/30 bg-status-success/10 text-status-success"
+    : currentStatus === "delivered"
+      ? "border-status-info/30 bg-status-info/10 text-status-info"
+      : "border-status-warning/30 bg-status-warning/10 text-status-warning";
+
   if (!canUpdate) {
     return (
-      <div className="flex min-w-36 flex-wrap items-center gap-1.5">
-        {subStatus.detail && subStatus.detail !== "-" ? <span>{subStatus.detail}</span> : null}
-        <StatusBadge status={subStatus.status}>{statusLabel(subStatus.status)}</StatusBadge>
-      </div>
+      <span className={cn("inline-flex min-h-9 w-fit min-w-0 max-w-full shrink-0 flex-nowrap items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium leading-4", tone)}>
+        {hasDetail ? <><span title={subStatus.detail} className="min-w-0 max-w-40 truncate whitespace-nowrap">{subStatus.detail}</span><span className="shrink-0" aria-hidden="true">—</span></> : null}
+        <span className="shrink-0 whitespace-nowrap font-semibold">{statusLabel(subStatus.status)}</span>
+      </span>
     );
   }
 
   return (
-    <div className="flex min-w-40 flex-wrap items-center gap-2">
-      {subStatus.detail && subStatus.detail !== "-" ? <span className="max-w-40 break-words">{subStatus.detail}</span> : null}
+    <span className={cn("inline-flex min-h-9 w-fit min-w-0 max-w-full shrink-0 flex-nowrap items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium leading-4", tone)}>
+      {hasDetail ? <><span title={subStatus.detail} className="min-w-0 max-w-40 truncate whitespace-nowrap">{subStatus.detail}</span><span className="shrink-0" aria-hidden="true">—</span></> : null}
       <Select
         aria-label={`สถานะ${subStatus.detail && subStatus.detail !== "-" ? ` ${subStatus.detail}` : "งานย่อย"} ของบ้านเลขที่ ${item.houseNo} รอบ ${item.round}`}
-        selectedKey={normalizeStatus(subStatus.status)}
+        selectedKey={currentStatus}
         isDisabled={updating}
         onSelectionChange={(status) => onChange(item, subStatus.detail, status)}
-        className="h-9 min-w-36 px-2 text-xs"
+        className="h-8 w-auto min-w-0 shrink-0 whitespace-nowrap border-0 bg-transparent px-0 py-0 text-xs font-semibold text-inherit"
       >
         {STATUS_OPTIONS.map((option) => <SelectItem key={option.value} id={option.value}>{option.label}</SelectItem>)}
       </Select>
-    </div>
+    </span>
   );
 }
 
@@ -258,7 +266,7 @@ export default function WorkOverviewPage() {
 
   const startDate = dateRange.from ? toApiDate(dateRange.from) : "";
   const endDate = dateRange.to ? toApiDate(dateRange.to) : "";
-  const { data: allRecords, loading, error, refresh } = useWorkList(startDate, endDate);
+  const { data: allRecords, loading, error, refresh, updateSubStatusInList } = useWorkList(startDate, endDate);
   const statusUpdate = useSubStatusUpdate();
 
   const recordsByBucket = useMemo(() => {
@@ -310,8 +318,14 @@ export default function WorkOverviewPage() {
         detail,
         status,
       });
+      updateSubStatusInList({
+        houseNo: item.houseNo,
+        round: item.round,
+        date: item.eventDate,
+        detail,
+        status,
+      });
       setFeedback({ type: "success", message: "อัปเดตสถานะงานย่อยแล้ว" });
-      refresh();
     } catch (cause) {
       setFeedback({ type: "error", message: cause instanceof Error ? cause.message : "อัปเดตสถานะไม่สำเร็จ" });
     }
@@ -421,16 +435,16 @@ export default function WorkOverviewPage() {
         ) : (
           <>
             <div className="hidden lg:block">
-              <Table>
+              <Table className="min-w-[960px] table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-48">สถานะงานย่อย</TableHead>
-                    <TableHead className="min-w-48">รายละเอียด</TableHead>
-                    <TableHead>บ้านเลขที่</TableHead>
-                    <TableHead>รอบ</TableHead>
-                    <TableHead>วันที่ตรวจ</TableHead>
-                    <TableHead>กำหนดส่ง</TableHead>
-                    <TableHead className="min-w-40">ผู้ทำรายงาน</TableHead>
+                    <TableHead className="w-[24%]">สถานะงานย่อย</TableHead>
+                    <TableHead className="w-[32%]">รายละเอียด</TableHead>
+                    <TableHead className="w-[12%]">บ้านเลขที่</TableHead>
+                    <TableHead className="w-[6%]">รอบ</TableHead>
+                    <TableHead className="w-[9%]">วันที่ตรวจ</TableHead>
+                    <TableHead className="w-[9%]">กำหนดส่ง</TableHead>
+                    <TableHead className="w-[8%]">ผู้ทำรายงาน</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -438,15 +452,20 @@ export default function WorkOverviewPage() {
                     <TableRow key={`${item.houseNo}-${item.round}-${item.eventDate}-${index}`}>
                       <TableCell>
                         {item.subStatuses.length ? (
-                          <div className="flex min-w-48 flex-col gap-2">
+                          <div className="flex min-w-48 flex-wrap content-start gap-1.5">
                             {item.subStatuses.map((subStatus, subIndex) => (
                               <WorkStatusControl key={`${subStatus.detail}-${subIndex}`} item={item} subStatus={subStatus} canUpdate={canUpdate} updating={statusUpdate.updating} onChange={handleSubStatusChange} />
                             ))}
                           </div>
                         ) : <StatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</StatusBadge>}
                       </TableCell>
-                      <TableCell><span className="block max-w-80 break-words font-medium">{getWorkTitle(item)}</span></TableCell>
-                      <TableCell className="whitespace-nowrap">{item.houseNo || "—"}</TableCell>
+                      <TableCell><span className="block max-w-full break-words font-medium">{getWorkTitle(item)}</span></TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex flex-col items-start gap-1">
+                          <span>{item.houseNo || "—"}</span>
+                          {item.itemCount > 1 ? <Badge color="info">{item.itemCount} รายการ</Badge> : null}
+                        </div>
+                      </TableCell>
                       <TableCell className="whitespace-nowrap tabular-nums">{item.round || "—"}</TableCell>
                       <TableCell className="whitespace-nowrap">{formatDate(item.eventDate)}</TableCell>
                       <TableCell className={cn("whitespace-nowrap font-medium", deliveredDateTone(item.deliveredDate))}>{formatDate(item.deliveredDate)}</TableCell>
@@ -465,17 +484,19 @@ export default function WorkOverviewPage() {
                     <StatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</StatusBadge>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                    <div><dt className="text-muted-foreground">บ้านเลขที่</dt><dd className="mt-0.5 font-medium">{item.houseNo || "—"}</dd></div>
+                    <div><dt className="text-muted-foreground">บ้านเลขที่</dt><dd className="mt-0.5 flex flex-wrap items-center gap-1.5 font-medium">{item.houseNo || "—"}{item.itemCount > 1 ? <Badge color="info">{item.itemCount} รายการ</Badge> : null}</dd></div>
                     <div><dt className="text-muted-foreground">รอบ</dt><dd className="mt-0.5 tabular-nums">{item.round || "—"}</dd></div>
                     <div><dt className="text-muted-foreground">วันที่ตรวจ</dt><dd className="mt-0.5">{formatDate(item.eventDate)}</dd></div>
                     <div><dt className="text-muted-foreground">กำหนดส่ง</dt><dd className={cn("mt-0.5 font-medium", deliveredDateTone(item.deliveredDate))}>{formatDate(item.deliveredDate)}</dd></div>
                   </dl>
                   {item.subStatuses.length ? (
                     <div className="space-y-2 border-t border-border pt-3">
-                      <p className="text-xs font-medium text-muted-foreground">สถานะงานย่อย</p>
-                      {item.subStatuses.map((subStatus, subIndex) => (
-                        <WorkStatusControl key={`${subStatus.detail}-${subIndex}`} item={item} subStatus={subStatus} canUpdate={canUpdate} updating={statusUpdate.updating} onChange={handleSubStatusChange} />
-                      ))}
+                      <p className="text-xs font-medium text-muted-foreground">สถานะงานย่อย <span className="font-normal">· {item.subStatuses.length} รายการ</span></p>
+                      <div className="flex flex-wrap items-start gap-1.5">
+                        {item.subStatuses.map((subStatus, subIndex) => (
+                          <WorkStatusControl key={`${subStatus.detail}-${subIndex}`} item={item} subStatus={subStatus} canUpdate={canUpdate} updating={statusUpdate.updating} onChange={handleSubStatusChange} />
+                        ))}
+                      </div>
                     </div>
                   ) : null}
                   <div className="border-t border-border pt-3">

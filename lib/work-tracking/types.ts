@@ -28,4 +28,5 @@ export type WorkTrackingApiRecord = {
   workers: string;
   /** Raw API Checker request status, retained for integrations that use it. */
   requestStatus?: string;
+  itemCount?: number;
 };

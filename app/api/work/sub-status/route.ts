@@ -3,7 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { workTrackingRecords } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
-import { isWorkTrackingStatus, jsonError, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
+import type { WorkTrackingSession } from "@/lib/work-tracking/types";
+import { getCheckerData } from "@/lib/work-tracking/checker";
+import { formatTrackingDate, groupCheckerWorkTrackingRecords, isWorkTrackingStatus, jsonError, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
+
+function parseWorkers(value: string): Record<string, WorkTrackingSession[]> {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, WorkTrackingSession[]> : {};
+  } catch {
+    return {};
+  }
+}
 
 export const PATCH = withApiAuth(async (request: NextRequest) => {
   await requireApiPermission(request, "work.status.update");
@@ -26,7 +37,7 @@ export const PATCH = withApiAuth(async (request: NextRequest) => {
   if (typeof input.detail !== "string" || !input.detail.trim()) return jsonError(400, "Subtask detail is required");
   if (!isWorkTrackingStatus(input.status)) return jsonError(400, "Invalid work status");
 
-  const [record] = await db
+  let [record] = await db
     .select()
     .from(workTrackingRecords)
     .where(and(
@@ -36,9 +47,77 @@ export const PATCH = withApiAuth(async (request: NextRequest) => {
     ))
     .limit(1);
 
+  if (!record || !record.subStatuses.some((subStatus) => subStatus.detail === input.detail)) {
+    let checkerItem;
+    try {
+      const date = formatTrackingDate(eventDate);
+      const checkerRows = await getCheckerData(date, date);
+      checkerItem = groupCheckerWorkTrackingRecords(checkerRows).find((item) =>
+        item.houseNo === input.houseNo
+        && item.round === input.round
+        && parseTrackingDate(item.date) === eventDate,
+      );
+    } catch (error) {
+      return jsonError(502, error instanceof Error ? error.message : "API Checker request failed");
+    }
+
+    if (!checkerItem) return jsonError(404, "Work record or subtask not found");
+    if (!checkerItem.subStatuses.some((subStatus) => subStatus.detail === input.detail)) {
+      return jsonError(404, "Subtask not found");
+    }
+
+    if (!record) {
+      [record] = await db
+        .insert(workTrackingRecords)
+        .values({
+          houseNo: checkerItem.houseNo,
+          round: checkerItem.round,
+          eventDate,
+          projectText: checkerItem.projectText,
+          detail: checkerItem.detail,
+          status: checkerItem.status,
+          deliveredDate: parseTrackingDate(checkerItem.deliveredDate) || null,
+          reportStatuses: checkerItem.reportStatuses,
+          subStatuses: checkerItem.subStatuses,
+          workers: parseWorkers(checkerItem.workers),
+        })
+        .onConflictDoNothing({
+          target: [workTrackingRecords.houseNo, workTrackingRecords.round, workTrackingRecords.eventDate],
+        })
+        .returning();
+
+      if (!record) {
+        [record] = await db
+          .select()
+          .from(workTrackingRecords)
+          .where(and(
+            eq(workTrackingRecords.houseNo, input.houseNo.trim()),
+            eq(workTrackingRecords.round, input.round.trim()),
+            eq(workTrackingRecords.eventDate, eventDate),
+          ))
+          .limit(1);
+      }
+    } else {
+      const subStatuses = [...record.subStatuses];
+      for (const subStatus of checkerItem.subStatuses) {
+        if (!subStatuses.some((current) => current.detail === subStatus.detail)) subStatuses.push(subStatus);
+      }
+      [record] = await db
+        .update(workTrackingRecords)
+        .set({
+          projectText: record.projectText || checkerItem.projectText,
+          deliveredDate: record.deliveredDate || parseTrackingDate(checkerItem.deliveredDate) || null,
+          reportStatuses: { ...checkerItem.reportStatuses, ...record.reportStatuses },
+          subStatuses,
+          workers: Object.keys(record.workers).length ? record.workers : parseWorkers(checkerItem.workers),
+          updatedAt: new Date(),
+        })
+        .where(eq(workTrackingRecords.id, record.id))
+        .returning();
+    }
+  }
+
   if (!record) return jsonError(404, "Work record not found");
-  const hasSubtask = record.subStatuses.some((subStatus) => subStatus.detail === input.detail);
-  if (!hasSubtask) return jsonError(404, "Subtask not found");
 
   const subStatuses = record.subStatuses.map((subStatus) =>
     subStatus.detail === input.detail ? { ...subStatus, status: input.status as typeof subStatus.status } : subStatus,

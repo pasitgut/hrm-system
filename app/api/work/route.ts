@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { workTrackingRecords } from "@/lib/db/schema";
 import { requireApiAnyPermission, requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { getCheckerData } from "@/lib/work-tracking/checker";
-import { formatTrackingDate, jsonError, parseTrackingDate, toCheckerWorkTrackingApiRecord, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
+import { formatTrackingDate, groupCheckerWorkTrackingRecords, jsonError, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
 
 const VIEW_PERMISSIONS = ["work.view", "work.status.update", "work.create"] as const;
 
@@ -19,15 +19,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 
   try {
     const checkerRows = await getCheckerData(formatTrackingDate(start), formatTrackingDate(end));
-    // Checker can return multiple request-status rows for the same work item.
-    // The tracking identity is house + round + event date, so keep one row per key.
-    const checkerItemsByKey = new Map<string, ReturnType<typeof toCheckerWorkTrackingApiRecord>>();
-    for (const row of checkerRows) {
-      const item = toCheckerWorkTrackingApiRecord(row);
-      const key = `${item.houseNo}::${item.round}::${parseTrackingDate(item.date) ?? item.date}`;
-      checkerItemsByKey.set(key, item);
-    }
-    const checkerItems = [...checkerItemsByKey.values()];
+    const checkerItems = groupCheckerWorkTrackingRecords(checkerRows);
     const localRows = await db
       .select()
       .from(workTrackingRecords)
@@ -40,7 +32,17 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     const checkerKeys = new Set(checkerItems.map(itemKey));
     const merged = checkerItems.map((item) => {
       const local = localByKey.get(itemKey(item));
-      return local ? { ...item, ...local } : item;
+      if (!local) return item;
+      return {
+        ...item,
+        ...local,
+        deliveredDate: local.deliveredDate || item.deliveredDate,
+        reportStatuses: { ...item.reportStatuses, ...local.reportStatuses },
+        subStatuses: local.subStatuses.length ? local.subStatuses : item.subStatuses,
+        workers: local.workers === "{}" ? item.workers : local.workers,
+        itemCount: item.itemCount,
+        requestStatus: item.requestStatus,
+      };
     });
     merged.push(...localItems.filter((item) => !checkerKeys.has(itemKey(item))));
     return NextResponse.json({ success: true, data: merged });

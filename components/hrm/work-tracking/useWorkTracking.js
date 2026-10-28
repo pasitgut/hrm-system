@@ -13,6 +13,17 @@ export function useWorkList(start, end) {
   const [error, setError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const refresh = useCallback(() => setReloadKey((key) => key + 1), []);
+  const updateSubStatusInList = useCallback(({ houseNo, round, date, detail, status }) => {
+    setData((current) => current.map((item) => {
+      if (item.houseNo !== houseNo || item.round !== round || item.eventDate !== date) return item;
+      return {
+        ...item,
+        subStatuses: (item.subStatuses ?? []).map((subStatus) =>
+          subStatus.detail === detail ? { ...subStatus, status } : subStatus,
+        ),
+      };
+    }));
+  }, []);
 
   useEffect(() => {
     if (!start || !end) {
@@ -46,7 +57,7 @@ export function useWorkList(start, end) {
     };
   }, [start, end, reloadKey]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, refresh, updateSubStatusInList };
 }
 
 export function useWorkCreate() {
