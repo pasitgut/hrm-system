@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/ui/date-picker-field";
-import { Badge, StatusBadge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectItem } from "@/components/ui/select";
@@ -116,6 +116,17 @@ function statusLabel(status) {
   return STATUS_OPTIONS.find((option) => option.value === normalizeStatus(status))?.label ?? STATUS_OPTIONS[0].label;
 }
 
+function workStatusClassName(status) {
+  const normalized = normalizeStatus(status);
+  if (normalized === "completed") return "border-work-status-completed-border bg-work-status-completed-bg text-work-status-completed";
+  if (normalized === "delivered") return "border-work-status-delivered-border bg-work-status-delivered-bg text-work-status-delivered";
+  return "border-work-status-progress-border bg-work-status-progress-bg text-work-status-progress";
+}
+
+function WorkStatusBadge({ status, children }) {
+  return <Badge variant="caption" className={workStatusClassName(status)}>{children ?? statusLabel(status)}</Badge>;
+}
+
 function getWorkTitle(item) {
   return item.projectText || item.detail || "—";
 }
@@ -135,11 +146,7 @@ function workerEntries(item) {
 function WorkStatusControl({ item, subStatus, canUpdate, updating, onChange }) {
   const currentStatus = normalizeStatus(subStatus.status);
   const hasDetail = Boolean(subStatus.detail && subStatus.detail !== "-");
-  const tone = currentStatus === "completed"
-    ? "border-status-success/30 bg-status-success/10 text-status-success"
-    : currentStatus === "delivered"
-      ? "border-status-info/30 bg-status-info/10 text-status-info"
-      : "border-status-warning/30 bg-status-warning/10 text-status-warning";
+  const tone = workStatusClassName(currentStatus);
 
   if (!canUpdate) {
     return (
@@ -237,7 +244,7 @@ function DeadlineDetailDialog({ type, items, onOpenChange }) {
                   <h3 className="break-words text-sm font-medium">{getWorkTitle(item)}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">บ้านเลขที่ {item.houseNo} · รอบ {item.round}</p>
                 </div>
-                <StatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</StatusBadge>
+                <WorkStatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</WorkStatusBadge>
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>วันที่ตรวจ: {formatDate(item.eventDate)}</span>
@@ -457,7 +464,7 @@ export default function WorkOverviewPage() {
                               <WorkStatusControl key={`${subStatus.detail}-${subIndex}`} item={item} subStatus={subStatus} canUpdate={canUpdate} updating={statusUpdate.updating} onChange={handleSubStatusChange} />
                             ))}
                           </div>
-                        ) : <StatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</StatusBadge>}
+                        ) : <WorkStatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</WorkStatusBadge>}
                       </TableCell>
                       <TableCell><span className="block max-w-full break-words font-medium">{getWorkTitle(item)}</span></TableCell>
                       <TableCell className="whitespace-nowrap">
@@ -481,7 +488,7 @@ export default function WorkOverviewPage() {
                 <article key={`${item.houseNo}-${item.round}-${item.eventDate}-${index}`} className="space-y-3 py-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <h3 className="min-w-0 flex-1 break-words text-sm font-medium">{getWorkTitle(item)}</h3>
-                    <StatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</StatusBadge>
+                    <WorkStatusBadge status={latestStatus(item)}>{statusLabel(item.status)}</WorkStatusBadge>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                     <div><dt className="text-muted-foreground">บ้านเลขที่</dt><dd className="mt-0.5 flex flex-wrap items-center gap-1.5 font-medium">{item.houseNo || "—"}{item.itemCount > 1 ? <Badge color="info">{item.itemCount} รายการ</Badge> : null}</dd></div>
