@@ -13,7 +13,7 @@ import { formatMoney, periodLabel } from "@/lib/salary-slips/model";
 import { cn } from "@/lib/utils";
 import { downloadSlips, readResponse } from "./helpers";
 
-export default function SalarySlipsModule({ permissions }) {
+export default function SalarySlipsModule({ permissions, showHeader = true }) {
   const [items, setItems] = useState([]), [employees, setEmployees] = useState([]);
   const [year, setYear] = useState(String(new Date().getFullYear())), [month, setMonth] = useState("all");
   const [query, setQuery] = useState(""), [department, setDepartment] = useState("all");
@@ -45,7 +45,7 @@ export default function SalarySlipsModule({ permissions }) {
     finally { setBusy(false); }
   }
   return <div className="space-y-6">
-    <PageHeader title="สลิปเงินเดือน" description="นำเข้ารายรับ–รายหัก ตรวจสอบประวัติ และดาวน์โหลดสลิปของพนักงาน" actions={hasPermission(permissions, "salary_slips.import") && <Button asChild leadingIcon={RiUpload2Line}><Link href="/salary-slips/import">นำเข้า Excel</Link></Button>} />
+    {showHeader ? <PageHeader title="สลิปเงินเดือน" description="นำเข้ารายรับ–รายหัก ตรวจสอบประวัติ และดาวน์โหลดสลิปของพนักงาน" actions={hasPermission(permissions, "salary_slips.import") && <Button asChild leadingIcon={RiUpload2Line}><Link href="/salary-slips/import">นำเข้า Excel</Link></Button>} /> : null}
     {error && <div role="alert" className="text-sm text-status-danger">{error} <Button variant="outline" onClick={load}>โหลดใหม่</Button></div>}
     {notice && <p role="status" className="text-sm text-status-success">{notice}</p>}
     <div className="flex flex-wrap items-end gap-3">

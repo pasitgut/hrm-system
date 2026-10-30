@@ -35,7 +35,6 @@ import {
   canViewCompanyAssetRequests,
   canViewCompanyLeave,
   canViewCompanyOt,
-  canViewEmployeeCompensation,
   canViewEmployeeProfiles,
   canViewOwnAssetRequests,
   canViewOwnLeaveRequests,
@@ -212,7 +211,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
         if (item.key === "ot") return canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions);
         if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
         if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
-        if (item.key === "payroll") return canViewEmployeeCompensation(permissions);
+        if (item.key === "payroll") return hasPermission(permissions, "salary_slips.view");
         if (item.key === "salary-slips") return hasPermission(permissions, "salary_slips.view");
         if (item.key === "reports") return canViewReports(permissions);
         return true;

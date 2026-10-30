@@ -1,12 +1,12 @@
 import PayrollModule from "@/components/hrm/payroll/PayrollModule";
-import { requireAnyPermission } from "@/lib/auth/dal";
+import { requirePermission } from "@/lib/auth/dal";
 
 export const metadata = {
   title: "เงินเดือน | HRM",
-  description: "ตัวอย่างหน้าจัดการรอบเงินเดือน",
+  description: "ดูข้อมูลเงินเดือนในระบบและส่งออกเอกสารประกันสังคม",
 };
 
 export default async function PayrollPage() {
-  await requireAnyPermission("employees.compensation.view", "employees.compensation.manage");
-  return <PayrollModule />;
+  const user = await requirePermission("salary_slips.view");
+  return <PayrollModule permissions={user.permissions} />;
 }
