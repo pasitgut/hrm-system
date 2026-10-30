@@ -48,31 +48,6 @@ const MASTER_ITEMS = [
   { key: "positions", label: "ตำแหน่ง", endpoint: "/api/positions" },
 ];
 
-const BANK_OPTIONS = [
-  "002|ธ.กรุงเทพ จำกัด (มหาชน)",
-  "004|ธ.กสิกรไทย จำกัด (มหาชน)",
-  "006|ธ.กรุงไทย จำกัด (มหาชน)",
-  "011|ธ.ทหารไทยธนชาต จำกัด (มหาชน)",
-  "014|ธ.ไทยพาณิชย์ จำกัด (มหาชน)",
-  "018|ธ.ซูมิโตโม มิตซุย แบงกิ้ง คอร์ปอเรชั่น",
-  "020|ธ.สแตนดาร์ดชาร์เตอร์ด (ไทย) จำกัด (มหาชน)",
-  "022|ธ.ซีไอเอ็มบี ไทย จำกัด (มหาชน)",
-  "024|ธ.ยูโอบี จำกัด (มหาชน)",
-  "025|ธ.กรุงศรีอยุธยา จำกัด (มหาชน)",
-  "030|ธ.ออมสิน",
-  "033|ธ.อาคารสงเคราะห์",
-  "034|ธ.เพื่อการเกษตรและสหกรณ์การเกษตร",
-  "035|ธ.เพื่อการส่งออกและนำเข้าแห่งประเทศไทย",
-  "039|ธ.มิซูโฮ จำกัด สาขากรุงเทพฯ",
-  "052|ธ.แห่งประเทศจีน (ไทย) จำกัด (มหาชน)",
-  "066|ธ.อิสลามแห่งประเทศไทย",
-  "067|ธ.ทิสโก้ จำกัด (มหาชน)",
-  "069|ธ.เกียรตินาคินภัทร จำกัด (มหาชน)",
-  "070|ธ.ไอซีบีซี (ไทย) จำกัด (มหาชน)",
-  "071|ธ.ไทยเครดิต จำกัด (มหาชน)",
-  "073|ธ.แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)",
-];
-
 const EMPTY_LOOKUPS = {
   employmentTypes: [],
   employmentStatuses: [],
@@ -214,9 +189,9 @@ function PayrollItemsTable({ items, onChange, disabled, idPrefix }) {
         </thead>
         <tbody>
           {items.map((item, index) => {
-            const rowId = `${idPrefix}-${item.code}`;
+            const rowId = `${idPrefix}-${item.code}-${index}`;
             return (
-              <tr key={item.code} className="border-t border-border">
+              <tr key={rowId} className="border-t border-border">
                 <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.code}</td>
                 <td className="px-3 py-2.5 text-foreground">{item.label}</td>
                 <td className="px-3 py-2">
@@ -266,7 +241,6 @@ function PayrollItemsTable({ items, onChange, disabled, idPrefix }) {
 function EmployeePayrollSettings({ form, updateForm, canManage }) {
   const [activeList, setActiveList] = useState("incomeItems");
   const payrollData = form.payrollData || createDefaultEmployeePayrollData();
-  const [customBankSelected, setCustomBankSelected] = useState(() => Boolean(payrollData.bankName && !BANK_OPTIONS.includes(payrollData.bankName)));
   const incomeItems = [
     { code: "INT001", label: "เงินเดือน", amount: form.baseSalary ?? "", unit: "period", enabled: true, lockUnit: true, lockEnabled: true },
     ...payrollData.incomeItems,
@@ -294,30 +268,7 @@ function EmployeePayrollSettings({ form, updateForm, canManage }) {
           <p className="mt-1 text-xs text-muted-foreground">ข้อมูลบัญชีและการตั้งค่าที่ใช้กับสลิปเงินเดือนของพนักงาน</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="grid min-w-0 gap-1.5">
-            <label htmlFor="employee-payroll-bank" className="text-sm font-medium text-foreground">ชื่อธนาคาร</label>
-            <Select
-              id="employee-payroll-bank"
-              aria-label="ชื่อธนาคาร"
-              selectedKey={customBankSelected ? "__custom__" : payrollData.bankName || "__none__"}
-              onSelectionChange={(key) => {
-                const value = String(key);
-                if (value === "__custom__") {
-                  setCustomBankSelected(true);
-                  if (BANK_OPTIONS.includes(payrollData.bankName)) updatePayrollField("bankName", "");
-                  return;
-                }
-                setCustomBankSelected(false);
-                updatePayrollField("bankName", value === "__none__" ? "" : value);
-              }}
-              isDisabled={!canManage}
-            >
-              <SelectItem id="__none__">เลือกธนาคาร</SelectItem>
-              {BANK_OPTIONS.map((bank) => <SelectItem id={bank} key={bank}>{bank}</SelectItem>)}
-              <SelectItem id="__custom__">อื่น ๆ</SelectItem>
-            </Select>
-            {customBankSelected ? <Input label="ระบุชื่อธนาคาร" value={payrollData.bankName} onChange={(value) => updatePayrollField("bankName", value)} isDisabled={!canManage} /> : null}
-          </div>
+          <Input label="ชื่อธนาคาร" value={payrollData.bankName} onChange={(value) => updatePayrollField("bankName", value)} isDisabled={!canManage} />
           <Input label="สาขาธนาคาร" value={payrollData.bankBranch} onChange={(value) => updatePayrollField("bankBranch", value)} isDisabled={!canManage} />
           <Input label="ชื่อบัญชี" value={payrollData.accountName} onChange={(value) => updatePayrollField("accountName", value)} isDisabled={!canManage} />
           <Input label="เลขที่บัญชี" inputMode="numeric" value={payrollData.accountNumber} onChange={(value) => updatePayrollField("accountNumber", value)} isDisabled={!canManage} />
@@ -347,9 +298,11 @@ function EmployeePayrollSettings({ form, updateForm, canManage }) {
             <Tab id="deductionItems">รายหัก</Tab>
           </TabList>
           <TabPanel id="incomeItems" className="mt-3">
+            <h4 className="mb-2 text-sm font-medium text-foreground">กำหนดรายได้ (ค่าคงที่)</h4>
             <PayrollItemsTable items={incomeItems} onChange={(index, changes) => updateItem("incomeItems", index, changes)} disabled={!canManage} idPrefix="employee-income" />
           </TabPanel>
           <TabPanel id="deductionItems" className="mt-3">
+            <h4 className="mb-2 text-sm font-medium text-foreground">กำหนดรายหัก (ค่าคงที่)</h4>
             <PayrollItemsTable items={payrollData.deductionItems} onChange={(index, changes) => updateItem("deductionItems", index, changes)} disabled={!canManage} idPrefix="employee-deduction" />
           </TabPanel>
         </Tabs>

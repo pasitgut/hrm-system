@@ -32,19 +32,19 @@ const DEFAULT_INCOME_ITEMS: EmployeePayrollItem[] = [
   { code: "INT003", label: "เบี้ยขยัน", amount: 0, unit: "period", enabled: false },
   { code: "INT008", label: "ค่าตอบแทน", amount: 0, unit: "period", enabled: false },
   { code: "INT1801001", label: "โบนัส", amount: 0, unit: "period", enabled: false },
-  { code: "INT19", label: "ค่าที่พักอาศัย", amount: 0, unit: "period", enabled: false },
-  { code: "license", label: "ค่าใบประกอบวิชาชีพ", amount: 0, unit: "period", enabled: false },
-  { code: "Tel", label: "ค่าโทรศัพท์", amount: 0, unit: "period", enabled: false },
+  { code: "INT19", label: "ค่าที่พักอาศัย", amount: 0, unit: "period", enabled: true },
+  { code: "license", label: "ค่าใบประกอบวิชาชีพ", amount: 0, unit: "period", enabled: true },
+  { code: "Tel", label: "ค่าโทรศัพท์", amount: 0, unit: "period", enabled: true },
 ];
 
 const DEFAULT_DEDUCTION_ITEMS: EmployeePayrollItem[] = [
-  { code: "leave", label: "ลางาน", amount: 0, unit: "period", enabled: false },
-  { code: "late", label: "มาสาย", amount: 0, unit: "period", enabled: false },
-  { code: "absence", label: "ขาดงาน", amount: 0, unit: "period", enabled: false },
-  { code: "provident_fund", label: "กองทุนสำรองเลี้ยงชีพ", amount: 0, unit: "period", enabled: false },
-  { code: "loan", label: "กองทุนกู้ยืม", amount: 0, unit: "period", enabled: false },
-  { code: "social_security", label: "ประกันสังคม", amount: 0, unit: "period", enabled: false },
-  { code: "tax", label: "ภาษีหัก ณ ที่จ่าย", amount: 0, unit: "period", enabled: false },
+  { code: "DDT003", label: "ลางาน", amount: 0, unit: "period", enabled: true },
+  { code: "DDT004", label: "มาสาย", amount: 0, unit: "period", enabled: true },
+  { code: "DDT005", label: "ขาดงาน", amount: 0, unit: "period", enabled: true },
+  { code: "SYSWELFARE", label: "กองทุนสงเคราะห์ลูกจ้าง", amount: 0, unit: "period", enabled: false },
+  { code: "SYS002", label: "ภาษี", amount: 0, unit: "period", enabled: false },
+  { code: "DDT006", label: "กองทุนสำรองเลี้ยงชีพ", amount: 0, unit: "period", enabled: false },
+  { code: "DDT009", label: "กองทุนกู้ยืม", amount: 0, unit: "period", enabled: false },
 ];
 
 export function createDefaultEmployeePayrollData(): EmployeePayrollData {
@@ -63,22 +63,30 @@ export function createDefaultEmployeePayrollData(): EmployeePayrollData {
 
 function normalizeItems(value: unknown, defaults: EmployeePayrollItem[]): EmployeePayrollItem[] {
   if (!Array.isArray(value)) return defaults.map((item) => ({ ...item }));
-  const supplied = new Map(value.filter((item) => item && typeof item === "object").map((item) => {
+  const aliases: Record<string, string> = {
+    leave: "DDT003",
+    late: "DDT004",
+    absence: "DDT005",
+    tax: "SYS002",
+    provident_fund: "DDT006",
+    loan: "DDT009",
+  };
+  const normalized = value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
-    return [row.code, row] as const;
-  }));
-  return defaults.map((item) => {
-    const saved = supplied.get(item.code);
-    if (!saved) return { ...item };
-    const unit = PAYROLL_VALUE_UNITS.some((option) => option.id === saved.unit) ? saved.unit as PayrollValueUnit : item.unit;
-    return {
-      code: item.code,
-      label: item.label,
-      amount: typeof saved.amount === "number" && Number.isFinite(saved.amount) ? saved.amount : item.amount,
+    if (typeof row.code !== "string" || typeof row.label !== "string") return [];
+    const code = aliases[row.code] ?? row.code;
+    const defaultItem = defaults.find((entry) => entry.code === code);
+    const unit = PAYROLL_VALUE_UNITS.some((option) => option.id === row.unit) ? row.unit as PayrollValueUnit : defaultItem?.unit ?? "period";
+    return [{
+      code,
+      label: row.label,
+      amount: typeof row.amount === "number" && Number.isFinite(row.amount) ? row.amount : defaultItem?.amount ?? 0,
       unit,
-      enabled: typeof saved.enabled === "boolean" ? saved.enabled : item.enabled,
-    };
+      enabled: typeof row.enabled === "boolean" ? row.enabled : defaultItem?.enabled ?? false,
+    }];
   });
+  return normalized.length ? normalized : defaults.map((item) => ({ ...item }));
 }
 
 export function normalizeEmployeePayrollData(value: unknown): EmployeePayrollData {
