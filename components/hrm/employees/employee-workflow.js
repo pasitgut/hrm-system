@@ -24,6 +24,9 @@ function validateEmployeeForm(form, employee, canEditProfile, canEditCompensatio
     if (!Number.isFinite(Number(form.otWeekdayMultiplier)) || Number(form.otWeekdayMultiplier) <= 0) return "เรท OT วันธรรมดาต้องมากกว่า 0";
     if (!Number.isFinite(Number(form.otHolidayMultiplier)) || Number(form.otHolidayMultiplier) <= 0) return "เรท OT วันหยุดต้องมากกว่า 0";
     if (!Number.isFinite(Number(form.workHoursPerDay)) || Number(form.workHoursPerDay) <= 0 || Number(form.workHoursPerDay) > 24) return "ชั่วโมงทำงานปกติต่อวันต้องมากกว่า 0 และไม่เกิน 24";
+    for (const item of [...(form.payrollData?.incomeItems ?? []), ...(form.payrollData?.deductionItems ?? [])]) {
+      if (item.amount !== "" && (!Number.isFinite(Number(item.amount)) || Number(item.amount) < 0)) return `จำนวนเงินของ ${item.label} ต้องเป็นตัวเลขตั้งแต่ 0 บาทขึ้นไป`;
+    }
   }
   return null;
 }
@@ -46,6 +49,11 @@ function employeeRequestBody(form, employee, lookups, canEditProfile, canEditCom
     phone: form.phone || null,
     avatarUrl: form.avatarUrl || null,
     baseSalary: form.baseSalary === "" ? null : Number(form.baseSalary),
+    payrollData: form.payrollData ? {
+      ...form.payrollData,
+      incomeItems: form.payrollData.incomeItems.map((item) => ({ ...item, amount: item.amount === "" ? 0 : Number(item.amount) })),
+      deductionItems: form.payrollData.deductionItems.map((item) => ({ ...item, amount: item.amount === "" ? 0 : Number(item.amount) })),
+    } : undefined,
     otWeekdayMultiplier: Number(form.otWeekdayMultiplier),
     otHolidayMultiplier: Number(form.otHolidayMultiplier),
     workHoursPerDay: Number(form.workHoursPerDay),
@@ -58,7 +66,7 @@ function employeeRequestBody(form, employee, lookups, canEditProfile, canEditCom
     ...(!employee ? { employmentStatusId: operationalStatus?.id ?? null } : {}),
   };
 
-  const compensationFields = ["baseSalary", "otWeekdayMultiplier", "otHolidayMultiplier", "workHoursPerDay"];
+  const compensationFields = ["baseSalary", "payrollData", "otWeekdayMultiplier", "otHolidayMultiplier", "workHoursPerDay"];
   if (canEditProfile && canEditCompensation) return body;
   if (canEditProfile) {
     for (const field of compensationFields) delete body[field];

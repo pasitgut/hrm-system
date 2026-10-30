@@ -5,6 +5,8 @@ import { db } from "@/lib/db/client";
 import { hashPassword } from "@/lib/auth/password";
 import { departments, employees, employmentStatuses, employmentTypes, positions, users } from "@/lib/db/schema";
 import { DEFAULT_OT_RATE_SETTINGS, getOtRateSettings } from "@/lib/settings/otRateSettings";
+import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, type EmployeePayrollData } from "@/lib/employees/payroll-data";
+import { employeePayrollDataSchema } from "@/lib/employees/payroll-data-schema";
 
 // Shared helpers for the app/api/employees/** Route Handlers: the joined
 // select used by every read, the GET response DTO, employee-code conflicts,
@@ -20,6 +22,7 @@ export const employeeSelectColumns = {
   firstName: employees.firstName,
   lastName: employees.lastName,
   baseSalary: employees.baseSalary,
+  payrollData: employees.payrollData,
   otWeekdayMultiplier: employees.otWeekdayMultiplier,
   otHolidayMultiplier: employees.otHolidayMultiplier,
   workHoursPerDay: employees.workHoursPerDay,
@@ -57,6 +60,7 @@ type EmployeeRow = {
   firstName: string;
   lastName: string;
   baseSalary: number | null;
+  payrollData: EmployeePayrollData;
   otWeekdayMultiplier: number;
   otHolidayMultiplier: number;
   workHoursPerDay: number;
@@ -91,6 +95,7 @@ export type EmployeeItemDto = ReturnType<typeof toEmployeeItemDto>;
 
 export const EMPLOYEE_COMPENSATION_FIELDS = [
   "baseSalary",
+  "payrollData",
   "otWeekdayMultiplier",
   "otHolidayMultiplier",
   "workHoursPerDay",
@@ -137,6 +142,7 @@ export function toEmployeeItemDto(row: EmployeeRow, includeCompensation = false)
     lastName: row.lastName,
     ...(includeCompensation ? {
       baseSalary: row.baseSalary,
+      payrollData: normalizeEmployeePayrollData(row.payrollData),
       otWeekdayMultiplier: row.otWeekdayMultiplier,
       otHolidayMultiplier: row.otHolidayMultiplier,
       workHoursPerDay: row.workHoursPerDay,
@@ -349,6 +355,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     phone,
     avatarUrl,
     baseSalary,
+    payrollData,
     otWeekdayMultiplier,
     otHolidayMultiplier,
     workHoursPerDay,
@@ -384,11 +391,13 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
   if (birthDate != null && birthDate !== "" && !isValidDateStr(birthDate)) return lifecycleFailure("invalid", "birthDate must be a YYYY-MM-DD date");
   if (managerId != null && managerId !== "" && !isValidUuid(managerId)) return lifecycleFailure("invalid", "Invalid managerId");
   const baseSalaryValue = parseOptionalNumber(baseSalary);
+  const payrollDataResult = employeePayrollDataSchema.safeParse(payrollData ?? createDefaultEmployeePayrollData());
   const otWeekdayMultiplierValue = parseMultiplier(otWeekdayMultiplier, otRateDefaults.weekdayMultiplier);
   const otHolidayMultiplierValue = parseMultiplier(otHolidayMultiplier, otRateDefaults.holidayMultiplier);
   const workHoursPerDayValue = parseWorkHours(workHoursPerDay, 8);
   const weeklyHolidaysValue = weeklyHolidays === undefined ? [] : parseWeeklyHolidays(weeklyHolidays);
   if (baseSalaryValue === undefined || (typeof baseSalaryValue === "number" && baseSalaryValue < 0)) return lifecycleFailure("invalid", "Invalid baseSalary");
+  if (!payrollDataResult.success) return lifecycleFailure("invalid", "ข้อมูลรายได้/หักไม่ถูกต้อง");
   if (otWeekdayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid weekday OT multiplier");
   if (otHolidayMultiplierValue === undefined) return lifecycleFailure("invalid", "Invalid holiday OT multiplier");
   if (workHoursPerDayValue === undefined) return lifecycleFailure("invalid", "Invalid work hours per day");
@@ -421,6 +430,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     firstName: firstName.trim(),
     lastName: lastName.trim(),
     baseSalary: baseSalaryValue,
+    payrollData: payrollDataResult.data,
     otWeekdayMultiplier: otWeekdayMultiplierValue,
     otHolidayMultiplier: otHolidayMultiplierValue,
     workHoursPerDay: workHoursPerDayValue,
@@ -488,6 +498,11 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
     const value = parseOptionalNumber(body.baseSalary);
     if (value === undefined || (typeof value === "number" && value < 0)) return lifecycleFailure("invalid", "Invalid baseSalary");
     values.baseSalary = value;
+  }
+  if ("payrollData" in body) {
+    const result = employeePayrollDataSchema.safeParse(body.payrollData);
+    if (!result.success) return lifecycleFailure("invalid", "ข้อมูลรายได้/หักไม่ถูกต้อง");
+    values.payrollData = result.data;
   }
   if ("otWeekdayMultiplier" in body) {
     const value = parseMultiplier(body.otWeekdayMultiplier, 1.5);

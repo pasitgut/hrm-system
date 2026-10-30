@@ -134,6 +134,13 @@
       "when": 1793145600000,
       "tag": "0018_work_tracking_records",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793318400000,
+      "tag": "0019_employee_payroll_data",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import {
   RiDeleteBinLine,
   RiEditLine,
   RiEyeLine,
+  RiMoneyDollarCircleLine,
   RiSearchLine,
   RiSettings3Line,
   RiTeamLine,
@@ -18,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePickerField } from "@/components/ui/date-picker-field";
 import { Select, SelectItem } from "@/components/ui/select";
+import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
@@ -37,12 +39,38 @@ import { cn } from "@/lib/utils";
 import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
 import { formatThaiDate, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
 import { useMasterDataWorkflow } from "@/components/hrm/employees/master-data-workflow";
+import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, PAYROLL_VALUE_UNITS } from "@/lib/employees/payroll-data";
 
 const MASTER_ITEMS = [
   { key: "employmentTypes", label: "ประเภทการจ้าง", endpoint: "/api/employment-types", hasCode: true },
   { key: "employmentStatuses", label: "สถานะพนักงาน", endpoint: "/api/employment-statuses" },
   { key: "departments", label: "แผนก", endpoint: "/api/departments" },
   { key: "positions", label: "ตำแหน่ง", endpoint: "/api/positions" },
+];
+
+const BANK_OPTIONS = [
+  "002|ธ.กรุงเทพ จำกัด (มหาชน)",
+  "004|ธ.กสิกรไทย จำกัด (มหาชน)",
+  "006|ธ.กรุงไทย จำกัด (มหาชน)",
+  "011|ธ.ทหารไทยธนชาต จำกัด (มหาชน)",
+  "014|ธ.ไทยพาณิชย์ จำกัด (มหาชน)",
+  "018|ธ.ซูมิโตโม มิตซุย แบงกิ้ง คอร์ปอเรชั่น",
+  "020|ธ.สแตนดาร์ดชาร์เตอร์ด (ไทย) จำกัด (มหาชน)",
+  "022|ธ.ซีไอเอ็มบี ไทย จำกัด (มหาชน)",
+  "024|ธ.ยูโอบี จำกัด (มหาชน)",
+  "025|ธ.กรุงศรีอยุธยา จำกัด (มหาชน)",
+  "030|ธ.ออมสิน",
+  "033|ธ.อาคารสงเคราะห์",
+  "034|ธ.เพื่อการเกษตรและสหกรณ์การเกษตร",
+  "035|ธ.เพื่อการส่งออกและนำเข้าแห่งประเทศไทย",
+  "039|ธ.มิซูโฮ จำกัด สาขากรุงเทพฯ",
+  "052|ธ.แห่งประเทศจีน (ไทย) จำกัด (มหาชน)",
+  "066|ธ.อิสลามแห่งประเทศไทย",
+  "067|ธ.ทิสโก้ จำกัด (มหาชน)",
+  "069|ธ.เกียรตินาคินภัทร จำกัด (มหาชน)",
+  "070|ธ.ไอซีบีซี (ไทย) จำกัด (มหาชน)",
+  "071|ธ.ไทยเครดิต จำกัด (มหาชน)",
+  "073|ธ.แลนด์ แอนด์ เฮ้าส์ จำกัด (มหาชน)",
 ];
 
 const EMPTY_LOOKUPS = {
@@ -72,6 +100,7 @@ const blankForm = {
   endDate: "",
   avatarUrl: "",
   baseSalary: "",
+  payrollData: createDefaultEmployeePayrollData(),
   otWeekdayMultiplier: "1.5",
   otHolidayMultiplier: "3",
   workHoursPerDay: "8",
@@ -170,7 +199,167 @@ function SelectField({ id, label, children, ...props }) {
   );
 }
 
-function EmployeeActions({ employee, canEdit, canOffboard, onView, onEdit, onOffboardEmployee }) {
+function PayrollItemsTable({ items, onChange, disabled, idPrefix }) {
+  return (
+    <div className="min-w-0 overflow-x-auto rounded-md border border-border">
+      <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <thead className="bg-muted text-xs text-muted-foreground">
+          <tr>
+            <th scope="col" className="h-10 px-3 font-medium">รหัสรายการ</th>
+            <th scope="col" className="px-3 font-medium">ชื่อรายการ</th>
+            <th scope="col" className="w-48 px-3 text-right font-medium">จำนวน</th>
+            <th scope="col" className="w-36 px-3 font-medium">หน่วยเวลา</th>
+            <th scope="col" className="w-24 px-3 text-center font-medium">ใช้งาน</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => {
+            const rowId = `${idPrefix}-${item.code}`;
+            return (
+              <tr key={item.code} className="border-t border-border">
+                <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.code}</td>
+                <td className="px-3 py-2.5 text-foreground">{item.label}</td>
+                <td className="px-3 py-2">
+                  <Input
+                    aria-label={`จำนวน ${item.label}`}
+                    className="min-w-28"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={item.amount ?? ""}
+                    onChange={(value) => onChange(index, { amount: value })}
+                    isDisabled={disabled}
+                  />
+                </td>
+                <td className="px-3 py-2">
+                  <Select
+                    id={`${rowId}-unit`}
+                    aria-label={`หน่วยเวลาของ ${item.label}`}
+                    selectedKey={item.unit}
+                    onSelectionChange={(key) => onChange(index, { unit: String(key) })}
+                    isDisabled={disabled || item.lockUnit}
+                  >
+                    {PAYROLL_VALUE_UNITS.map((unit) => <SelectItem id={unit.id} key={unit.id}>{unit.label}</SelectItem>)}
+                  </Select>
+                </td>
+                <td className="px-3 py-2 text-center">
+                  <label htmlFor={`${rowId}-enabled`} className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center">
+                    <Checkbox
+                      id={`${rowId}-enabled`}
+                      aria-label={`เปิดใช้งาน ${item.label}`}
+                      isSelected={item.enabled}
+                      isDisabled={disabled || item.lockEnabled}
+                      onChange={(enabled) => onChange(index, { enabled })}
+                    />
+                  </label>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EmployeePayrollSettings({ form, updateForm, canManage }) {
+  const [activeList, setActiveList] = useState("incomeItems");
+  const payrollData = form.payrollData || createDefaultEmployeePayrollData();
+  const [customBankSelected, setCustomBankSelected] = useState(() => Boolean(payrollData.bankName && !BANK_OPTIONS.includes(payrollData.bankName)));
+  const incomeItems = [
+    { code: "INT001", label: "เงินเดือน", amount: form.baseSalary ?? "", unit: "period", enabled: true, lockUnit: true, lockEnabled: true },
+    ...payrollData.incomeItems,
+  ];
+
+  function updatePayrollField(field, value) {
+    updateForm("payrollData", { ...payrollData, [field]: value });
+  }
+
+  function updateItem(listName, index, changes) {
+    if (listName === "incomeItems" && index === 0) {
+      if ("amount" in changes) updateForm("baseSalary", changes.amount);
+      return;
+    }
+    const listIndex = listName === "incomeItems" ? index - 1 : index;
+    const current = payrollData[listName];
+    updatePayrollField(listName, current.map((item, itemIndex) => itemIndex === listIndex ? { ...item, ...changes } : item));
+  }
+
+  return (
+    <div className="space-y-5">
+      <section aria-labelledby="employee-payroll-payment-title" className="space-y-3">
+        <div>
+          <h3 id="employee-payroll-payment-title" className="text-sm font-semibold text-foreground">ข้อมูลการจ่ายเงิน</h3>
+          <p className="mt-1 text-xs text-muted-foreground">ข้อมูลบัญชีและการตั้งค่าที่ใช้กับสลิปเงินเดือนของพนักงาน</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid min-w-0 gap-1.5">
+            <label htmlFor="employee-payroll-bank" className="text-sm font-medium text-foreground">ชื่อธนาคาร</label>
+            <Select
+              id="employee-payroll-bank"
+              aria-label="ชื่อธนาคาร"
+              selectedKey={customBankSelected ? "__custom__" : payrollData.bankName || "__none__"}
+              onSelectionChange={(key) => {
+                const value = String(key);
+                if (value === "__custom__") {
+                  setCustomBankSelected(true);
+                  if (BANK_OPTIONS.includes(payrollData.bankName)) updatePayrollField("bankName", "");
+                  return;
+                }
+                setCustomBankSelected(false);
+                updatePayrollField("bankName", value === "__none__" ? "" : value);
+              }}
+              isDisabled={!canManage}
+            >
+              <SelectItem id="__none__">เลือกธนาคาร</SelectItem>
+              {BANK_OPTIONS.map((bank) => <SelectItem id={bank} key={bank}>{bank}</SelectItem>)}
+              <SelectItem id="__custom__">อื่น ๆ</SelectItem>
+            </Select>
+            {customBankSelected ? <Input label="ระบุชื่อธนาคาร" value={payrollData.bankName} onChange={(value) => updatePayrollField("bankName", value)} isDisabled={!canManage} /> : null}
+          </div>
+          <Input label="สาขาธนาคาร" value={payrollData.bankBranch} onChange={(value) => updatePayrollField("bankBranch", value)} isDisabled={!canManage} />
+          <Input label="ชื่อบัญชี" value={payrollData.accountName} onChange={(value) => updatePayrollField("accountName", value)} isDisabled={!canManage} />
+          <Input label="เลขที่บัญชี" inputMode="numeric" value={payrollData.accountNumber} onChange={(value) => updatePayrollField("accountNumber", value)} isDisabled={!canManage} />
+          <SelectField id="employee-payroll-tax" label="เงื่อนไขภาษี" selectedKey={payrollData.taxCondition} onSelectionChange={(key) => updatePayrollField("taxCondition", String(key))} isDisabled={!canManage}>
+            <SelectItem id="withhold">หัก ณ ที่จ่าย</SelectItem>
+            <SelectItem id="no_withholding">ไม่หัก ณ ที่จ่าย</SelectItem>
+          </SelectField>
+          <SelectField id="employee-payslip-language" label="ภาษา payslip" selectedKey={payrollData.payslipLanguage} onSelectionChange={(key) => updatePayrollField("payslipLanguage", String(key))} isDisabled={!canManage}>
+            <SelectItem id="th">ไทย</SelectItem>
+            <SelectItem id="en">อังกฤษ</SelectItem>
+          </SelectField>
+          <label htmlFor="employee-do-not-print-payslip" className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:col-span-2">
+            <Checkbox id="employee-do-not-print-payslip" isSelected={payrollData.doNotPrintPayslip} isDisabled={!canManage} onChange={(checked) => updatePayrollField("doNotPrintPayslip", checked)} />
+            ไม่พิมพ์ payslip
+          </label>
+        </div>
+      </section>
+
+      <section aria-labelledby="employee-payroll-items-title" className="space-y-3">
+        <div>
+          <h3 id="employee-payroll-items-title" className="text-sm font-semibold text-foreground">รายการรายได้และรายหัก</h3>
+          <p className="mt-1 text-xs text-muted-foreground">กำหนดยอดประจำ หน่วยเวลา และสถานะการใช้งานของแต่ละรายการ</p>
+        </div>
+        <Tabs selectedKey={activeList} onSelectionChange={(key) => setActiveList(String(key))}>
+          <TabList aria-label="ประเภทรายการเงินเดือน">
+            <Tab id="incomeItems">รายได้</Tab>
+            <Tab id="deductionItems">รายหัก</Tab>
+          </TabList>
+          <TabPanel id="incomeItems" className="mt-3">
+            <PayrollItemsTable items={incomeItems} onChange={(index, changes) => updateItem("incomeItems", index, changes)} disabled={!canManage} idPrefix="employee-income" />
+          </TabPanel>
+          <TabPanel id="deductionItems" className="mt-3">
+            <PayrollItemsTable items={payrollData.deductionItems} onChange={(index, changes) => updateItem("deductionItems", index, changes)} disabled={!canManage} idPrefix="employee-deduction" />
+          </TabPanel>
+        </Tabs>
+        {!canManage ? <p role="status" className="text-xs text-muted-foreground">บัญชีนี้ดูข้อมูลได้ แต่ไม่มีสิทธิ์แก้ไขรายได้/หัก</p> : null}
+      </section>
+    </div>
+  );
+}
+
+function EmployeeActions({ employee, canEdit, canManagePayroll, canOffboard, onView, onEdit, onPayroll, onOffboardEmployee }) {
   const name = `${employee.firstName} ${employee.lastName}`;
   return (
     <div className="flex items-center justify-end gap-1">
@@ -178,6 +367,7 @@ function EmployeeActions({ employee, canEdit, canOffboard, onView, onEdit, onOff
       {canEdit || canOffboard ? (
         <>
           {canEdit ? <IconButton icon={RiEditLine} aria-label={`แก้ไข ${name}`} onClick={() => onEdit(employee)} /> : null}
+          {canManagePayroll ? <IconButton icon={RiMoneyDollarCircleLine} aria-label={`ตั้งค่ารายได้และรายหัก ${name}`} onClick={() => onPayroll(employee)} /> : null}
           {canOffboard && employee.isActive ? <Button type="button" size="xs" variant="outline" className="text-destructive" aria-label={`เปลี่ยน ${name} เป็นพ้นสภาพ`} onClick={() => onOffboardEmployee(employee)}>พ้นสภาพ</Button> : null}
         </>
       ) : null}
@@ -244,6 +434,7 @@ export default function EmployeeModule() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [employeeFormTab, setEmployeeFormTab] = useState("profile");
   const canEditProfileForm = editing ? canUpdateProfile : canCreate;
   const [form, setForm] = useState(blankForm);
   const [otRateDefaults, setOtRateDefaults] = useState({ weekdayMultiplier: "1.5", holidayMultiplier: "3" });
@@ -391,8 +582,10 @@ export default function EmployeeModule() {
       setOtRateSettingsLoaded(true);
     }
     setEditing(null);
+    setEmployeeFormTab("profile");
     setForm({
       ...blankForm,
+      payrollData: createDefaultEmployeePayrollData(),
       otWeekdayMultiplier: defaults.weekdayMultiplier,
       otHolidayMultiplier: defaults.holidayMultiplier,
       startDate: todayStr(),
@@ -401,8 +594,9 @@ export default function EmployeeModule() {
     setFormOpen(true);
   }
 
-  function openEdit(employee) {
+  function openEdit(employee, initialTab = "profile") {
     setEditing(employee);
+    setEmployeeFormTab(initialTab === "payroll" && canViewCompensation ? "payroll" : (canUpdateProfile ? "profile" : "payroll"));
     setForm({
       code: employee.code || "",
       prefix: employee.prefix || "คุณ",
@@ -416,6 +610,7 @@ export default function EmployeeModule() {
       email: employee.email || "",
       phone: employee.phone || "",
       baseSalary: employee.baseSalary == null ? "" : String(employee.baseSalary),
+      payrollData: normalizeEmployeePayrollData(employee.payrollData),
       otWeekdayMultiplier: String(employee.otWeekdayMultiplier ?? 1.5),
       otHolidayMultiplier: String(employee.otHolidayMultiplier ?? 3),
       workHoursPerDay: String(employee.workHoursPerDay ?? 8),
@@ -429,6 +624,10 @@ export default function EmployeeModule() {
     });
     setFormError("");
     setFormOpen(true);
+  }
+
+  function openPayrollSettings(employee) {
+    openEdit(employee, "payroll");
   }
 
   function closeForm() {
@@ -631,7 +830,7 @@ export default function EmployeeModule() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-foreground">{formatEmploymentTenure(employee, tenureAsOf)}</td>
                     <td className="px-4 py-3"><StatusChip status={employee.employmentStatus?.name} /></td>
-                    <td className="px-3 py-3"><EmployeeActions employee={employee} canEdit={canEditEmployee} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onOffboardEmployee={beginOffboard} /></td>
+                    <td className="px-3 py-3"><EmployeeActions employee={employee} canEdit={canEditEmployee} canManagePayroll={canManageCompensation} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onPayroll={openPayrollSettings} onOffboardEmployee={beginOffboard} /></td>
                   </tr>
                 );
               })}
@@ -640,7 +839,7 @@ export default function EmployeeModule() {
         </div>
 
         <div className="grid gap-3 p-3 md:hidden">
-          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} tenureAsOf={tenureAsOf} canEdit={canEditEmployee} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onOffboardEmployee={beginOffboard} />)}
+          {pageItems.map((employee) => <EmployeeCard key={employee.id} employee={employee} tenureAsOf={tenureAsOf} canEdit={canEditEmployee} canManagePayroll={canManageCompensation} canOffboard={canOffboard} onView={setSelected} onEdit={openEdit} onPayroll={openPayrollSettings} onOffboardEmployee={beginOffboard} />)}
         </div>
 
         {listLoading ? (
@@ -671,119 +870,120 @@ export default function EmployeeModule() {
         open={formOpen}
         onClose={closeForm}
         title={editing ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงาน"}
-        description="กำหนดรหัสพนักงานเองเป็นตัวเลข 4 หลัก เช่น 2603"
-        size={canViewDocuments ? "lg" : "md"}
+        description={editing ? `${editing.code} · ${editing.firstName} ${editing.lastName}` : "กำหนดรหัสพนักงานเองเป็นตัวเลข 4 หลัก เช่น 2603"}
+        size={canViewDocuments || canViewCompensation ? "lg" : "md"}
         className="border-t-4 border-t-primary"
         footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
       >
-        <form id="employee-form" className="grid items-start gap-4 sm:grid-cols-2" onSubmit={saveEmployee} noValidate>
-          {canEditProfileForm ? (
-            <>
-          <div className="sm:col-span-2 border-b border-border pb-3">
-            <h3 className="text-sm font-semibold text-foreground">ข้อมูลส่วนบุคคล</h3>
-            <p className="mt-1 text-xs text-muted-foreground">กรอกข้อมูลที่จำเป็นให้ครบก่อนบันทึก</p>
-          </div>
-          <Input label="รหัสพนักงาน *" placeholder="กรอกรหัสเอง เช่น 2603" value={form.code} onChange={(value) => { updateForm("code", value); setFormError(""); }} inputMode="numeric" maxLength={4} isRequired aria-describedby="employee-code-help" />
-          <p id="employee-code-help" className="self-end pb-2 text-xs text-muted-foreground">กำหนดเอง เช่น 2603 และห้ามซ้ำกับพนักงานคนอื่น</p>
-          <SelectField id="employee-prefix" label="คำนำหน้า" selectedKey={form.prefix} onSelectionChange={(key) => updateForm("prefix", String(key))}>
-            <SelectItem id="นาย">นาย</SelectItem><SelectItem id="นาง">นาง</SelectItem><SelectItem id="นางสาว">นางสาว</SelectItem><SelectItem id="คุณ">คุณ</SelectItem>
-          </SelectField>
-          <Input label="ชื่อ (ไทย) *" value={form.firstName} onChange={(value) => updateForm("firstName", value)} isRequired />
-          <Input label="นามสกุล (ไทย) *" value={form.lastName} onChange={(value) => updateForm("lastName", value)} isRequired />
-          <Input label="ชื่อเล่น" value={form.nickname} onChange={(value) => updateForm("nickname", value)} />
-          <Input label="ชื่อ (อังกฤษ)" value={form.firstNameEn} onChange={(value) => updateForm("firstNameEn", value)} />
-          <Input label="นามสกุล (อังกฤษ)" value={form.lastNameEn} onChange={(value) => updateForm("lastNameEn", value)} />
-          <Input label="เลขบัตรประชาชน" value={form.citizenId} onChange={(value) => updateForm("citizenId", value)} />
-          <DatePickerField label="วันเกิด" value={form.birthDate} onChange={(value) => updateForm("birthDate", value?.toString() || "")} />
-          <div className="min-w-0 space-y-2">
-            <Input label={editing ? "อีเมล" : "อีเมล *"} type="email" value={form.email} onChange={(value) => updateForm("email", value)} isRequired={!editing || Boolean(form.email)} />
-            {!editing ? <p className="text-xs leading-5 text-muted-foreground">ใช้เข้าสู่ระบบได้ด้วยอีเมลหรือรหัสพนักงาน โดยรหัสผ่านเริ่มต้นคือรหัสพนักงานและต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก</p> : null}
-          </div>
-          <Input label="โทรศัพท์" type="tel" value={form.phone} onChange={(value) => updateForm("phone", value)} />
+        <form id="employee-form" className="min-w-0" onSubmit={saveEmployee} noValidate>
+          <Tabs selectedKey={employeeFormTab} onSelectionChange={(key) => setEmployeeFormTab(String(key))}>
+            <TabList aria-label="ข้อมูลพนักงาน" className="w-full flex-wrap">
+              {canEditProfileForm ? <Tab id="profile">ข้อมูลพนักงาน</Tab> : null}
+              {canViewCompensation ? <Tab id="payroll">รายได้/หัก</Tab> : null}
+            </TabList>
 
-          <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
-            <h3 className="text-sm font-semibold text-foreground">ข้อมูลการจ้างงาน</h3>
-          </div>
-          <SelectField id="employee-department" label="แผนก" selectedKey={form.departmentId || NO_LOOKUP} onSelectionChange={(key) => updateForm("departmentId", key == null || key === NO_LOOKUP ? "" : String(key))}>
-            <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
-            {activeDepartments.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
-          </SelectField>
-          <SelectField id="employee-position" label="ตำแหน่ง" selectedKey={form.positionId || NO_LOOKUP} onSelectionChange={(key) => updateForm("positionId", key == null || key === NO_LOOKUP ? "" : String(key))}>
-            <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
-            {activePositions.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
-          </SelectField>
-          <SelectField id="employee-type" label="ประเภทการจ้าง" selectedKey={form.employmentTypeId || NO_LOOKUP} onSelectionChange={(key) => updateForm("employmentTypeId", key == null || key === NO_LOOKUP ? "" : String(key))}>
-            <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
-            {activeTypes.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
-          </SelectField>
-          <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
-          {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
-          <fieldset className="sm:col-span-2 min-w-0">
-            <legend className="text-sm font-medium text-foreground">วันหยุดประจำสัปดาห์</legend>
-            <p id="employee-weekly-holidays-help" className="mt-1 text-xs leading-5 text-muted-foreground">เลือกได้มากกว่าหนึ่งวัน หากยังไม่กำหนดให้เว้นว่าง</p>
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {WEEKLY_DAYS.map((day) => {
-                const isSelected = Array.isArray(form.weeklyHolidays) && form.weeklyHolidays.includes(day.value);
-                const checkboxId = `employee-weekly-holiday-${day.value}`;
-                return (
-                  <label
-                    key={day.value}
-                    htmlFor={checkboxId}
-                    className={cn(
-                      "flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-ring",
-                      isSelected ? "border-primary bg-primary/5 text-foreground" : "border-border bg-background text-foreground hover:bg-muted",
-                    )}
-                  >
-                    <Checkbox
-                      id={checkboxId}
-                      isSelected={isSelected}
-                      onChange={() => toggleWeeklyHoliday(day.value)}
-                      aria-describedby="employee-weekly-holidays-help"
-                    />
-                    <span>{day.label}</span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-            </>
-          ) : (
-            <p className="sm:col-span-2 text-sm text-muted-foreground">บัญชีนี้จัดการได้เฉพาะข้อมูลค่าตอบแทนของพนักงาน</p>
-          )}
-          {canManageCompensation ? (
-            <>
-          <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
-            <h3 className="text-sm font-semibold text-foreground">ข้อมูลสำหรับคำนวณ OT</h3>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">ใช้ค่าแรงรายชั่วโมง = เงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน แล้วคูณเรทตามประเภทวัน</p>
-          </div>
-          <Input label="ฐานเงินเดือน (บาท/เดือน)" type="number" min="0" step="0.01" inputMode="decimal" value={form.baseSalary} onChange={(value) => updateForm("baseSalary", value)} />
-          <Input label="ชั่วโมงทำงานปกติต่อวัน" type="number" min="0.01" max="24" step="0.25" inputMode="decimal" value={form.workHoursPerDay} onChange={(value) => updateForm("workHoursPerDay", value)} isRequired />
-          <Input label="เรท OT วันธรรมดา (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otWeekdayMultiplier} onChange={(value) => updateForm("otWeekdayMultiplier", value)} isRequired />
-          <Input label="เรท OT วันหยุด (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otHolidayMultiplier} onChange={(value) => updateForm("otHolidayMultiplier", value)} isRequired />
-            </>
-          ) : null}
-          {canEditProfileForm ? (
-            <>
-          <Input
-            label="รูปโปรไฟล์"
-            type="file"
-            accept="image/png,image/jpeg"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (!file) return;
-              if (!file.type.startsWith("image/")) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์ไม่ใช่รูปภาพ"); return; }
-              if (file.size > 5 * 1024 * 1024) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์มีขนาดเกิน 5 MB"); return; }
-              const reader = new FileReader();
-              reader.onload = () => { if (typeof reader.result === "string") updateForm("avatarUrl", reader.result); };
-              reader.onerror = () => setFormError("อ่านไฟล์รูปไม่สำเร็จ กรุณาเลือกรูปอื่น");
-              reader.readAsDataURL(file);
-            }}
-          />
-          {form.avatarUrl ? <div className="flex items-center gap-3 text-xs text-muted-foreground"><Avatar src={form.avatarUrl} alt="รูปพนักงาน" initials={initialsFor(form)} /><span>เลือกรูปแล้ว</span></div> : <p className="self-end pb-2 text-xs text-muted-foreground">JPG หรือ PNG ขนาดไม่เกิน 5 MB</p>}
-            </>
-          ) : null}
-          {formError ? <p role="alert" className="sm:col-span-2 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{formError}</p> : null}
+            {canEditProfileForm ? (
+              <TabPanel id="profile" className="mt-4 grid items-start gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2 border-b border-border pb-3">
+                  <h3 className="text-sm font-semibold text-foreground">ข้อมูลส่วนบุคคล</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">กรอกข้อมูลที่จำเป็นให้ครบก่อนบันทึก</p>
+                </div>
+                <Input label="รหัสพนักงาน *" placeholder="กรอกรหัสเอง เช่น 2603" value={form.code} onChange={(value) => { updateForm("code", value); setFormError(""); }} inputMode="numeric" maxLength={4} isRequired aria-describedby="employee-code-help" />
+                <p id="employee-code-help" className="self-end pb-2 text-xs text-muted-foreground">กำหนดเอง เช่น 2603 และห้ามซ้ำกับพนักงานคนอื่น</p>
+                <SelectField id="employee-prefix" label="คำนำหน้า" selectedKey={form.prefix} onSelectionChange={(key) => updateForm("prefix", String(key))}>
+                  <SelectItem id="นาย">นาย</SelectItem><SelectItem id="นาง">นาง</SelectItem><SelectItem id="นางสาว">นางสาว</SelectItem><SelectItem id="คุณ">คุณ</SelectItem>
+                </SelectField>
+                <Input label="ชื่อ (ไทย) *" value={form.firstName} onChange={(value) => updateForm("firstName", value)} isRequired />
+                <Input label="นามสกุล (ไทย) *" value={form.lastName} onChange={(value) => updateForm("lastName", value)} isRequired />
+                <Input label="ชื่อเล่น" value={form.nickname} onChange={(value) => updateForm("nickname", value)} />
+                <Input label="ชื่อ (อังกฤษ)" value={form.firstNameEn} onChange={(value) => updateForm("firstNameEn", value)} />
+                <Input label="นามสกุล (อังกฤษ)" value={form.lastNameEn} onChange={(value) => updateForm("lastNameEn", value)} />
+                <Input label="เลขบัตรประชาชน" value={form.citizenId} onChange={(value) => updateForm("citizenId", value)} />
+                <DatePickerField label="วันเกิด" value={form.birthDate} onChange={(value) => updateForm("birthDate", value?.toString() || "")} />
+                <div className="min-w-0 space-y-2">
+                  <Input label={editing ? "อีเมล" : "อีเมล *"} type="email" value={form.email} onChange={(value) => updateForm("email", value)} isRequired={!editing || Boolean(form.email)} />
+                  {!editing ? <p className="text-xs leading-5 text-muted-foreground">ใช้เข้าสู่ระบบได้ด้วยอีเมลหรือรหัสพนักงาน โดยรหัสผ่านเริ่มต้นคือรหัสพนักงานและต้องเปลี่ยนเมื่อเข้าสู่ระบบครั้งแรก</p> : null}
+                </div>
+                <Input label="โทรศัพท์" type="tel" value={form.phone} onChange={(value) => updateForm("phone", value)} />
+
+                <div className="sm:col-span-2 border-b border-border pb-3 pt-2">
+                  <h3 className="text-sm font-semibold text-foreground">ข้อมูลการจ้างงาน</h3>
+                </div>
+                <SelectField id="employee-department" label="แผนก" selectedKey={form.departmentId || NO_LOOKUP} onSelectionChange={(key) => updateForm("departmentId", key == null || key === NO_LOOKUP ? "" : String(key))}>
+                  <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
+                  {activeDepartments.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
+                </SelectField>
+                <SelectField id="employee-position" label="ตำแหน่ง" selectedKey={form.positionId || NO_LOOKUP} onSelectionChange={(key) => updateForm("positionId", key == null || key === NO_LOOKUP ? "" : String(key))}>
+                  <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
+                  {activePositions.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
+                </SelectField>
+                <SelectField id="employee-type" label="ประเภทการจ้าง" selectedKey={form.employmentTypeId || NO_LOOKUP} onSelectionChange={(key) => updateForm("employmentTypeId", key == null || key === NO_LOOKUP ? "" : String(key))}>
+                  <SelectItem id={NO_LOOKUP}>ไม่ระบุ</SelectItem>
+                  {activeTypes.map((item) => <SelectItem id={String(item.id)} key={item.id}>{item.name}</SelectItem>)}
+                </SelectField>
+                <DatePickerField label="วันที่เริ่มงาน *" value={form.startDate} onChange={(value) => updateForm("startDate", value?.toString() || "")} isRequired />
+                {editing && !editing.isActive ? <DatePickerField label="วันที่สิ้นสุดการทำงาน" value={form.endDate} onChange={(value) => updateForm("endDate", value?.toString() || "")} /> : null}
+                <fieldset className="sm:col-span-2 min-w-0">
+                  <legend className="text-sm font-medium text-foreground">วันหยุดประจำสัปดาห์</legend>
+                  <p id="employee-weekly-holidays-help" className="mt-1 text-xs leading-5 text-muted-foreground">เลือกได้มากกว่าหนึ่งวัน หากยังไม่กำหนดให้เว้นว่าง</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {WEEKLY_DAYS.map((day) => {
+                      const isSelected = Array.isArray(form.weeklyHolidays) && form.weeklyHolidays.includes(day.value);
+                      const checkboxId = `employee-weekly-holiday-${day.value}`;
+                      return (
+                        <label key={day.value} htmlFor={checkboxId} className={cn(
+                          "flex min-h-10 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm focus-within:ring-2 focus-within:ring-ring",
+                          isSelected ? "border-primary bg-primary/5 text-foreground" : "border-border bg-background text-foreground hover:bg-muted",
+                        )}>
+                          <Checkbox id={checkboxId} isSelected={isSelected} onChange={() => toggleWeeklyHoliday(day.value)} aria-describedby="employee-weekly-holidays-help" />
+                          <span>{day.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {canManageCompensation ? (
+                  <section className="sm:col-span-2 grid gap-3 border-t border-border pt-4 sm:grid-cols-2" aria-labelledby="employee-ot-settings-title">
+                    <div className="sm:col-span-2">
+                      <h3 id="employee-ot-settings-title" className="text-sm font-semibold text-foreground">ข้อมูลสำหรับคำนวณ OT</h3>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">ฐานเงินเดือนกำหนดในแท็บรายได้/หัก แล้วระบบนำไปคำนวณค่าแรงรายชั่วโมง</p>
+                    </div>
+                    <Input label="ชั่วโมงทำงานปกติต่อวัน" type="number" min="0.01" max="24" step="0.25" inputMode="decimal" value={form.workHoursPerDay} onChange={(value) => updateForm("workHoursPerDay", value)} isRequired />
+                    <Input label="เรท OT วันธรรมดา (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otWeekdayMultiplier} onChange={(value) => updateForm("otWeekdayMultiplier", value)} isRequired />
+                    <Input label="เรท OT วันหยุด (เท่า)" type="number" min="0.01" max="10" step="0.01" inputMode="decimal" value={form.otHolidayMultiplier} onChange={(value) => updateForm("otHolidayMultiplier", value)} isRequired />
+                  </section>
+                ) : null}
+
+                <div className="sm:col-span-2 flex flex-wrap items-end gap-3 border-t border-border pt-4">
+                  <Input
+                    label="รูปโปรไฟล์"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = "";
+                      if (!file) return;
+                      if (!file.type.startsWith("image/")) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์ไม่ใช่รูปภาพ"); return; }
+                      if (file.size > 5 * 1024 * 1024) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์มีขนาดเกิน 5 MB"); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => { if (typeof reader.result === "string") updateForm("avatarUrl", reader.result); };
+                      reader.onerror = () => setFormError("อ่านไฟล์รูปไม่สำเร็จ กรุณาเลือกรูปอื่น");
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                  {form.avatarUrl ? <div className="flex items-center gap-3 text-xs text-muted-foreground"><Avatar src={form.avatarUrl} alt="รูปพนักงาน" initials={initialsFor(form)} /><span>เลือกรูปแล้ว</span></div> : <p className="pb-2 text-xs text-muted-foreground">JPG หรือ PNG ขนาดไม่เกิน 5 MB</p>}
+                </div>
+              </TabPanel>
+            ) : null}
+
+            {canViewCompensation ? (
+              <TabPanel id="payroll" className="mt-4">
+                <EmployeePayrollSettings key={editing?.id || "new"} form={form} updateForm={updateForm} canManage={canManageCompensation} />
+              </TabPanel>
+            ) : null}
+          </Tabs>
+          {formError ? <p role="alert" className="mt-4 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{formError}</p> : null}
         </form>
       </HrmDialog>
 

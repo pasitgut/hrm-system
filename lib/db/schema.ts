@@ -21,6 +21,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { WorkTrackingRecordStatus, WorkTrackingSession, WorkTrackingSubStatus } from "@/lib/work-tracking/types";
+import type { EmployeePayrollData } from "@/lib/employees/payroll-data";
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => "bytea",
@@ -101,6 +102,7 @@ export const employees = pgTable(
     firstName: varchar("first_name", { length: 255 }).notNull(),
     lastName: varchar("last_name", { length: 255 }).notNull(),
     baseSalary: numeric("base_salary", { precision: 12, scale: 2, mode: "number" }),
+    payrollData: jsonb("payroll_data").$type<EmployeePayrollData>().notNull().default(sql`'{}'::jsonb`),
     otWeekdayMultiplier: numeric("ot_weekday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(1.5),
     otHolidayMultiplier: numeric("ot_holiday_multiplier", { precision: 5, scale: 2, mode: "number" }).notNull().default(3),
     workHoursPerDay: numeric("work_hours_per_day", { precision: 5, scale: 2, mode: "number" }).notNull().default(8),
