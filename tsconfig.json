@@ -38,9 +38,6 @@
   ],
   "exclude": [
     "node_modules",
-    "tracking-migration/**",
-    "asset-borrowing/infrastructure/**",
-    "asset-borrowing/pages/**",
-    "asset-borrowing/server/**"
+    "tracking-migration/**"
   ]
 }

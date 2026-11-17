@@ -8,6 +8,7 @@ import {
   overtimeRequests,
   requestStatuses,
 } from "@/lib/db/schema";
+import { assertSafeToRewriteData } from "./guard";
 
 const OT_COUNT = 600;
 const LEAVE_COUNT = 150;
@@ -56,6 +57,7 @@ function printSizes(label: string, sizes: Awaited<ReturnType<typeof getSizes>>) 
 }
 
 async function main() {
+  assertSafeToRewriteData("db:seed-volume");
   try {
     const [employeeRows, statusRows, leaveTypeRows] = await Promise.all([
       db.select({ id: employees.id }).from(employees).where(isNull(employees.deletedAt)),

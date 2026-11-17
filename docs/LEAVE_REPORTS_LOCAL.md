@@ -37,13 +37,13 @@ npx vitest run lib/reports/leave/model.test.ts lib/reports/leave/options.test.ts
 Generate synthetic fixture PDFs, including all twelve variants, extra active and inactive types, a half-day, month/year overlaps, and a long reason:
 
 ```powershell
-npx tsx --env-file-if-exists=.env scripts/verify-leave-report-fixtures.ts
+npx tsx --env-file-if-exists=.env scripts/verify/leave-report-fixtures.ts
 ```
 
 Fixtures are saved under `output/pdf/leave-report-fixtures/`. The read-only live smoke uses the configured application `DATABASE_URL`, selects the current Bangkok calendar month, writes a PDF under `output/pdf/leave-reports/`, and prints only counts/type totals and PDF metadata:
 
 ```powershell
-npx tsx --env-file-if-exists=.env scripts/verify-leave-report-live.ts
+npx tsx --env-file-if-exists=.env scripts/verify/leave-report-live.ts
 ```
 
 The live smoke only runs `SELECT` queries and closes its database connection. Do not use database reset or seed scripts against the configured application URL.

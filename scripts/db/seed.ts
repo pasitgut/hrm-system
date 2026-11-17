@@ -11,11 +11,14 @@ import {
   users,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
+import { MANAGER_PERMISSIONS } from "@/lib/auth/permissions";
+import { assertSafeToRewriteData } from "./guard";
 
 const ADMIN_EMAIL = "admin@peopleos.co";
 const ADMIN_PASSWORD = "admin";
 
 async function main() {
+  assertSafeToRewriteData("db:seed");
   console.log("Resetting database...");
   await db.execute(sql`
     TRUNCATE TABLE
@@ -70,8 +73,9 @@ async function main() {
 
   await db.insert(leaveTypes).values([
     { code: "sick", name: "ลาป่วย", annualQuotaDays: 30 },
-    { code: "personal", name: "ลากิจ", annualQuotaDays: 3 },
+    { code: "personal", name: "ลากิจ", annualQuotaDays: 6, quotaBasis: "tenure" },
     { code: "birthday", name: "ลาวันเกิด", annualQuotaDays: 1 },
+    { code: "vacation", name: "ลาพักร้อน", annualQuotaDays: 6 },
   ]);
 
   const allDepartments = await db.select().from(departments);
@@ -102,17 +106,7 @@ async function main() {
     email: ADMIN_EMAIL,
     passwordHash,
     role: "ceo",
-    permissions: [
-      "employees.manage",
-      "ot.approve",
-      "ot.view_company",
-      "leave.approve",
-      "leave.view_company",
-      "leave_types.manage",
-      "assets.manage",
-      "settings.manage",
-      "users.permissions.manage",
-    ],
+    permissions: [...MANAGER_PERMISSIONS],
   });
 
   console.log("\nSeed complete.");
