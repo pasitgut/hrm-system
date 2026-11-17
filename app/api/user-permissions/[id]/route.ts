@@ -3,15 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { encodePermissionsForStorage, normalizePermissions, PERMISSIONS, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { db } from "@/lib/db/client";
+import { jsonError } from "@/lib/api/response";
 import { users } from "@/lib/db/schema";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const permissionKeys = new Set<string>(PERMISSIONS.map(({ key }) => key));
-
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
   await requireApiPermission(request, "users.permissions.manage");

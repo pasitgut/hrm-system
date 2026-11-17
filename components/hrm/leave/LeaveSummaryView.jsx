@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { LEAVE_TYPE_CODES, LEAVE_TYPE_PRESENTATION } from "@/components/hrm/leave/leaveTypes";
+import { withCustomLeaveTypes } from "@/components/hrm/leave/leaveTypes";
 import { cn } from "@/lib/utils";
 
 function QuotaCard({ type, quota }) {
@@ -37,6 +37,13 @@ function QuotaCard({ type, quota }) {
             ? `ใช้ไป ${usedDays} วัน`
             : `ใช้ไป ${usedDays} จาก ${quota.annualQuotaDays} วัน`}
       </p>
+      {quota?.quotaBasis === "tenure" && quota.maxAnnualQuotaDays != null ? (
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {quota.annualQuotaDays < quota.maxAnnualQuotaDays
+            ? `คิดตามอายุงาน (สูงสุด ${quota.maxAnnualQuotaDays} วัน เมื่อทำงานครบ 1 ปี)`
+            : `สูงสุด ${quota.maxAnnualQuotaDays} วัน (อายุงานครบ 1 ปี)`}
+        </p>
+      ) : null}
       {!isUncapped && !isMissing ? (
         <div className="mt-3 h-1 overflow-hidden rounded-sm bg-muted" role="meter" aria-label={`ใช้สิทธิ์${type.name}ไป ${progress}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
           <div className={cn("h-full transition-[width]", type.barClass)} style={{ width: `${progress}%` }} />
@@ -78,7 +85,8 @@ export function LeaveSummaryView({ refreshKey = 0 }) {
     };
   }, [employeeId, refreshKey]);
 
-  const quotas = new Map((summary?.quotas || []).filter((quota) => LEAVE_TYPE_CODES.has(quota.code)).map((quota) => [quota.code, quota]));
+  const quotas = new Map((summary?.quotas || []).map((quota) => [quota.code, quota]));
+  const types = withCustomLeaveTypes(summary?.quotas || []);
 
   return (
     <div>
@@ -87,7 +95,7 @@ export function LeaveSummaryView({ refreshKey = 0 }) {
         <p className="border-y border-border py-6 text-center text-xs text-muted-foreground">กำลังโหลดสิทธิ์วันลา...</p>
       ) : (
         <div className="grid divide-y divide-border border-y border-border sm:grid-cols-2 sm:divide-y-0 sm:divide-x xl:grid-cols-3">
-          {LEAVE_TYPE_PRESENTATION.map((type) => <QuotaCard key={type.code} type={type} quota={quotas.get(type.code)} />)}
+          {types.map((type) => <QuotaCard key={type.code} type={type} quota={quotas.get(type.code)} />)}
         </div>
       )}
     </div>

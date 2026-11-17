@@ -49,7 +49,11 @@ const leaveTypeDetailFields = [
   { key: "code", render: (item) => `รหัสอัตโนมัติ: ${item.code}` },
   {
     key: "quota",
-    render: (item) => (item.annualQuotaDays == null ? "โควตา: ไม่จำกัด" : `โควตา: ${item.annualQuotaDays} วัน/ปี`),
+    render: (item) => (item.annualQuotaDays == null
+      ? "โควตา: ไม่จำกัด"
+      : item.quotaBasis === "tenure"
+        ? `โควตา: สูงสุด ${item.annualQuotaDays} วัน/ปี (คิดตามอายุงาน)`
+        : `โควตา: ${item.annualQuotaDays} วัน/ปี`),
   },
 ];
 

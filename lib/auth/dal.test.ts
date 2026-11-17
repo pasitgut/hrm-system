@@ -1,14 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { ApiAuthError, requireApiRole, requireApiUser } from "@/lib/auth/dal";
+import { eq } from "drizzle-orm";
+import { ApiAuthError, requireApiAnyPermission, requireApiPermission, requireApiUser } from "@/lib/auth/dal";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
-
-const payload: SessionPayload = {
-  sub: "11111111-1111-1111-1111-111111111111",
-  employeeId: "22222222-2222-2222-2222-222222222222",
-  email: "test@example.com",
-  role: "employee",
-};
+import { users } from "@/lib/db/schema";
+import { closeDb, db, resetDb } from "@/tests/setup/db";
+import { createUser } from "@/tests/setup/factories";
 
 function requestWithCookie(token?: string) {
   return new NextRequest("http://localhost/api/ot", {
@@ -16,11 +13,36 @@ function requestWithCookie(token?: string) {
   });
 }
 
-describe("requireApiUser / requireApiRole (Route Handler guards)", () => {
-  it("resolves the session from a plain NextRequest's Cookie header, with no Next.js server needed", async () => {
-    const token = await createSessionToken(payload);
-    const user = await requireApiUser(requestWithCookie(token));
-    expect(user).toEqual(payload);
+async function tokenFor(
+  account: { id: string; employeeId: string; email: string; role: SessionPayload["role"] },
+  extra: Partial<SessionPayload> = {},
+) {
+  return createSessionToken({ sub: account.id, employeeId: account.employeeId, email: account.email, role: account.role, ...extra });
+}
+
+beforeEach(async () => {
+  await resetDb();
+});
+
+afterAll(async () => {
+  await closeDb();
+});
+
+describe("requireApiUser (Route Handler guard)", () => {
+  it("resolves the session from a plain NextRequest's Cookie header and loads permissions from the database", async () => {
+    const { user } = await createUser({ permissions: ["ot.approve"] });
+
+    const result = await requireApiUser(requestWithCookie(await tokenFor(user)));
+
+    expect(result).toMatchObject({ sub: user.id, employeeId: user.employeeId, permissions: ["ot.approve"] });
+  });
+
+  it("ignores permissions carried in the token and trusts the database", async () => {
+    const { user } = await createUser({ permissions: [] });
+
+    const result = await requireApiUser(requestWithCookie(await tokenFor(user, { permissions: ["users.permissions.manage"] })));
+
+    expect(result.permissions).toEqual([]);
   });
 
   it("throws a 401 ApiAuthError when there is no cookie", async () => {
@@ -31,20 +53,41 @@ describe("requireApiUser / requireApiRole (Route Handler guards)", () => {
     await expect(requireApiUser(requestWithCookie("garbage"))).rejects.toBeInstanceOf(ApiAuthError);
   });
 
+  it("throws a 401 when the account was deactivated after the token was issued", async () => {
+    const { user } = await createUser();
+    await db.update(users).set({ isActive: false }).where(eq(users.id, user.id));
+
+    await expect(requireApiUser(requestWithCookie(await tokenFor(user)))).rejects.toMatchObject({ status: 401 });
+  });
+
   it("blocks API access while a first-login password change is required", async () => {
-    const token = await createSessionToken({ ...payload, mustChangePassword: true } as SessionPayload);
+    const { user } = await createUser();
+    const token = await tokenFor(user, { mustChangePassword: true });
 
     await expect(requireApiUser(requestWithCookie(token))).rejects.toMatchObject({ status: 403 });
   });
+});
 
-  it("allows a role that is in the allowed list", async () => {
-    const token = await createSessionToken({ ...payload, role: "supervisor" });
-    const user = await requireApiRole(requestWithCookie(token), "supervisor", "ceo");
-    expect(user.role).toBe("supervisor");
+describe("requireApiPermission / requireApiAnyPermission", () => {
+  it("allows an account holding the permission", async () => {
+    const { user } = await createUser({ permissions: ["leave.approve"] });
+
+    const result = await requireApiPermission(requestWithCookie(await tokenFor(user)), "leave.approve");
+
+    expect(result.sub).toBe(user.id);
   });
 
-  it("throws a 403 ApiAuthError for a role that is not allowed", async () => {
-    const token = await createSessionToken({ ...payload, role: "employee" });
-    await expect(requireApiRole(requestWithCookie(token), "supervisor", "ceo")).rejects.toMatchObject({ status: 403 });
+  it("throws a 403 ApiAuthError when the permission is missing", async () => {
+    const { user } = await createUser({ permissions: [] });
+
+    await expect(requireApiPermission(requestWithCookie(await tokenFor(user)), "leave.approve")).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("allows any one of several permissions and rejects when none match", async () => {
+    const { user } = await createUser({ permissions: ["ot.view_company"] });
+    const request = requestWithCookie(await tokenFor(user));
+
+    await expect(requireApiAnyPermission(request, "ot.approve", "ot.view_company")).resolves.toMatchObject({ sub: user.id });
+    await expect(requireApiAnyPermission(request, "ot.approve", "leave.approve")).rejects.toMatchObject({ status: 403 });
   });
 });

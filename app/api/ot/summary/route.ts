@@ -5,6 +5,7 @@ import { employees, overtimeRequests } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canViewEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
 import { canViewOwnOtRequests } from "@/lib/auth/permissions";
+import { deriveOvertimeType } from "@/lib/ot/overtime-type";
 import { currentBangkokMonth, durationHours, isValidMonthStr, jsonError, monthRangeUtc, payrollPeriodRangeUtc, round2, utcToBangkokParts } from "@/app/api/ot/_shared";
 
 async function individualSummary(employeeId: string, month: string, start: Date, end: Date) {
@@ -73,9 +74,9 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
       otWeekdayMultiplier: employees.otWeekdayMultiplier,
       otHolidayMultiplier: employees.otHolidayMultiplier,
       workHoursPerDay: employees.workHoursPerDay,
+      weeklyHolidays: employees.weeklyHolidays,
       requestId: overtimeRequests.id,
       statusCode: overtimeRequests.statusCode,
-      overtimeType: overtimeRequests.overtimeType,
       startAt: overtimeRequests.startAt,
       endAt: overtimeRequests.endAt,
     })
@@ -104,7 +105,6 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
     approvedHours: number;
     weekdayApprovedHours: number;
     holidayApprovedHours: number;
-    unclassifiedApprovedHours: number;
     pendingHours: number;
     rejectedHours: number;
     requestCount: number;
@@ -130,7 +130,6 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
         approvedHours: 0,
         weekdayApprovedHours: 0,
         holidayApprovedHours: 0,
-        unclassifiedApprovedHours: 0,
         pendingHours: 0,
         rejectedHours: 0,
         requestCount: 0,
@@ -143,9 +142,9 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
     }
     if (row.statusCode === "approved") {
       entry.approvedHours += hours;
-      if (row.overtimeType === "holiday") entry.holidayApprovedHours += hours;
-      else if (row.overtimeType === "weekday") entry.weekdayApprovedHours += hours;
-      else entry.unclassifiedApprovedHours += hours;
+      // Day type is derived from the date worked vs. the employee's weekly days off (not stored).
+      if (row.startAt && deriveOvertimeType(row.startAt, row.weeklyHolidays) === "holiday") entry.holidayApprovedHours += hours;
+      else entry.weekdayApprovedHours += hours;
       totalApprovedHours += hours;
     } else if (row.statusCode === "pending") {
       entry.pendingHours += hours;
@@ -160,7 +159,6 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
       const approvedHours = round2(entry.approvedHours);
       const weekdayApprovedHours = round2(entry.weekdayApprovedHours);
       const holidayApprovedHours = round2(entry.holidayApprovedHours);
-      const unclassifiedApprovedHours = round2(entry.unclassifiedApprovedHours);
       const baseRow = {
         employeeId: entry.employeeId,
         employeeName: entry.employeeName,
@@ -168,7 +166,6 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
         approvedHours,
         weekdayApprovedHours,
         holidayApprovedHours,
-        unclassifiedApprovedHours,
         pendingHours: round2(entry.pendingHours),
         rejectedHours: round2(entry.rejectedHours),
         requestCount: entry.requestCount,
@@ -181,7 +178,7 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
       const holidayRatePerHour = hourlyWage == null ? null : hourlyWage * entry.otHolidayMultiplier;
       const approvedPay = approvedHours === 0
         ? 0
-        : hourlyWage == null || unclassifiedApprovedHours > 0
+        : hourlyWage == null
           ? null
           : round2(
             (weekdayApprovedHours * (hourlyWage * entry.otWeekdayMultiplier))

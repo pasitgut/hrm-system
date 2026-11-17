@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { GET, POST } from "@/app/api/ot/route";
 import { closeDb, resetDb } from "@/tests/setup/db";
-import { createOvertimeRequest, createUser } from "@/tests/setup/factories";
+import { createEmployee, createOvertimeRequest, createUser } from "@/tests/setup/factories";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
 
 async function cookieFor(payload: SessionPayload): Promise<string> {
@@ -52,6 +52,19 @@ describe("GET /api/ot", () => {
     expect(response.status).toBe(200);
     expect(payload.items).toHaveLength(1);
     expect(payload.items[0].employeeId).toBe(employee.id);
+  });
+
+  it("derives overtimeType per request from the date worked and the employee's weekly holidays", async () => {
+    const employee = await createEmployee({ weeklyHolidays: [4] }); // Thursday
+    const { user } = await createUser({ role: "employee", employeeId: employee.id });
+    await createOvertimeRequest({ employeeId: employee.id, startAt: new Date("2026-09-10T11:00:00Z"), endAt: new Date("2026-09-10T13:00:00Z") }); // Thu 18:00 BKK
+    await createOvertimeRequest({ employeeId: employee.id, startAt: new Date("2026-09-11T11:00:00Z"), endAt: new Date("2026-09-11T13:00:00Z") }); // Fri 18:00 BKK
+
+    const token = await cookieFor(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "employee" }));
+    const payload = await (await GET(otRequest("http://localhost/api/ot?month=2026-09", { token }))).json();
+
+    expect(Object.fromEntries(payload.items.map((item: { date: string; overtimeType: string }) => [item.date, item.overtimeType])))
+      .toEqual({ "2026-09-10": "holiday", "2026-09-11": "weekday" });
   });
 
   it("returns 403 when an employee requests another employee's id", async () => {

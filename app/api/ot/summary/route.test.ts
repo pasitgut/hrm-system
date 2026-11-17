@@ -72,7 +72,9 @@ describe("GET /api/ot/summary", () => {
     expect(payload.totalApprovedHours).toBe(2);
     expect(payload.totalPendingHours).toBe(1.5);
     expect(payload.requestCount).toBe(3);
-    expect(payload.byEmployee).toHaveLength(2);
+    // Company scope lists every employee, including ones with no requests (the supervisor here).
+    expect(payload.byEmployee).toHaveLength(3);
+    expect(payload.byEmployee.find((row: { employeeId: string }) => row.employeeId === supervisor.id).requestCount).toBe(0);
 
     const rowA = payload.byEmployee.find((row: { employeeId: string }) => row.employeeId === employeeA.id);
     expect(rowA.approvedHours).toBe(2);

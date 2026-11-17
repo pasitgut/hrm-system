@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db, resetDb, closeDb } from "@/tests/setup/db";
 import { departments, employees, employmentStatuses, employmentTypes, overtimeRequests, positions, requestStatuses, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";

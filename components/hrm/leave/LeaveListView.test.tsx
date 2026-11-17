@@ -2,12 +2,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { permissionsForRole } from "@/tests/setup/permissions";
 
 let mockRole = "employee";
 let mockEmployeeId = "emp-1";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
-  useHrmRole: () => ({ role: mockRole, employeeId: mockEmployeeId, email: "user@example.com" }),
+  useHrmRole: () => ({ permissions: permissionsForRole(mockRole), employeeId: mockEmployeeId, email: "user@example.com" }),
 }));
 
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";

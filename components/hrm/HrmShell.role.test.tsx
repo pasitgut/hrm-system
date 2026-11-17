@@ -26,10 +26,10 @@ window.matchMedia =
   }));
 
 import HrmShell from "@/components/hrm/HrmShell";
+import { permissionsForRole } from "@/tests/setup/permissions";
 
 const employeeUser = { role: "employee", employeeId: "emp-1", email: "employee@example.com" };
-const supervisorUser = { role: "supervisor", employeeId: "sup-1", email: "supervisor@example.com" };
-const ceoUser = { role: "ceo", employeeId: "ceo-1", email: "ceo@example.com" };
+const managerUser = { role: "supervisor", employeeId: "sup-1", email: "supervisor@example.com" };
 
 describe("HrmShell", () => {
   it("renders only children, with no chrome, when there is no user (i.e. on /login)", () => {
@@ -54,19 +54,9 @@ describe("HrmShell", () => {
     expect(screen.queryByText("รออนุมัติ")).not.toBeInTheDocument();
   });
 
-  it("shows the approvals nav item for a supervisor", () => {
+  it("shows the approvals nav item for an account with approval permissions", () => {
     render(
-      <HrmShell user={supervisorUser}>
-        <div>content</div>
-      </HrmShell>,
-    );
-
-    expect(screen.getAllByText("รออนุมัติ").length).toBeGreaterThan(0);
-  });
-
-  it("shows the approvals nav item for a ceo", () => {
-    render(
-      <HrmShell user={ceoUser}>
+      <HrmShell user={managerUser} permissions={permissionsForRole("supervisor")}>
         <div>content</div>
       </HrmShell>,
     );
@@ -76,7 +66,7 @@ describe("HrmShell", () => {
 
   it("no longer renders the fake role-toggle button", () => {
     render(
-      <HrmShell user={supervisorUser}>
+      <HrmShell user={managerUser} permissions={permissionsForRole("supervisor")}>
         <div>content</div>
       </HrmShell>,
     );

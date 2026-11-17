@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
@@ -7,12 +7,11 @@ import { canManageOwnLeaveRequests, canViewCompanyLeave, canViewOwnLeaveRequests
 import {
   fetchLeaveItemById,
   jsonError,
-  leaveDaySpan,
-  leaveQuotaExceededMessage,
   leaveSelectColumns,
   parseLeaveInput,
   toLeaveItemDto,
 } from "@/app/api/leave/_shared";
+import { checkLeaveQuota } from "@/app/api/leave/_quota";
 
 const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
@@ -86,16 +85,11 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, parsed.message);
   }
 
-  const startYear = parsed.value.startOn.slice(0, 4);
-  const startOfYear = `${startYear}-01-01`;
-  const endOfYear = `${startYear}-12-31`;
-  const requestedDays = leaveDaySpan(parsed.value.startOn, parsed.value.endOn, parsed.value.session);
-
   const result = await db.transaction(async (tx) => {
     // Serialize quota checks for one employee so concurrent submissions
     // cannot both spend the same remaining balance.
     const [employee] = await tx
-      .select({ id: employees.id })
+      .select({ id: employees.id, startDate: employees.startDate })
       .from(employees)
       .where(eq(employees.id, user.employeeId))
       .for("update");
@@ -106,29 +100,13 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       };
     }
 
-    const [leaveType] = await tx
-      .select({ name: leaveTypes.name, annualQuotaDays: leaveTypes.annualQuotaDays, isActive: leaveTypes.isActive })
-      .from(leaveTypes)
-      .where(eq(leaveTypes.code, parsed.value.leaveTypeCode));
-    if (!leaveType?.isActive) return { error: "Unknown or inactive leave type", status: 400 as const };
-
-    if (leaveType.annualQuotaDays != null) {
-      const reservedRows = await tx
-        .select({ startOn: leaveRequests.startOn, endOn: leaveRequests.endOn, session: leaveRequests.session })
-        .from(leaveRequests)
-        .where(and(
-          eq(leaveRequests.employeeId, user.employeeId),
-          eq(leaveRequests.leaveTypeCode, parsed.value.leaveTypeCode),
-          inArray(leaveRequests.statusCode, ["approved", "pending"]),
-          gte(leaveRequests.startOn, startOfYear),
-          lte(leaveRequests.startOn, endOfYear),
-        ));
-      const reservedDays = reservedRows.reduce((total, row) => total + leaveDaySpan(row.startOn, row.endOn, row.session), 0);
-      const remainingDays = leaveType.annualQuotaDays - reservedDays;
-      if (requestedDays > remainingDays) {
-        return { error: leaveQuotaExceededMessage(leaveType.name, requestedDays, remainingDays), status: 409 as const };
-      }
-    }
+    const quotaFailure = await checkLeaveQuota({
+      tx,
+      employeeId: user.employeeId,
+      employeeStartDate: employee.startDate,
+      ...parsed.value,
+    });
+    if (quotaFailure) return quotaFailure;
 
     const [inserted] = await tx
       .insert(leaveRequests)

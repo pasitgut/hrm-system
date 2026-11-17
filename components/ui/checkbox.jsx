@@ -1,7 +1,7 @@
 "use client";
 
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { RiCheckLine, RiSubtractLine } from "@remixicon/react";
+import { RiCheckLine } from "@remixicon/react";
 import { cx } from "@/utils/cx";
 
 export function Checkbox({ isSelected, onChange, isDisabled, className, ...props }) {

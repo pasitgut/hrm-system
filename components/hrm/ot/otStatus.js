@@ -35,15 +35,10 @@ export const OT_STATUS_TABS = [
 
 const STATUS_COLORS = { pending: "yellow", approved: "lime", rejected: "rose" };
 
-export const OT_DAY_TYPES = [
-  { key: "weekday", label: "วันธรรมดา" },
-  { key: "holiday", label: "วันหยุด" },
-];
-
+// The API derives `overtimeType` per request from the date worked and the
+// employee's weekly days off; it is never stored or chosen by the user.
 export function overtimeTypeLabel(type) {
-  if (type === "holiday") return "วันหยุด";
-  if (type === "weekday") return "วันธรรมดา";
-  return "ยังไม่ระบุประเภทวัน";
+  return type === "holiday" ? "วันหยุด" : "วันธรรมดา";
 }
 
 export function statusColor(statusCode) {

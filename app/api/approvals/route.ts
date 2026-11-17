@@ -20,6 +20,7 @@ import {
   canViewOwnLeaveRequests,
   canViewOwnOtRequests,
 } from "@/lib/auth/permissions";
+import { deriveOvertimeType } from "@/lib/ot/overtime-type";
 import { formatOtDetail, formatThaiDateRange, jsonError, type ApprovalItem } from "@/app/api/approvals/_shared";
 
 const TYPE_VALUES = new Set(["all", "leave", "ot", "asset"]);
@@ -60,7 +61,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
         employeeLastName: employees.lastName,
         startAt: overtimeRequests.startAt,
         endAt: overtimeRequests.endAt,
-        overtimeType: overtimeRequests.overtimeType,
+        weeklyHolidays: employees.weeklyHolidays,
         reason: overtimeRequests.reason,
         statusCode: overtimeRequests.statusCode,
         statusName: requestStatuses.name,
@@ -81,7 +82,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
           employeeId: row.employeeId,
           employeeName: `${row.employeeFirstName} ${row.employeeLastName}`.trim(),
           detail: formatOtDetail(row.startAt, row.endAt),
-          overtimeType: row.overtimeType === "holiday" ? "holiday" : row.overtimeType === "weekday" ? "weekday" : null,
+          overtimeType: deriveOvertimeType(row.startAt, row.weeklyHolidays),
           reason: row.reason,
           submittedAt: row.createdAt.toISOString(),
           statusCode: row.statusCode,

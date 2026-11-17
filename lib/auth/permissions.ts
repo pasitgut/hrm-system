@@ -85,6 +85,32 @@ const DEFAULT_GRANTS = [
   { permission: "assets.request.self", disabledMarker: "permissions.assets_request_self.disabled" },
 ] as const satisfies readonly { permission: PermissionKey; disabledMarker: string }[];
 
+// Default grants for a manager account (the former supervisor / ceo roles):
+// approvals, company-wide views, and administration. Used when seeding the
+// first admin account and when tests need a privileged user.
+export const MANAGER_PERMISSIONS = [
+  "employees.profile.view",
+  "employees.profile.create",
+  "employees.profile.update",
+  "employees.profile.offboard",
+  "employees.compensation.view",
+  "employees.compensation.manage",
+  "ot.approve",
+  "ot.view_company",
+  "leave.approve",
+  "leave.view_company",
+  "leave_types.manage",
+  "leave.quotas.manage",
+  "assets.view_company",
+  "assets.requests.manage",
+  "assets.templates.manage",
+  "settings.departments.manage",
+  "settings.positions.manage",
+  "settings.employment.manage",
+  "settings.ot_rates.manage",
+  "users.permissions.manage",
+] as const satisfies readonly PermissionKey[];
+
 export function normalizePermissions(permissions: unknown): PermissionKey[] {
   if (!Array.isArray(permissions)) return [];
   const granted = new Set<string>();
@@ -207,17 +233,6 @@ export function canViewEmployeeDocuments(permissions: unknown): boolean {
   );
 }
 
-export function canAccessEmployeeDocuments(permissions: unknown): boolean {
-  return hasAnyPermission(
-    permissions,
-    "employees.documents.view",
-    "employees.documents.view_all",
-    "employees.documents.upload",
-    "employees.documents.share",
-    "employees.documents.delete",
-  );
-}
-
 export function canViewAllEmployeeDocuments(permissions: unknown): boolean {
   return hasAnyPermission(
     permissions,
@@ -237,12 +252,6 @@ export function canShareEmployeeDocuments(permissions: unknown): boolean {
 
 export function canDeleteEmployeeDocuments(permissions: unknown): boolean {
   return hasPermission(permissions, "employees.documents.delete");
-}
-
-// Kept as a convenience for employee profile views, where the document panel
-// shows management actions only when the user can share or delete documents.
-export function canManageEmployeeDocuments(permissions: unknown): boolean {
-  return hasAnyPermission(permissions, "employees.documents.share", "employees.documents.delete");
 }
 
 export function canManageAssets(permissions: unknown): boolean {
@@ -290,10 +299,6 @@ export function canManagePositions(permissions: unknown): boolean {
 
 export function canManageEmploymentSettings(permissions: unknown): boolean {
   return hasPermission(permissions, "settings.employment.manage");
-}
-
-export function canManageOtRatesPermission(permissions: unknown): boolean {
-  return hasPermission(permissions, "settings.ot_rates.manage");
 }
 
 export function canManageLeaveTypes(permissions: unknown): boolean {

@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte, lt, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { departments, employees, overtimeRequests, positions } from "@/lib/db/schema";
+import { deriveOvertimeType } from "@/lib/ot/overtime-type";
 import { aggregateOtReport, type OtReportEmployee, type OtReportRequestRow } from "./model";
 import { getOtReportPeriod, type OtReportExportInput } from "./options";
 
@@ -81,7 +82,6 @@ export async function createOtReportModel(input: OtReportExportInput, scope: "co
       employeeId: overtimeRequests.employeeId,
       startAt: overtimeRequests.startAt,
       endAt: overtimeRequests.endAt,
-      overtimeType: overtimeRequests.overtimeType,
       reason: overtimeRequests.reason,
     })
     .from(overtimeRequests)
@@ -105,6 +105,7 @@ export async function createOtReportModel(input: OtReportExportInput, scope: "co
       positionName: positions.name,
       startDate: employees.startDate,
       endDate: employees.endDate,
+      weeklyHolidays: employees.weeklyHolidays,
     })
     .from(employees)
     .leftJoin(departments, eq(employees.departmentId, departments.id))
@@ -133,7 +134,8 @@ export async function createOtReportModel(input: OtReportExportInput, scope: "co
     throw new OtReportServiceError(400, "พบรหัสพนักงานที่ไม่มีอยู่ในระบบ");
   }
 
-  const reportEmployees: OtReportEmployee[] = employeeRows.map((employee) => ({
+  const weeklyHolidaysByEmployee = new Map(employeeRows.map((employee) => [employee.id, employee.weeklyHolidays]));
+  const reportEmployees: OtReportEmployee[] = employeeRows.map(({ weeklyHolidays: _weeklyHolidays, ...employee }) => ({
     ...employee,
     departmentName: employee.departmentName ?? "ไม่ระบุแผนก",
     positionName: employee.positionName ?? "ไม่ระบุตำแหน่ง",
@@ -145,6 +147,10 @@ export async function createOtReportModel(input: OtReportExportInput, scope: "co
     periodStart: period.startLocalDate,
     periodEnd: period.endLocalDate,
     employees: reportEmployees,
-    requests: requestRows as OtReportRequestRow[],
+    // Day type is derived from the date worked vs. the employee's weekly days off (not stored).
+    requests: requestRows.map((row) => ({
+      ...row,
+      overtimeType: deriveOvertimeType(row.startAt, weeklyHolidaysByEmployee.get(row.employeeId)),
+    })) satisfies OtReportRequestRow[],
   });
 }

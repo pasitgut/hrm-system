@@ -9,7 +9,6 @@ import {
   readSessionCookie,
   readSessionCookieFromRequest,
   verifySessionToken,
-  type Role,
   type SessionPayload,
 } from "@/lib/auth/session";
 
@@ -19,42 +18,32 @@ export const getCurrentUser = cache(async (): Promise<SessionPayload | null> => 
   return verifySessionToken(token);
 });
 
+// Permissions are always read from the database, never trusted from the JWT, so
+// revoking a grant or deactivating an account takes effect on the next request.
+// Returns null when the account is missing or inactive.
+async function findActivePermissions(userId: string): Promise<string[] | null> {
+  const [account] = await db
+    .select({ permissions: users.permissions, isActive: users.isActive })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  if (!account?.isActive) return null;
+  return Array.isArray(account.permissions) ? account.permissions : [];
+}
+
 // --- Server Components / Server Actions: redirect on failure ---
 
 export async function requireUser(): Promise<SessionPayload> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.mustChangePassword) redirect("/change-password");
-  const [account] = await db
-    .select({ permissions: users.permissions, isActive: users.isActive })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-  if (!account?.isActive) redirect("/login");
-  return { ...user, permissions: Array.isArray(account.permissions) ? account.permissions : [] };
-}
-
-export async function requireRole(...roles: Role[]): Promise<SessionPayload> {
-  const user = await requireUser();
-  if (!roles.includes(user.role)) redirect("/");
-  return user;
-}
-
-export async function requireCapability(
-  canAccess: (role: Role) => boolean,
-): Promise<SessionPayload> {
-  const user = await requireUser();
-  if (!canAccess(user.role)) redirect("/");
-  return user;
+  const permissions = await findActivePermissions(user.sub);
+  if (!permissions) redirect("/login");
+  return { ...user, permissions };
 }
 
 export async function getUserPermissions(userId: string): Promise<string[]> {
-  const [account] = await db
-    .select({ permissions: users.permissions, isActive: users.isActive })
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-  return account?.isActive && Array.isArray(account.permissions) ? account.permissions : [];
+  return (await findActivePermissions(userId)) ?? [];
 }
 
 export async function requirePermission(permission: PermissionKey): Promise<SessionPayload> {
@@ -85,28 +74,9 @@ export async function requireApiUser(request: NextRequest): Promise<SessionPaylo
   const user = token ? await verifySessionToken(token) : null;
   if (!user) throw new ApiAuthError(401, "Unauthorized");
   if (user.mustChangePassword) throw new ApiAuthError(403, "Password change required");
-  const [account] = await db
-    .select({ permissions: users.permissions, isActive: users.isActive })
-    .from(users)
-    .where(eq(users.id, user.sub))
-    .limit(1);
-  if (!account?.isActive) throw new ApiAuthError(401, "Account is inactive");
-  return { ...user, permissions: Array.isArray(account.permissions) ? account.permissions : [] };
-}
-
-export async function requireApiRole(request: NextRequest, ...roles: Role[]): Promise<SessionPayload> {
-  const user = await requireApiUser(request);
-  if (!roles.includes(user.role)) throw new ApiAuthError(403, "Forbidden");
-  return user;
-}
-
-export async function requireApiCapability(
-  request: NextRequest,
-  canAccess: (role: Role) => boolean,
-): Promise<SessionPayload> {
-  const user = await requireApiUser(request);
-  if (!canAccess(user.role)) throw new ApiAuthError(403, "Forbidden");
-  return user;
+  const permissions = await findActivePermissions(user.sub);
+  if (!permissions) throw new ApiAuthError(401, "Account is inactive");
+  return { ...user, permissions };
 }
 
 export async function requireApiPermission(request: NextRequest, permission: PermissionKey): Promise<SessionPayload> {

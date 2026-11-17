@@ -15,6 +15,7 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
@@ -82,8 +83,11 @@ export const leaveTypes = pgTable("leave_types", {
   description: text("description"),
   // Annual entitlement in days; null = uncapped.
   annualQuotaDays: integer("annual_quota_days"),
+  // "fixed": everyone gets annualQuotaDays. "tenure": annualQuotaDays is the maximum, pro-rated by
+  // months of service until 12 completed months (see lib/leave/quota.ts).
+  quotaBasis: varchar("quota_basis", { length: 20 }).notNull().default("fixed"),
   isActive: boolean("is_active").notNull().default(true),
-});
+}, (t) => [check("leave_types_quota_basis_valid", sql`${t.quotaBasis} IN ('fixed', 'tenure')`)]);
 
 export const skills = pgTable("skills", {
   id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
@@ -150,7 +154,7 @@ export const employeeSkills = pgTable(
     skillId: integer("skill_id")
       .notNull()
       .references(() => skills.id),
-    // Allowed values: 1-5, enforced in application validation (no DB CHECK, matches init.sql).
+    // Allowed values: 1-5, enforced in application validation (no DB CHECK).
     skillLevel: smallint("skill_level").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -173,7 +177,6 @@ export const overtimeRequests = pgTable(
     // start_at must be earlier than end_at (enforced in application code).
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
-    overtimeType: varchar("overtime_type", { length: 20 }),
     reason: text("reason").notNull(),
     statusCode: varchar("status_code", { length: 20 })
       .notNull()
@@ -231,7 +234,7 @@ export const leaveRequests = pgTable(
   ],
 );
 
-// ---------- auth (new, not in init.sql) ----------
+// ---------- auth ----------
 
 export const userRoleEnum = pgEnum("user_role", ["employee", "supervisor", "ceo"]);
 
@@ -344,7 +347,7 @@ export const assetRequests = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     agreementId: uuid("agreement_id").references(() => assetAgreements.id, { onDelete: "set null" }),
-    legacySheetId: text("legacy_sheet_id").unique(),
+    legacySheetId: text("legacy_sheet_id"),
     borrowerEmployeeId: uuid("borrower_employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
     // Snapshots preserve the form and agreement as submitted if employee details later change.
     borrowerEmployeeCode: varchar("borrower_employee_code", { length: 20 }).notNull(),
@@ -377,6 +380,7 @@ export const assetRequests = pgTable(
     index("asset_requests_borrower_created_idx").on(t.borrowerEmployeeId, t.createdAt),
     index("asset_requests_status_created_idx").on(t.status, t.createdAt),
     uniqueIndex("asset_requests_agreement_id_unique").on(t.agreementId),
+    uniqueIndex("asset_requests_legacy_sheet_id_unique").on(t.legacySheetId),
     check("asset_requests_date_order", sql`${t.toDate} IS NULL OR ${t.toDate} >= ${t.fromDate}`),
     check("asset_requests_version_positive", sql`${t.version} > 0`),
   ],
@@ -412,7 +416,7 @@ export const assetRequestAttachments = pgTable(
   },
   (t) => [
     index("asset_request_attachments_request_kind_idx").on(t.requestId, t.kind),
-    uniqueIndex("asset_request_attachments_request_kind_position_unique").on(t.requestId, t.kind, t.position),
+    unique("asset_request_attachments_request_kind_position_unique").on(t.requestId, t.kind, t.position),
     check("asset_request_attachments_position_nonnegative", sql`${t.position} >= 0`),
     check("asset_request_attachments_url_not_blank", sql`length(btrim(${t.url})) > 0`),
   ],

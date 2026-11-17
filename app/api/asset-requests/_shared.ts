@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import type { AssetAgreement, AssetRequest } from "@/asset-borrowing/domain/asset";
+import { jsonError } from "@/lib/api/response";
 
-export function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
+export { jsonError };
 
 function agreementDto(agreement: AssetAgreement | null) {
   if (!agreement) return null;

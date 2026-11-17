@@ -201,7 +201,6 @@ export function OtSummaryView({ refreshKey = 0 }) {
                     <span className="block tabular-nums">{row.approvedHours} ชม.</span>
                     <span className="block text-[11px] text-muted-foreground">
                       ธรรมดา {row.weekdayApprovedHours} · วันหยุด {row.holidayApprovedHours}
-                      {row.unclassifiedApprovedHours ? " · ยังไม่ระบุ " + row.unclassifiedApprovedHours : ""}
                     </span>
                   </td>
                   {canViewCompensation ? (
@@ -239,7 +238,6 @@ export function OtSummaryView({ refreshKey = 0 }) {
                   <strong className="text-right tabular-nums text-foreground">{row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}</strong>
                   <span className="col-span-2 text-[11px] leading-4 text-muted-foreground">
                     ธรรมดา {row.weekdayApprovedHours} ชม. · วันหยุด {row.holidayApprovedHours} ชม.
-                    {row.unclassifiedApprovedHours ? " · ยังไม่ระบุ " + row.unclassifiedApprovedHours + " ชม." : ""}
                   </span>
                 </div>
               ) : (

@@ -92,11 +92,6 @@ export function bangkokParts(date: Date) {
   };
 }
 
-export function formatBangkokDate(date: Date) {
-  const part = bangkokParts(date);
-  return `${part.day} ${THAI_MONTHS[part.month - 1]} ${part.year}`;
-}
-
 function localDateAndTime(date: Date) {
   const part = bangkokParts(date);
   return {

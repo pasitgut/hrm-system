@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    setupFiles: ["./tests/setup/env.ts"],
+    setupFiles: ["./tests/setup/env.ts", "./tests/setup/dom.ts"],
     exclude: ["**/node_modules/**", "**/.next/**", "**/drizzle/**"],
     // Multiple test files call resetDb()/seedReferenceData() against the
     // same shared TEST_DATABASE_URL; running files in parallel races

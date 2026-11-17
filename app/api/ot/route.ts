@@ -11,7 +11,6 @@ import {
   fetchOtItemById,
   isValidDateStr,
   isValidMonthStr,
-  isValidOvertimeType,
   isValidTimeStr,
   jsonError,
   monthRangeUtc,
@@ -82,8 +81,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, "Invalid request body");
   }
 
-  const { date, startTime, endTime, reason, employeeId, overtimeType } = body as Record<string, unknown>;
-  const selectedOvertimeType = overtimeType === undefined ? "weekday" : overtimeType;
+  const { date, startTime, endTime, reason, employeeId } = body as Record<string, unknown>;
 
   if (employeeId != null && employeeId !== user.employeeId) {
     return jsonError(400, "Cannot create an OT request for another employee");
@@ -93,9 +91,6 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   }
   if (typeof reason !== "string" || !reason.trim()) {
     return jsonError(400, "Reason is required");
-  }
-  if (!isValidOvertimeType(selectedOvertimeType)) {
-    return jsonError(400, "Invalid overtime type");
   }
 
   const startAt = bangkokToUtcDate(date, startTime);
@@ -110,7 +105,6 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       employeeId: user.employeeId,
       startAt,
       endAt,
-      overtimeType: selectedOvertimeType,
       reason: reason.trim(),
       statusCode: "pending",
     })

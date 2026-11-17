@@ -1,8 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/leave/summary/route";
-import { closeDb, resetDb } from "@/tests/setup/db";
-import { createLeaveRequest, createUser } from "@/tests/setup/factories";
+import { closeDb, db, resetDb } from "@/tests/setup/db";
+import { createEmployee, createLeaveRequest, createUser } from "@/tests/setup/factories";
+import { leaveTypes } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
 
 function sessionFor(user: { id: string; employeeId: string; email: string; role: SessionPayload["role"] }): SessionPayload {
@@ -33,6 +34,22 @@ describe("GET /api/leave/summary", () => {
   it("returns 401 when unauthenticated", async () => {
     const response = await summaryRequest("");
     expect(response.status).toBe(401);
+  });
+
+  it("pro-rates a tenure-based quota by months of service and caps it at the maximum", async () => {
+    await db.insert(leaveTypes).values({ code: "personal", name: "ลากิจ", annualQuotaDays: 6, quotaBasis: "tenure" });
+    const newcomer = await createEmployee({ startDate: `${year}-07-01` }); // 6 completed months by year end
+    const veteran = await createEmployee({ startDate: `${year - 2}-03-10` });
+
+    const quotaFor = async (employeeId: string) => {
+      const { user } = await createUser({ role: "employee", employeeId });
+      const token = await createSessionToken(sessionFor({ id: user.id, employeeId, email: user.email, role: "employee" }));
+      const payload = await (await summaryRequest("", token)).json();
+      return payload.quotas.find((q: { code: string }) => q.code === "personal");
+    };
+
+    expect(await quotaFor(newcomer.id)).toMatchObject({ annualQuotaDays: 3, maxAnnualQuotaDays: 6, quotaBasis: "tenure", remainingDays: 3 });
+    expect(await quotaFor(veteran.id)).toMatchObject({ annualQuotaDays: 6, maxAnnualQuotaDays: 6, quotaBasis: "tenure", remainingDays: 6 });
   });
 
   it("returns individual quota math for the caller (self-scoped)", async () => {

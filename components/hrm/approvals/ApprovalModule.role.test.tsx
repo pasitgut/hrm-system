@@ -2,11 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { permissionsForRole } from "@/tests/setup/permissions";
 
 let mockRole = "employee";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
-  useHrmRole: () => ({ role: mockRole, employeeId: "emp-1", email: "user@example.com" }),
+  useHrmRole: () => ({ permissions: permissionsForRole(mockRole), employeeId: "emp-1", email: "user@example.com" }),
 }));
 
 import ApprovalModule from "@/components/hrm/approvals/ApprovalModule";
@@ -36,7 +37,7 @@ describe("ApprovalModule role gating", () => {
     mockFetchOnce(sampleItems);
     render(<ApprovalModule />);
 
-    await screen.findByText("ธนากร มั่นคง");
+    expect((await screen.findAllByText("ธนากร มั่นคง")).length).toBeGreaterThan(0);
     expect(screen.queryByText("อนุมัติ")).not.toBeInTheDocument();
     expect(screen.queryByText("ไม่อนุมัติ")).not.toBeInTheDocument();
   });

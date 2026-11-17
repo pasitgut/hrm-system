@@ -111,11 +111,11 @@ export function LeaveQuotaDialog({ open, onClose, onSaved = () => {} }) {
       )}
     >
       <form id="leave-quota-form" className="space-y-4" onSubmit={submit}>
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2">
           {LEAVE_TYPE_PRESENTATION.map((type) => (
             <Input
               key={type.code}
-              label={`${type.name} (วัน/ปี)`}
+              label={type.code === "personal" ? `${type.name} (สูงสุด วัน/ปี)` : `${type.name} (วัน/ปี)`}
               type="number"
               min={0}
               max={MAX_QUOTA_DAYS}
@@ -126,7 +126,7 @@ export function LeaveQuotaDialog({ open, onClose, onSaved = () => {} }) {
             />
           ))}
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">ใส่จำนวนเต็มตั้งแต่ 0 วันขึ้นไป หรือเว้นว่างหากไม่จำกัดโควตา</p>
+        <p className="text-xs leading-5 text-muted-foreground">ใส่จำนวนเต็มตั้งแต่ 0 วันขึ้นไป หรือเว้นว่างหากไม่จำกัดโควตา ลากิจคิดตามอายุงาน: พนักงานที่ทำงานครบ 1 ปีได้ตามค่าสูงสุด ส่วนผู้ที่ยังไม่ครบ 1 ปีได้ตามสัดส่วนเดือนที่ทำงาน (ปัดลง) ส่วนประเภทอื่นเพิ่มและกำหนดค่าได้ที่ตั้งค่า &gt; ประเภทการลา</p>
         {loading ? <p role="status" className="text-xs leading-5 text-muted-foreground">กำลังโหลดโควต้าจากฐานข้อมูล...</p> : null}
         {loadError ? <p role="alert" className="text-xs leading-5 text-status-danger">{loadError}</p> : null}
         {saveError ? <p role="alert" className="text-xs leading-5 text-status-danger">{saveError}</p> : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { LEAVE_TYPE_PRESENTATION } from "@/components/hrm/leave/leaveTypes";
+import { withCustomLeaveTypes } from "@/components/hrm/leave/leaveTypes";
 import { formatDays } from "@/components/hrm/leave/leaveStatus";
 import { cn } from "@/lib/utils";
 
@@ -37,8 +37,9 @@ function monthLabel(year, month) {
 }
 
 function MonthlyLeaveChart({ year, items }) {
+  const leaveTypes = withCustomLeaveTypes(items.map((item) => ({ code: item.leaveTypeCode, name: item.leaveTypeName })));
   const months = Array.from({ length: 12 }, (_, month) => {
-    const types = LEAVE_TYPE_PRESENTATION.map((type) => ({
+    const types = leaveTypes.map((type) => ({
       ...type,
       days: items
         .filter((item) => item.leaveTypeCode === type.code)
@@ -81,7 +82,7 @@ function MonthlyLeaveChart({ year, items }) {
             ))}
           </div>
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
-            {LEAVE_TYPE_PRESENTATION.map((type) => (
+            {leaveTypes.map((type) => (
               <span key={type.code} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
                 <span className={cn("size-2.5 rounded-sm", type.dotClass)} aria-hidden="true" />{type.name}
               </span>

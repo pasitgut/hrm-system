@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
 
 export function HrmDialog({ open, title, description, onClose, children, footer, size = "md", className }) {
@@ -26,8 +25,4 @@ export function HrmDialog({ open, title, description, onClose, children, footer,
       </DialogContent>
     </Dialog>
   );
-}
-
-export function DialogCancelButton({ onClick }) {
-  return <Button type="button" variant="outline" onClick={onClick}>ยกเลิก</Button>;
 }

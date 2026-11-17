@@ -3,10 +3,11 @@ import { requirePermission } from "@/lib/auth/dal";
 
 export const metadata = {
   title: "เงินเดือน | HRM",
-  description: "ดูข้อมูลเงินเดือนในระบบและส่งออกเอกสารประกันสังคม",
+  description: "คำนวณเงินเดือนจากข้อมูลพนักงานและ OT ในระบบ พร้อมส่งออก Excel",
 };
 
 export default async function PayrollPage() {
-  const user = await requirePermission("salary_slips.view");
+  await requirePermission("salary_slips.view");
+  const user = await requirePermission("employees.compensation.view");
   return <PayrollModule permissions={user.permissions} />;
 }

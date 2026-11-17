@@ -2,11 +2,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import { permissionsForRole } from "@/tests/setup/permissions";
 
 let mockRole = "supervisor";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
-  useHrmRole: () => ({ role: mockRole, employeeId: "emp-1", email: "user@example.com" }),
+  useHrmRole: () => ({ permissions: permissionsForRole(mockRole), employeeId: "emp-1", email: "user@example.com" }),
 }));
 
 import EmployeeModule from "@/components/hrm/employees/EmployeeModule";
@@ -41,6 +42,7 @@ function mockResponse(url: string) {
   if (url.startsWith("/api/positions")) return { ok: true, json: async () => ({ items: [{ id: 1, name: "Software Engineer" }] }) };
   if (url.startsWith("/api/employment-statuses")) return { ok: true, json: async () => ({ items: [{ id: 1, name: "ปฏิบัติงาน" }] }) };
   if (url.startsWith("/api/employment-types")) return { ok: true, json: async () => ({ items: [{ id: 1, code: "full_time", name: "พนักงานประจำ" }] }) };
+  if (url.startsWith("/api/settings/ot-rates")) return { ok: true, json: async () => ({ item: { weekdayMultiplier: 1.5, holidayMultiplier: 3 } }) };
   if (url.startsWith("/api/employees")) return { ok: true, json: async () => ({ items: [employeeItem] }) };
   throw new Error(`unexpected fetch: ${url}`);
 }

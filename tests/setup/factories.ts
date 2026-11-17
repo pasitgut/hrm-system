@@ -10,6 +10,7 @@ import {
   type userRoleEnum,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
+import { permissionsForRole } from "@/tests/setup/permissions";
 import { eq } from "drizzle-orm";
 
 type Role = (typeof userRoleEnum.enumValues)[number];
@@ -69,6 +70,8 @@ export async function createUser(overrides: Partial<typeof users.$inferInsert> &
       email: email ?? employee?.email ?? `test.user.${Date.now()}@example.com`,
       passwordHash,
       role: role ?? "employee",
+      // Permissions, not roles, gate the API: managers get the manager grants unless a test overrides them.
+      permissions: permissionsForRole(role),
       ...rest,
     })
     .returning();

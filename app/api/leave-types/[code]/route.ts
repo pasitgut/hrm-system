@@ -1,6 +1,8 @@
 import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
+import { jsonError } from "@/lib/api/response";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { leaveTypes } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 
@@ -9,19 +11,6 @@ import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 // because leave requests reference it; DELETE only flips isActive.
 
 type RouteContext = { params: Promise<{ code: string }> };
-
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  // drizzle-orm wraps the original postgres error in a DrizzleQueryError,
-  // exposing the real code via .cause, not directly on the caught error.
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === "23505") return true;
-  const cause = (error as { cause?: unknown } | null)?.cause;
-  return typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "23505";
-}
 
 function invalidQuotaMessage(value: unknown): string | null {
   if (value === undefined || value === null) return null;

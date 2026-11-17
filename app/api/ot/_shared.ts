@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, overtimeRequests, requestStatuses } from "@/lib/db/schema";
+import { deriveOvertimeType } from "@/lib/ot/overtime-type";
+import { jsonError } from "@/lib/api/response";
 
 // Shared helpers for the app/api/ot/** Route Handlers: Bangkok-local time
 // conversion, the GET /api/ot response DTO, and the joined select used to
@@ -47,10 +49,6 @@ export function isValidMonthStr(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
 
-export function isValidOvertimeType(value: unknown): value is "weekday" | "holiday" {
-  return value === "weekday" || value === "holiday";
-}
-
 // [start, end) bounds, expressed as UTC instants, for the given "YYYY-MM"
 // month as it is understood in Asia/Bangkok local time.
 export function monthRangeUtc(month: string): { start: Date; end: Date } {
@@ -92,7 +90,7 @@ export const otSelectColumns = {
   employeeCode: employees.code,
   startAt: overtimeRequests.startAt,
   endAt: overtimeRequests.endAt,
-  overtimeType: overtimeRequests.overtimeType,
+  weeklyHolidays: employees.weeklyHolidays,
   reason: overtimeRequests.reason,
   statusCode: overtimeRequests.statusCode,
   statusName: requestStatuses.name,
@@ -110,7 +108,7 @@ type OtRow = {
   employeeCode: string;
   startAt: Date;
   endAt: Date;
-  overtimeType: string | null;
+  weeklyHolidays: number[];
   reason: string;
   statusCode: string;
   statusName: string;
@@ -133,7 +131,8 @@ export function toOtItemDto(row: OtRow) {
     date,
     startTime,
     endTime,
-    overtimeType: row.overtimeType,
+    // Derived on read from the date worked vs. the employee's weekly days off; never stored.
+    overtimeType: deriveOvertimeType(row.startAt, row.weeklyHolidays),
     durationHours: durationHours(row.startAt, row.endAt),
     reason: row.reason,
     statusCode: row.statusCode,
@@ -158,6 +157,4 @@ export async function fetchOtItemById(id: string): Promise<OtItemDto | null> {
   return row ? toOtItemDto(row) : null;
 }
 
-export function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
+export { jsonError };

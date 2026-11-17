@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { GET, POST } from "@/app/api/leave/route";
 import { closeDb, resetDb, db } from "@/tests/setup/db";
-import { createLeaveRequest, createUser } from "@/tests/setup/factories";
+import { createEmployee, createLeaveRequest, createUser } from "@/tests/setup/factories";
 import { leaveTypes } from "@/lib/db/schema";
 import { COOKIE_NAME, createSessionToken, type SessionPayload } from "@/lib/auth/session";
 import { eq } from "drizzle-orm";
@@ -124,6 +124,20 @@ describe("POST /api/leave", () => {
       leaveRequestHttp("http://localhost/api/leave", { method: "POST", body: { leaveTypeCode: "sick", startOn: "2026-10-05", endOn: "2026-10-05", session: "full", reason: "test" } }),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("limits a tenure-based leave type to the employee's pro-rated entitlement", async () => {
+    await db.insert(leaveTypes).values({ code: "personal", name: "ลากิจ", annualQuotaDays: 6, quotaBasis: "tenure" });
+    // Started 1 Jul 2026 -> 6 completed months by year end -> 6 * 6/12 = 3 days in 2026.
+    const employee = await createEmployee({ startDate: "2026-07-01" });
+    const { user } = await createUser({ role: "employee", employeeId: employee.id });
+    const token = await cookieFor(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "employee" }));
+    const post = (endOn: string) => POST(leaveRequestHttp("http://localhost/api/leave", {
+      method: "POST", token, body: { leaveTypeCode: "personal", startOn: "2026-10-05", endOn, session: "full", reason: "ธุระ" },
+    }));
+
+    expect((await post("2026-10-08")).status).toBe(409); // 4 days > 3
+    expect((await post("2026-10-07")).status).toBe(201); // 3 days
   });
 
   it("creates a pending request for the caller's own employee", async () => {

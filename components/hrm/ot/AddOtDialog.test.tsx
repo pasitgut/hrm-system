@@ -4,6 +4,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { AddOtDialog } from "@/components/hrm/ot/AddOtDialog";
 
+// The real TimePicker is a pair of Radix selects, which jsdom cannot drive.
+// These tests cover the dialog's own logic, so a native time input stands in.
+vi.mock("@/components/ui/time-picker", () => ({
+  TimePicker: ({ label, value, onChange }: { label: string; value: string; onChange: (next: string) => void }) => (
+    <label>
+      {label}
+      <input type="time" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  ),
+}));
+
 function getStartTimeInput() {
   return screen.getByLabelText("เวลาที่เริ่ม");
 }

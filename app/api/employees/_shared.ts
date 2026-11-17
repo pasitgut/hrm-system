@@ -7,6 +7,8 @@ import { departments, employees, employmentStatuses, employmentTypes, positions,
 import { DEFAULT_OT_RATE_SETTINGS, getOtRateSettings } from "@/lib/settings/otRateSettings";
 import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, type EmployeePayrollData } from "@/lib/employees/payroll-data";
 import { employeePayrollDataSchema } from "@/lib/employees/payroll-data-schema";
+import { jsonError } from "@/lib/api/response";
+import { isForeignKeyViolation, isUniqueViolation, postgresConstraintName } from "@/lib/db/errors";
 
 // Shared helpers for the app/api/employees/** Route Handlers: the joined
 // select used by every read, the GET response DTO, employee-code conflicts,
@@ -260,45 +262,10 @@ export function isValidEmail(value: unknown): value is string {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-// Postgres unique_violation (23505) / foreign_key_violation (23503), as
-// thrown by the `postgres` driver — used to turn a raw DB constraint error
-// into a clean 4xx response instead of a 500. drizzle-orm wraps every driver
-// error in a DrizzleQueryError whose real PostgresError (with `.code` /
-// `.constraint_name`) lives one level down as `.cause`, so both the error
-// itself and its `.cause` are checked.
-function pgError(error: unknown): { code?: unknown; constraint_name?: unknown; constraint?: unknown } | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const record = error as { code?: unknown; cause?: unknown };
-  if (typeof record.code === "string") return record as { code?: unknown };
-  if (typeof record.cause === "object" && record.cause !== null) return record.cause as { code?: unknown };
-  return undefined;
-}
-
-export function pgErrorCode(error: unknown): string | undefined {
-  const value = pgError(error)?.code;
-  return typeof value === "string" ? value : undefined;
-}
-
-export function isUniqueViolation(error: unknown): boolean {
-  return pgErrorCode(error) === "23505";
-}
-
-export function isForeignKeyViolation(error: unknown): boolean {
-  return pgErrorCode(error) === "23503";
-}
-
-export function constraintName(error: unknown): string | undefined {
-  const inner = pgError(error);
-  const value = inner?.constraint_name ?? inner?.constraint;
-  return typeof value === "string" ? value : undefined;
-}
-
-export function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
+export { jsonError };
 
 function uniqueViolationMessage(error: unknown): string {
-  const name = constraintName(error) ?? "";
+  const name = postgresConstraintName(error) ?? "";
   if (name.includes("email")) return "Email is already in use";
   if (name.includes("citizen_id")) return "Citizen ID is already in use";
   if (name.includes("code")) return "Employee code is already in use";

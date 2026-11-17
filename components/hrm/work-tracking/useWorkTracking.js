@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createWork, getWork, updateSubStatus } from "@/lib/work-tracking/service";
+import { getWork, updateSubStatus } from "@/lib/work-tracking/service";
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
@@ -58,24 +58,6 @@ export function useWorkList(start, end) {
   }, [start, end, reloadKey]);
 
   return { data, loading, error, refresh, updateSubStatusInList };
-}
-
-export function useWorkCreate() {
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState(null);
-  const create = useCallback(async (input) => {
-    setCreating(true);
-    setError(null);
-    try {
-      return await createWork(input);
-    } catch (cause) {
-      setError(errorMessage(cause));
-      throw cause;
-    } finally {
-      setCreating(false);
-    }
-  }, []);
-  return { create, creating, error };
 }
 
 export function useSubStatusUpdate() {

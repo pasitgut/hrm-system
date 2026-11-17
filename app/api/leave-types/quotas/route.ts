@@ -1,15 +1,12 @@
 import { eq, inArray } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
+import { jsonError } from "@/lib/api/response";
 import { leaveTypes } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 
-const QUOTA_CODES = ["personal", "sick", "birthday"] as const;
+const QUOTA_CODES = ["personal", "sick", "birthday", "vacation"] as const;
 const MAX_QUOTA_DAYS = 2_147_483_647;
-
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
 
 export const PATCH = withApiAuth(async (request: NextRequest) => {
   await requireApiPermission(request, "leave.quotas.manage");
@@ -27,12 +24,12 @@ export const PATCH = withApiAuth(async (request: NextRequest) => {
 
   const quotas = (body as Record<string, unknown>).quotas;
   if (typeof quotas !== "object" || quotas === null || Array.isArray(quotas)) {
-    return jsonError(400, "quotas must include personal, sick, and birthday");
+    return jsonError(400, "quotas must include personal, sick, birthday, and vacation");
   }
 
   const values = quotas as Record<string, unknown>;
   if (QUOTA_CODES.some((code) => !Object.hasOwn(values, code))) {
-    return jsonError(400, "quotas must include personal, sick, and birthday");
+    return jsonError(400, "quotas must include personal, sick, birthday, and vacation");
   }
 
   for (const code of QUOTA_CODES) {
@@ -68,6 +65,6 @@ export const PATCH = withApiAuth(async (request: NextRequest) => {
     return updatedItems;
   });
 
-  if (!items) return jsonError(409, "The three leave types must exist before quotas can be saved");
+  if (!items) return jsonError(409, "The four built-in leave types must exist before quotas can be saved");
   return NextResponse.json({ items });
 });

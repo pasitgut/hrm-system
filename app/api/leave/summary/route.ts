@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { entitledQuotaDays } from "@/lib/leave/quota";
 import { canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 import { jsonError, leaveDaySpan } from "@/app/api/leave/_shared";
 
@@ -27,13 +28,13 @@ async function individualSummary(employeeId: string, year = new Date().getFullYe
   const { start, end } = yearBounds(year);
 
   const [employee] = await db
-    .select({ firstName: employees.firstName, lastName: employees.lastName })
+    .select({ firstName: employees.firstName, lastName: employees.lastName, startDate: employees.startDate })
     .from(employees)
     .where(eq(employees.id, employeeId));
   if (!employee) return null;
 
   const types = await db
-    .select({ code: leaveTypes.code, name: leaveTypes.name, annualQuotaDays: leaveTypes.annualQuotaDays })
+    .select({ code: leaveTypes.code, name: leaveTypes.name, annualQuotaDays: leaveTypes.annualQuotaDays, quotaBasis: leaveTypes.quotaBasis })
     .from(leaveTypes)
     .where(eq(leaveTypes.isActive, true))
     .orderBy(asc(leaveTypes.name));
@@ -67,14 +68,18 @@ async function individualSummary(employeeId: string, year = new Date().getFullYe
   const quotas = types.map((type) => {
     const usedDays = usedByType.get(type.code) ?? 0;
     const pendingDays = pendingByType.get(type.code) ?? 0;
+    // Effective entitlement for this employee and year (pro-rated by service for "tenure" types).
+    const entitledDays = entitledQuotaDays({ ...type, startDate: employee.startDate, year });
     return {
       code: type.code,
       name: type.name,
-      annualQuotaDays: type.annualQuotaDays,
+      annualQuotaDays: entitledDays,
+      maxAnnualQuotaDays: type.annualQuotaDays,
+      quotaBasis: type.quotaBasis,
       usedDays,
       pendingDays,
-      remainingDays: type.annualQuotaDays == null ? null : type.annualQuotaDays - usedDays,
-      availableDays: type.annualQuotaDays == null ? null : type.annualQuotaDays - usedDays - pendingDays,
+      remainingDays: entitledDays == null ? null : entitledDays - usedDays,
+      availableDays: entitledDays == null ? null : entitledDays - usedDays - pendingDays,
     };
   });
 

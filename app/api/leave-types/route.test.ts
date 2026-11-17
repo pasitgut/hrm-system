@@ -54,18 +54,18 @@ describe("POST /api/leave-types", () => {
     expect(response.status).toBe(403);
   });
 
-  it("creates an active leave type with a quota for a supervisor", async () => {
+  it("creates an active leave type with a database-assigned code and a quota for a supervisor", async () => {
     const token = await tokenFor("supervisor");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", {
         method: "POST",
         token,
-        body: { code: "maternity", name: "ลาคลอด", annualQuotaDays: 90, description: "ลาคลอดบุตร" },
+        body: { name: "ลาคลอด", annualQuotaDays: 90, description: "ลาคลอดบุตร" },
       }),
     );
     const payload = await response.json();
     expect(response.status).toBe(201);
-    expect(payload.item.code).toBe("maternity");
+    expect(payload.item.code).toMatch(/^\d+$/);
     expect(payload.item.annualQuotaDays).toBe(90);
     expect(payload.item.isActive).toBe(true);
   });
@@ -88,18 +88,18 @@ describe("POST /api/leave-types", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects a missing code with 400", async () => {
+  it("rejects a missing name with 400", async () => {
     const token = await tokenFor("supervisor");
     const response = await POST(
-      apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { name: "ไม่มีรหัส" } }),
+      apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { annualQuotaDays: 3 } }),
     );
     expect(response.status).toBe(400);
   });
 
-  it("returns a clean 409 on a duplicate code", async () => {
+  it("returns a clean 409 on a duplicate name", async () => {
     const token = await tokenFor("supervisor");
     const response = await POST(
-      apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { code: "sick", name: "ลาป่วยซ้ำ" } }),
+      apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { name: "ลาป่วย" } }),
     );
     const payload = await response.json();
     expect(response.status).toBe(409);

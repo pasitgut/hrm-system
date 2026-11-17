@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
 import {
   hasPermission,
-  canAccessEmployeeDocuments,
+  canViewEmployeeDocuments,
   canApproveAnything,
   canManageAssetTemplates,
   canManageLeaveQuotas,
@@ -69,7 +69,6 @@ const baseGroups = [
     label: "ข้อมูลและรายงาน",
     items: [
       { key: "payroll", label: "เงินเดือน", icon: RiMoneyDollarCircleLine, href: "/payroll" },
-      { key: "salary-slips", label: "สลิปเงินเดือน", icon: RiFileTextLine, href: "/salary-slips" },
       { key: "reports", label: "รายงาน", icon: RiFileChartLine, href: "/reports" },
     ],
   },
@@ -192,7 +191,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
   const [darkMode, setDarkMode] = useState(false);
   const active = pathname === "/ot" ? "ot"
     : pathname.startsWith("/work-tracking") ? "work"
-    : pathname.startsWith("/salary-slips") ? "salary-slips"
+    : pathname.startsWith("/salary-slips") ? "payroll"
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
         : pathname === "/assets" ? "assets"
@@ -211,14 +210,13 @@ export default function HrmShell({ children, user = null, permissions = [], empl
         if (item.key === "ot") return canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions);
         if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
         if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
-        if (item.key === "payroll") return hasPermission(permissions, "salary_slips.view");
-        if (item.key === "salary-slips") return hasPermission(permissions, "salary_slips.view");
+        if (item.key === "payroll") return hasPermission(permissions, "salary_slips.view") && hasPermission(permissions, "employees.compensation.view");
         if (item.key === "reports") return canViewReports(permissions);
         return true;
       }),
     }));
     const workGroup = nextGroups.find((group) => group.label === "การทำงาน");
-    if (canAccessEmployeeDocuments(permissions)) {
+    if (canViewEmployeeDocuments(permissions)) {
       workGroup?.items.splice(1, 0, { key: "documents", label: "เอกสาร", icon: RiFileTextLine, href: "/documents" });
     }
     if (canApproveAnything(permissions)) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { durationHours, utcToBangkokParts } from "@/app/api/ot/_shared";
+import { jsonError } from "@/lib/api/response";
 
 // Shared helpers for app/api/approvals/**: the combined-item DTO shape and
 // the Thai short-date formatting used to build each item's `detail` string.
@@ -23,9 +24,7 @@ export type ApprovalItem = {
   requiresAssetWorkflow?: boolean;
 };
 
-export function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
+export { jsonError };
 
 const THAI_MONTHS_ABBR = [
   "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",

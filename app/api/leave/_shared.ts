@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
+import { jsonError } from "@/lib/api/response";
 
 // Shared helpers for the app/api/leave/** Route Handlers: request-body
 // validation, day-span math, the GET /api/leave response DTO, and the
@@ -43,9 +44,7 @@ export function leaveQuotaExceededMessage(leaveTypeName: string, requestedDays: 
   return `จำนวนวันที่ขอ (${formatDays(requestedDays)} วัน) เกินโควต้าคงเหลือของ${leaveTypeName} (${formatDays(Math.max(0, remainingDays))} วัน)`;
 }
 
-export function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
+export { jsonError };
 
 // --- request body validation, shared by POST and PATCH ---
 

@@ -6,12 +6,11 @@ import { RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiPencilLine } from "
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { IconButton } from "@/components/ui/icon-button";
-import { Select, SelectItem } from "@/components/ui/select";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { canApproveOtData, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import { canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
 import { canManageOwnOtRequests } from "@/lib/auth/permissions";
-import { OT_DAY_TYPES, OT_STATUS_TABS, currentMonthInBangkok, formatMonthLabel, overtimeTypeLabel, shiftMonth, statusColor } from "@/components/hrm/ot/otStatus";
+import { OT_STATUS_TABS, currentMonthInBangkok, formatMonthLabel, overtimeTypeLabel, shiftMonth, statusColor } from "@/components/hrm/ot/otStatus";
 import { cx } from "@/utils/cx";
 
 function StatusTabs({ selected, counts, onChange }) {
@@ -64,7 +63,7 @@ function OwnActions({ item, canManage, onEdit, onCancel }) {
   );
 }
 
-function OtRow({ item, showEmployeeColumn, showActionsColumn, canManage, canClassify, onEdit, onCancel, onClassify }) {
+function OtRow({ item, showEmployeeColumn, showActionsColumn, canManage, onEdit, onCancel }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-accent">
       <td className="whitespace-nowrap px-3 py-3 text-xs leading-5 text-foreground">{item.date}</td>
@@ -78,7 +77,6 @@ function OtRow({ item, showEmployeeColumn, showActionsColumn, canManage, canClas
         <td className="px-3 py-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <OwnActions item={item} canManage={canManage} onEdit={onEdit} onCancel={onCancel} />
-            {canClassify ? <Button size="xs" variant="secondary" onClick={() => onClassify(item)}>กำหนดประเภทวัน</Button> : null}
           </div>
         </td>
       ) : null}
@@ -86,7 +84,7 @@ function OtRow({ item, showEmployeeColumn, showActionsColumn, canManage, canClas
   );
 }
 
-function OtCard({ item, showEmployeeColumn, canManage, canClassify, onEdit, onCancel, onClassify }) {
+function OtCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
   return (
     <article className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
@@ -99,11 +97,10 @@ function OtCard({ item, showEmployeeColumn, canManage, canClassify, onEdit, onCa
       </div>
       {showEmployeeColumn ? <p className="mt-2 text-xs font-medium leading-5 text-foreground">{item.employeeName}</p> : null}
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.reason}</p>
-      {canManage || canClassify ? (
+      {canManage ? (
         <div className="mt-3 border-t border-border pt-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <OwnActions item={item} canManage={canManage} onEdit={onEdit} onCancel={onCancel} />
-            {canClassify ? <Button size="xs" variant="secondary" onClick={() => onClassify(item)}>กำหนดประเภทวัน</Button> : null}
           </div>
         </div>
       ) : null}
@@ -115,7 +112,7 @@ function OtCard({ item, showEmployeeColumn, canManage, canClassify, onEdit, onCa
 // available to any caller that already has a list to filter. Without it the
 // view fetches GET /api/ot?month=...&status=all itself and filters the 4
 // tabs client-side, so switching tabs never re-hits the network.
-export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}, onCancelled = () => {}, onClassified = () => {} }) {
+export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}, onCancelled = () => {} }) {
   const user = useHrmRole() ?? {};
   const { employeeId } = user;
   const [month, setMonth] = useState(() => currentMonthInBangkok());
@@ -126,10 +123,6 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
-  const [classifyTarget, setClassifyTarget] = useState(null);
-  const [classifyType, setClassifyType] = useState("");
-  const [classifying, setClassifying] = useState(false);
-  const [classifyError, setClassifyError] = useState("");
 
   useEffect(() => {
     if (itemsProp) {
@@ -175,7 +168,6 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
   );
 
   const showEmployeeColumn = canViewCompanyOtData(user);
-  const canClassifyRequests = canApproveOtData(user);
   const canManageOwnRequests = canManageOwnOtRequests(user.permissions);
 
   function handleEdit(item) {
@@ -185,41 +177,6 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
   function requestCancel(item) {
     setCancelError("");
     setCancelTarget(item);
-  }
-
-  function requestClassification(item) {
-    setClassifyError("");
-    setClassifyType("");
-    setClassifyTarget(item);
-  }
-
-  async function saveClassification() {
-    if (!classifyTarget) return;
-    if (!classifyType) {
-      setClassifyError("กรุณาเลือกประเภทวัน OT");
-      return;
-    }
-    setClassifying(true);
-    setClassifyError("");
-    try {
-      const response = await fetch(`/api/ot/${classifyTarget.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ overtimeType: classifyType }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setClassifyError(payload.error || "ไม่สามารถระบุประเภทวัน OT ได้");
-        return;
-      }
-      setItems((current) => current.map((item) => (item.id === payload.item.id ? payload.item : item)));
-      setClassifyTarget(null);
-      onClassified?.(payload.item);
-    } catch {
-      setClassifyError("เชื่อมต่อระบบไม่ได้ กรุณาลองใหม่อีกครั้ง");
-    } finally {
-      setClassifying(false);
-    }
   }
 
   async function confirmCancel() {
@@ -280,10 +237,8 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
                   showEmployeeColumn={showEmployeeColumn}
                   showActionsColumn
                   canManage={canManageOwnRequests && item.employeeId === employeeId && item.statusCode === "pending"}
-                  canClassify={canClassifyRequests && item.statusCode === "approved" && !item.overtimeType}
                   onEdit={handleEdit}
                   onCancel={requestCancel}
-                  onClassify={requestClassification}
                 />
               ))}
             </tbody>
@@ -296,10 +251,8 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
               item={item}
               showEmployeeColumn={showEmployeeColumn}
               canManage={canManageOwnRequests && item.employeeId === employeeId && item.statusCode === "pending"}
-              canClassify={canClassifyRequests && item.statusCode === "approved" && !item.overtimeType}
               onEdit={handleEdit}
               onCancel={requestCancel}
-              onClassify={requestClassification}
             />
           ))}
         </div>
@@ -324,26 +277,6 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
           </p>
         ) : null}
         {cancelError ? <p className="mt-2 text-xs leading-5 text-status-danger">{cancelError}</p> : null}
-      </HrmDialog>
-      <HrmDialog
-        open={Boolean(classifyTarget)}
-        onClose={() => setClassifyTarget(null)}
-        title="ระบุประเภทวันของ OT"
-        description={classifyTarget ? `${classifyTarget.employeeName} · ${classifyTarget.date} · ${classifyTarget.durationHours} ชม.` : undefined}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setClassifyTarget(null)} disabled={classifying}>ยกเลิก</Button>
-            <Button onClick={saveClassification} disabled={classifying || !classifyType}>{classifying ? "กำลังบันทึก..." : "บันทึก"}</Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <label id="ot-classify-day-type-label" className="text-sm font-medium text-foreground">ประเภทวันสำหรับคิดเรท OT</label>
-          <Select aria-labelledby="ot-classify-day-type-label" selectedKey={classifyType || undefined} placeholder="เลือกประเภทวัน" onSelectionChange={(key) => setClassifyType(String(key))}>
-            {OT_DAY_TYPES.map((type) => <SelectItem key={type.key} id={type.key}>{type.label}</SelectItem>)}
-          </Select>
-          {classifyError ? <p className="text-xs leading-5 text-status-danger">{classifyError}</p> : null}
-        </div>
       </HrmDialog>
     </div>
   );

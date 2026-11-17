@@ -1,6 +1,8 @@
 import { asc } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
+import { jsonError } from "@/lib/api/response";
+import { isUniqueViolation } from "@/lib/db/errors";
 import { leaveTypes } from "@/lib/db/schema";
 import { requireApiPermission, requireApiUser, withApiAuth } from "@/lib/auth/dal";
 
@@ -17,19 +19,6 @@ export const GET = withApiAuth(async (request: NextRequest) => {
 // --- Settings module: create; the database assigns each code from a sequence.
 // Edits and deactivation live in ./[code]/route.ts. Never hard-delete a type
 // because leave requests reference its code. ---
-
-function jsonError(status: number, message: string) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  // drizzle-orm wraps the original postgres error in a DrizzleQueryError,
-  // exposing the real code via .cause, not directly on the caught error.
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === "23505") return true;
-  const cause = (error as { cause?: unknown } | null)?.cause;
-  return typeof cause === "object" && cause !== null && (cause as { code?: unknown }).code === "23505";
-}
 
 // Returns an error message, or null when the value is a valid optional
 // annualQuotaDays: absent, null (uncapped), or a non-negative integer.

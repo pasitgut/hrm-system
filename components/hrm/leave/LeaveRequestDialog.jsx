@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { formatDays } from "@/components/hrm/leave/leaveStatus";
-import { LEAVE_TYPE_CODES, LEAVE_TYPE_PRESENTATION } from "@/components/hrm/leave/leaveTypes";
+import { withCustomLeaveTypes } from "@/components/hrm/leave/leaveTypes";
 
 function defaultDate() {
   try {
@@ -127,12 +127,10 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
       })
       .then((payload) => {
         if (!cancelled) {
-          const supportedTypes = (payload.items || []).filter((type) => type.isActive && LEAVE_TYPE_CODES.has(type.code));
-          setLeaveTypes(supportedTypes.toSorted((left, right) => {
-            const leftIndex = LEAVE_TYPE_PRESENTATION.findIndex((type) => type.code === left.code);
-            const rightIndex = LEAVE_TYPE_PRESENTATION.findIndex((type) => type.code === right.code);
-            return leftIndex - rightIndex;
-          }));
+          const supportedTypes = (payload.items || []).filter((type) => type.isActive);
+          // Built-in types first in their fixed order, then the ones configured in Settings.
+          const order = withCustomLeaveTypes(supportedTypes).map((type) => type.code);
+          setLeaveTypes(supportedTypes.toSorted((left, right) => order.indexOf(left.code) - order.indexOf(right.code)));
           if (supportedTypes.length === 0) setLeaveTypesError("ไม่พบประเภทการลาที่เปิดใช้งานในฐานข้อมูล");
         }
       })

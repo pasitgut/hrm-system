@@ -4,6 +4,33 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { LeaveRequestDialog } from "@/components/hrm/leave/LeaveRequestDialog";
 
+vi.mock("@/components/hrm/HrmShell", () => ({
+  useHrmRole: () => ({ employeeId: "emp-1", permissions: [], email: "user@example.com" }),
+}));
+
+// The real DatePickerField is a popup calendar; a native date input stands in
+// so these tests can exercise the dialog's own validation logic.
+vi.mock("@/components/ui/date-picker-field", async () => {
+  const { parseDate } = await import("@internationalized/date");
+  return {
+    DatePickerField: ({ label, value, onChange }: { label: string; value: { toString(): string } | null; onChange: (next: unknown) => void }) => (
+      <label>
+        {label}
+        <input type="date" value={value?.toString() ?? ""} onChange={(event) => onChange(parseDate(event.target.value))} />
+      </label>
+    ),
+  };
+});
+
+const quotaSummary = {
+  scope: "individual",
+  employeeId: "emp-1",
+  quotas: [
+    { code: "sick", annualQuotaDays: 30, remainingDays: 30, availableDays: 30 },
+    { code: "annual", annualQuotaDays: 10, remainingDays: 10, availableDays: 10 },
+  ],
+};
+
 const leaveTypesResponse = {
   items: [
     { id: "1", code: "sick", name: "ลาป่วย", description: null, annualQuotaDays: 30, isActive: true },
@@ -15,6 +42,9 @@ function stubFetch(postResponse: unknown = { item: { id: "leave-1", statusCode: 
   return vi.fn().mockImplementation((url: string, options?: { method?: string }) => {
     if (url === "/api/leave-types") {
       return Promise.resolve({ ok: true, json: async () => leaveTypesResponse });
+    }
+    if (url.startsWith("/api/leave/summary")) {
+      return Promise.resolve({ ok: true, json: async () => quotaSummary });
     }
     return Promise.resolve({ ok: true, json: async () => postResponse });
   });
@@ -70,15 +100,17 @@ describe("LeaveRequestDialog (create mode)", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("disables the session select when the date range spans more than one day", async () => {
+  it("disables the session select and keeps submit enabled when the date range spans more than one day", async () => {
     vi.stubGlobal("fetch", stubFetch());
     render(<LeaveRequestDialog open mode="create" onClose={() => {}} />);
-    await waitFor(() => expect(screen.getAllByText("ลาป่วย").length).toBeGreaterThan(0));
+    await waitFor(() => expect(getSubmitButton()).not.toBeDisabled());
 
     const endInput = screen.getByLabelText("วันที่สิ้นสุดการลา") as HTMLInputElement;
     const [year, month, day] = endInput.value.split("-").map(Number);
-    fireEvent.change(endInput, { target: { value: `${year}-${String(month).padStart(2, "0")}-${String(day + 1).padStart(2, "0")}` } });
+    const nextDay = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+    fireEvent.change(endInput, { target: { value: nextDay } });
 
+    expect(screen.getByRole("combobox", { name: "ช่วงที่ลา" })).toBeDisabled();
     expect(getSubmitButton()).not.toBeDisabled();
   });
 });
