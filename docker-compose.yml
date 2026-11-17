@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: hrm_dev_password
       POSTGRES_DB: hrm_dev
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - hrm_pgdata:/var/lib/postgresql/data
       - ./docker/init-multiple-dbs.sh:/docker-entrypoint-initdb.d/init-multiple-dbs.sh:ro
@@ -18,5 +18,32 @@ services:
       timeout: 5s
       retries: 10
 
+  hrm:
+    image: node:24-bookworm-slim
+    container_name: hrm-demo
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npm ci && npm run db:migrate && npm run dev -- --hostname 0.0.0.0"
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      DATABASE_URL: postgresql://hrm:hrm_dev_password@postgres:5432/hrm_dev
+      TEST_DATABASE_URL: postgresql://hrm:hrm_dev_password@postgres:5432/hrm_test
+      JWT_SECRET: dev-only-please-change-32-bytes-min
+      SESSION_COOKIE_NAME: hrm_session
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - .:/app
+      - hrm_node_modules:/app/node_modules
+      - hrm_next_data:/app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   hrm_pgdata:
+    external: true
+    name: hrm-system_hrm_pgdata
+  hrm_node_modules:
+  hrm_next_data:

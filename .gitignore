@@ -41,3 +41,7 @@ yarn-error.log*
 # vercel / misc
 .vercel
 *.pem
+
+# generated AppSheet migration SQL (contains personal data)
+/scripts/migration/output/
+__pycache__/
