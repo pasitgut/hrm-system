@@ -1,13 +1,13 @@
-import { payrollPeriodRangeUtc, utcToBangkokParts } from "@/app/api/ot/_shared";
+import { monthRangeUtc, utcToBangkokParts } from "@/app/api/ot/_shared";
 import { buildPayrollRow, groupLeaves, summarizeOvertime } from "./calculate";
 import { loadPayrollInputs } from "./inputs";
 import type { Payroll } from "./types";
 
 const DAY_MS = 86_400_000;
 
-/** Payroll for the period labelled by `year`/`month`: the 26th of the previous month through the 25th (Asia/Bangkok). */
+/** Payroll for the period labelled by `year`/`month`: the calendar month, 1st through last day (Asia/Bangkok). */
 export async function createPayroll(year: number, month: number): Promise<Payroll> {
-  const { start, end } = payrollPeriodRangeUtc(`${year}-${String(month).padStart(2, "0")}`);
+  const { start, end } = monthRangeUtc(`${year}-${String(month).padStart(2, "0")}`);
   const startDate = utcToBangkokParts(start).date;
   const endExclusiveDate = utcToBangkokParts(end).date;
 

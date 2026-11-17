@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { canManageEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
-import { currentMonthInBangkok, formatMonthLabel, formatPayrollPeriodLabel, shiftMonth } from "@/components/hrm/ot/otStatus";
+import { currentMonthInBangkok, formatMonthLabel, shiftMonth } from "@/components/hrm/ot/otStatus";
 
 function formatMoney(value) {
   return value == null
@@ -55,24 +55,14 @@ function MonthNav({ month, onChange }) {
   );
 }
 
-function PayrollPeriodNav({ period, onChange }) {
-  return (
-    <div className="flex items-center justify-between gap-2 border-y border-border py-1">
-      <IconButton icon={RiArrowLeftSLine} aria-label="งวดก่อนหน้า" onClick={() => onChange(shiftMonth(period, -1))} />
-      <strong className="text-center text-sm font-semibold leading-5 text-foreground">{formatPayrollPeriodLabel(period)}</strong>
-      <IconButton icon={RiArrowRightSLine} aria-label="งวดถัดไป" onClick={() => onChange(shiftMonth(period, 1))} />
-    </div>
-  );
-}
-
-function IndividualSummary({ month, onMonthChange, summary, loading, error, backAction, isPayrollPeriod = false }) {
+function IndividualSummary({ month, onMonthChange, summary, loading, error, backAction }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         {backAction ? <Button size="small" variant="secondary" onClick={backAction}>ย้อนกลับ</Button> : <span />}
         {summary ? <span className="text-xs leading-5 text-muted-foreground">{summary.employeeName}</span> : null}
       </div>
-      {isPayrollPeriod ? <PayrollPeriodNav period={month} onChange={onMonthChange} /> : <MonthNav month={month} onChange={onMonthChange} />}
+      <MonthNav month={month} onChange={onMonthChange} />
       {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       {loading || !summary ? (
         <p className="text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p>
@@ -103,7 +93,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
     setLoading(true);
     setError("");
     const targetEmployeeId = isCompanyCapable ? drillEmployeeId : null;
-    const query = new URLSearchParams(isCompanyCapable ? { period: month } : { month });
+    const query = new URLSearchParams({ month });
     if (targetEmployeeId) query.set("employeeId", targetEmployeeId);
 
     fetch(`/api/ot/summary?${query.toString()}`)
@@ -141,7 +131,6 @@ export function OtSummaryView({ refreshKey = 0 }) {
         loading={loading}
         error={error}
         backAction={() => setDrillEmployeeId(null)}
-        isPayrollPeriod
       />
     );
   }
@@ -150,7 +139,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
 
   return (
     <div className="space-y-4">
-      <PayrollPeriodNav period={month} onChange={setMonth} />
+      <MonthNav month={month} onChange={setMonth} />
       {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       {companySummary ? (
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-y border-border py-3 sm:grid-cols-4">

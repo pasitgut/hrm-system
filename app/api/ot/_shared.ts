@@ -60,19 +60,6 @@ export function monthRangeUtc(month: string): { start: Date; end: Date } {
   return { start, end };
 }
 
-// Payroll periods are labeled by the month in which they end: for example,
-// 2026-09 covers 26 Aug through 25 Sep in Bangkok local time.
-export function payrollPeriodRangeUtc(period: string): { start: Date; end: Date } {
-  const [year, month] = period.split("-").map(Number);
-  const previousYear = month === 1 ? year - 1 : year;
-  const previousMonth = month === 1 ? 12 : month - 1;
-  const startMonth = String(previousMonth).padStart(2, "0");
-  const endMonth = String(month).padStart(2, "0");
-  const start = bangkokToUtcDate(String(previousYear).padStart(4, "0") + "-" + startMonth + "-26", "00:00");
-  const end = bangkokToUtcDate(String(year).padStart(4, "0") + "-" + endMonth + "-26", "00:00");
-  return { start, end };
-}
-
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }

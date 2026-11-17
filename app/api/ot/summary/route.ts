@@ -6,7 +6,7 @@ import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canViewEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
 import { canViewOwnOtRequests } from "@/lib/auth/permissions";
 import { deriveOvertimeType } from "@/lib/ot/overtime-type";
-import { currentBangkokMonth, durationHours, isValidMonthStr, jsonError, monthRangeUtc, payrollPeriodRangeUtc, round2, utcToBangkokParts } from "@/app/api/ot/_shared";
+import { currentBangkokMonth, durationHours, isValidMonthStr, jsonError, monthRangeUtc, round2, utcToBangkokParts } from "@/app/api/ot/_shared";
 
 async function individualSummary(employeeId: string, month: string, start: Date, end: Date) {
   const rows = await db
@@ -61,7 +61,7 @@ async function individualSummary(employeeId: string, month: string, start: Date,
   };
 }
 
-async function companySummary(period: string, start: Date, end: Date, includeCompensation: boolean) {
+async function companySummary(month: string, start: Date, end: Date, includeCompensation: boolean) {
   const periodStartDate = utcToBangkokParts(start).date;
   const periodEndDate = utcToBangkokParts(end).date;
   const rows = await db
@@ -208,8 +208,7 @@ async function companySummary(period: string, start: Date, end: Date, includeCom
 
   return {
     scope: "company" as const,
-    month: period,
-    period,
+    month,
     totalApprovedHours: round2(totalApprovedHours),
     totalPendingHours: round2(totalPendingHours),
     requestCount,
@@ -225,14 +224,13 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   }
   const searchParams = request.nextUrl.searchParams;
 
-  const periodParam = searchParams.get("period");
-  const monthParam = periodParam ?? searchParams.get("month") ?? currentBangkokMonth();
+  const monthParam = searchParams.get("month") ?? currentBangkokMonth();
   if (!isValidMonthStr(monthParam)) {
     return jsonError(400, "Invalid month");
   }
 
   const employeeIdParam = searchParams.get("employeeId");
-  const { start, end } = periodParam ? payrollPeriodRangeUtc(monthParam) : monthRangeUtc(monthParam);
+  const { start, end } = monthRangeUtc(monthParam);
 
   if (!canViewCompanyOtData(user)) {
     if (employeeIdParam && employeeIdParam !== user.employeeId) {

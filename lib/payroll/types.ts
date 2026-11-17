@@ -31,7 +31,7 @@ export type PayrollRow = {
 export type Payroll = {
   year: number;
   month: number;
-  /** First and last day (inclusive, "YYYY-MM-DD", Asia/Bangkok) of the 26th-to-25th payroll period. */
+  /** First and last day (inclusive, "YYYY-MM-DD", Asia/Bangkok) of the calendar-month payroll period. */
   periodStart: string;
   periodEnd: string;
   rows: PayrollRow[];

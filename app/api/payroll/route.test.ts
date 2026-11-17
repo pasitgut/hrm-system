@@ -30,6 +30,22 @@ function request(query = "", token?: string) {
 }
 
 describe("GET /api/payroll", () => {
+  it("counts OT by calendar month: the 1st and last day are in, the neighbouring months are out", async () => {
+    const employee = await createEmployee({ baseSalary: 30000, weeklyHolidays: [] });
+    const token = await session(permissions, employee.id);
+    const approved = (startAt: string, endAt: string) =>
+      createOvertimeRequest({ employeeId: employee.id, statusCode: "approved", startAt: new Date(startAt), endAt: new Date(endAt) });
+    await approved("2026-08-26T11:00:00Z", "2026-08-26T12:00:00Z"); // 26 Aug 18:00 BKK: previous month
+    await approved("2026-08-31T17:30:00Z", "2026-08-31T18:30:00Z"); // 1 Sep 00:30 BKK: first day of the month
+    await approved("2026-09-30T11:00:00Z", "2026-09-30T13:00:00Z"); // 30 Sep 18:00 BKK: last day of the month
+    await approved("2026-10-01T11:00:00Z", "2026-10-01T12:00:00Z"); // 1 Oct 18:00 BKK: next month
+
+    const payload = await (await request("?year=2026&month=9", token)).json();
+    const row = payload.rows.find((item: { employeeId: string }) => item.employeeId === employee.id);
+
+    expect(row.weekdayOtHours + row.holidayOtHours).toBe(3);
+  });
+
   it("calculates salary and approved OT from internal data and exports a month-specific workbook", async () => {
     const payrollData = createDefaultEmployeePayrollData();
     payrollData.incomeItems = [{ code: "housing", label: "ค่าที่พัก", amount: 500, unit: "period", enabled: true }];
@@ -45,8 +61,8 @@ describe("GET /api/payroll", () => {
     expect(response.status).toBe(200);
     const payload = await response.json();
     const row = payload.rows.find((item: { employeeId: string }) => item.employeeId === employee.id);
-    expect(payload.periodStart).toBe("2026-08-26");
-    expect(payload.periodEnd).toBe("2026-09-25");
+    expect(payload.periodStart).toBe("2026-09-01");
+    expect(payload.periodEnd).toBe("2026-09-30");
     expect(row).toMatchObject({
       baseSalary: 30000,
       weekdayOtHours: 2,

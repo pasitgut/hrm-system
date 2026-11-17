@@ -51,7 +51,7 @@ export default function OTModule() {
         <div className="mb-3">
           <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ภาพรวมชั่วโมงทำงาน</p>
           <h2 id="ot-summary-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">สรุป OT</h2>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">ดูชั่วโมงและยอด OT ที่อนุมัติตามงวดเงินเดือน 26–25</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">ดูชั่วโมงและยอด OT ที่อนุมัติรายเดือน (วันที่ 1 ถึงวันสุดท้ายของเดือน)</p>
         </div>
         <OtSummaryView refreshKey={refreshKey} />
       </section>

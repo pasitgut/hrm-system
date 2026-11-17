@@ -71,20 +71,6 @@ export function formatMonthLabel(month) {
 }
 
 // "2026-09" + -1 -> "2026-08", "2026-01" + -1 -> "2025-12".
-const SHORT_THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-
-export function formatPayrollPeriodRange(period) {
-  const [year, month] = period.split("-").map(Number);
-  const previousYear = month === 1 ? year - 1 : year;
-  const previousMonth = month === 1 ? 12 : month - 1;
-  return "26 " + SHORT_THAI_MONTHS[previousMonth - 1] + " " + (previousYear + 543)
-    + " – 25 " + SHORT_THAI_MONTHS[month - 1] + " " + (year + 543);
-}
-
-export function formatPayrollPeriodLabel(period) {
-  return "งวด " + formatMonthLabel(period) + " · " + formatPayrollPeriodRange(period);
-}
-
 export function shiftMonth(month, delta) {
   const [year, monthNumber] = month.split("-").map(Number);
   const total = year * 12 + (monthNumber - 1) + delta;
