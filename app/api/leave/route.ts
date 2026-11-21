@@ -11,7 +11,7 @@ import {
   parseLeaveInput,
   toLeaveItemDto,
 } from "@/app/api/leave/_shared";
-import { checkLeaveQuota } from "@/app/api/leave/_quota";
+import { createLeave } from "@/lib/leave/commands";
 
 const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
@@ -85,43 +85,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     return jsonError(400, parsed.message);
   }
 
-  const result = await db.transaction(async (tx) => {
-    // Serialize quota checks for one employee so concurrent submissions
-    // cannot both spend the same remaining balance.
-    const [employee] = await tx
-      .select({ id: employees.id, startDate: employees.startDate })
-      .from(employees)
-      .where(eq(employees.id, user.employeeId))
-      .for("update");
-    if (!employee) {
-      return {
-        error: "บัญชีผู้ใช้ไม่ตรงกับข้อมูลพนักงาน กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่",
-        status: 409 as const,
-      };
-    }
-
-    const quotaFailure = await checkLeaveQuota({
-      tx,
-      employeeId: user.employeeId,
-      employeeStartDate: employee.startDate,
-      ...parsed.value,
-    });
-    if (quotaFailure) return quotaFailure;
-
-    const [inserted] = await tx
-      .insert(leaveRequests)
-      .values({
-        employeeId: user.employeeId,
-        leaveTypeCode: parsed.value.leaveTypeCode,
-        startOn: parsed.value.startOn,
-        endOn: parsed.value.endOn,
-        session: parsed.value.session,
-        reason: parsed.value.reason,
-        statusCode: "pending",
-      })
-      .returning({ id: leaveRequests.id });
-    return { id: inserted.id };
-  });
+  const result = await db.transaction((tx) => createLeave(tx, user, parsed.value));
 
   if ("error" in result) return jsonError(result.status, result.error);
   const item = await fetchLeaveItemById(result.id);
