@@ -1,22 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { ApiAuthError, withApiAuth } from "@/lib/auth/dal";
-import { SlipError } from "@/lib/salary-slips/service";
+import { SlipError } from "@/lib/salary-slips/stateless";
 
-export const idSchema = z.uuid();
-export const selectionSchema = z.object({ key: z.string().min(1), employeeId: z.uuid(), expectedRevision: z.number().int().min(0), replace: z.boolean() });
 export function salaryRoute<Args extends unknown[]>(handler: (request: NextRequest, ...args: Args) => Promise<Response>) {
   return withApiAuth(async (request: NextRequest, ...args: Args) => {
     // Reject cross-origin mutations; API authentication alone does not prevent CSRF.
     const origin = request.headers.get("origin");
-    if (request.method !== "GET" && origin && origin !== request.nextUrl.origin) return NextResponse.json({ error: "Origin ไม่ถูกต้อง" }, { status: 403 });
-    try { return await handler(request, ...args); }
-    catch (error) {
+    if (request.method !== "GET" && origin && origin !== request.nextUrl.origin) {
+      return NextResponse.json({ error: "Origin ไม่ถูกต้อง" }, { status: 403 });
+    }
+    try {
+      return await handler(request, ...args);
+    } catch (error) {
       if (error instanceof ApiAuthError) throw error;
       if (error instanceof SlipError) return NextResponse.json({ error: error.message }, { status: error.status });
-      if (error instanceof z.ZodError || error instanceof SyntaxError) return NextResponse.json({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, { status: 400 });
+      if (error instanceof z.ZodError || error instanceof SyntaxError) {
+        return NextResponse.json({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, { status: 400 });
+      }
       console.error("Salary slip request failed", error instanceof Error ? error.name : "Unknown error");
-      return NextResponse.json({ error: "ทำรายการไม่สำเร็จ ตรวจสอบฐานข้อมูลและไฟล์ในเครื่อง แล้วลองใหม่" }, { status: 500 });
+      return NextResponse.json({ error: "ทำรายการไม่สำเร็จ กรุณาตรวจสอบไฟล์แล้วลองใหม่" }, { status: 500 });
     }
   });
 }

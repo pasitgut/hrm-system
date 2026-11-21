@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { departments, employees, salarySlips } from "@/lib/db/schema";
 import { requireApiPermission } from "@/lib/auth/dal";
-import { SlipError } from "@/lib/salary-slips/service";
+import { SlipError } from "@/lib/salary-slips/stateless";
 import { salaryRoute } from "@/app/api/salary-slips/_shared";
 
 export const runtime = "nodejs";
