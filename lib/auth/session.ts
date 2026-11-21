@@ -6,12 +6,13 @@ import { normalizeRole, type Role } from "@/lib/auth/roles";
 export type { Role };
 
 export type SessionPayload = {
-  sub: string; // users.id
+  sub: string; // users.id or "system-admin"
   employeeId: string;
   email: string;
   role: Role;
   permissions?: string[];
   mustChangePassword?: boolean;
+  isSystemAdmin?: boolean;
 };
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME ?? "hrm_session";
@@ -50,6 +51,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       email: payload.email as string,
       role: normalizeRole(payload.role),
       ...(payload.mustChangePassword === true ? { mustChangePassword: true } : {}),
+      ...(payload.isSystemAdmin === true ? { isSystemAdmin: true } : {}),
     };
   } catch {
     return null;

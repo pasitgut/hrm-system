@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { getSystemAdminPermissions, isSystemAdminUserId } from "@/lib/auth/admin";
 import { hasAnyPermission, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
 import { normalizeRole, type Role } from "@/lib/auth/roles";
 import {
@@ -23,6 +24,12 @@ export const getCurrentUser = cache(async (): Promise<SessionPayload | null> => 
 // JWT, so role changes, revoking a grant, or deactivating an account take effect
 // on the next request. Returns null when the account is missing or inactive.
 async function findActiveAccount(userId: string): Promise<{ role: Role; permissions: string[] } | null> {
+  if (isSystemAdminUserId(userId)) {
+    return {
+      role: "hr",
+      permissions: getSystemAdminPermissions(),
+    };
+  }
   const [account] = await db
     .select({ role: users.role, permissions: users.permissions, isActive: users.isActive })
     .from(users)

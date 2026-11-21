@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { RiExternalLinkLine, RiImageLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { useHrmRole } from "@/components/hrm/HrmShell";
@@ -58,21 +59,30 @@ function RowActions({ item, canManage, onEdit, onCancel }) {
   );
 }
 
-function LeaveRow({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
+function LeaveRow({ item, showEmployeeColumn, canManage, onEdit, onCancel, onViewAttachment }) {
   return (
     <tr className="border-b border-border last:border-0 hover:bg-accent">
       <td className="whitespace-nowrap px-3 py-3 text-xs leading-5 text-foreground">{formatDateRange(item.startOn, item.endOn)}</td>
       <td className="whitespace-nowrap px-3 py-3 text-xs leading-5 text-muted-foreground">{item.leaveTypeName}</td>
       <td className="whitespace-nowrap px-3 py-3 text-xs leading-5 text-muted-foreground">{formatDays(item.days)}</td>
       {showEmployeeColumn ? <td className="px-3 py-3 text-xs leading-5 text-foreground">{item.employeeName}</td> : null}
-      <td className="min-w-48 px-3 py-3 text-xs leading-5 text-muted-foreground">{item.reason || "-"}</td>
+      <td className="min-w-48 px-3 py-3 text-xs leading-5 text-muted-foreground">
+        <div className="space-y-1">
+          <p>{item.reason || "-"}</p>
+          {item.attachmentUrl ? (
+            <Button type="button" size="xs" variant="ghost" leadingIcon={RiImageLine} onClick={() => onViewAttachment(item)}>
+              ดูรูปแนบ
+            </Button>
+          ) : null}
+        </div>
+      </td>
       <td className="px-3 py-3"><StatusChip item={item} /></td>
       {canManage ? <td className="px-3 py-3"><RowActions item={item} canManage={canManage} onEdit={onEdit} onCancel={onCancel} /></td> : null}
     </tr>
   );
 }
 
-function LeaveCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
+function LeaveCard({ item, showEmployeeColumn, canManage, onEdit, onCancel, onViewAttachment }) {
   return (
     <article className="rounded-xl border border-border bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
@@ -84,6 +94,13 @@ function LeaveCard({ item, showEmployeeColumn, canManage, onEdit, onCancel }) {
       </div>
       {showEmployeeColumn ? <p className="mt-2 text-xs font-medium leading-5 text-foreground">{item.employeeName}</p> : null}
       <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.reason || "-"}</p>
+      {item.attachmentUrl ? (
+        <div className="mt-2">
+          <Button type="button" size="xs" variant="ghost" leadingIcon={RiImageLine} onClick={() => onViewAttachment(item)}>
+            ดูรูปแนบ
+          </Button>
+        </div>
+      ) : null}
       {canManage && item.statusCode === "pending" ? (
         <div className="mt-3 flex justify-end gap-2 border-t border-border pt-3">
           <RowActions item={item} canManage={canManage} onEdit={onEdit} onCancel={onCancel} />
@@ -104,6 +121,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [previewItem, setPreviewItem] = useState(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
 
@@ -206,6 +224,7 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
                   canManage={canManageOwnRequests && isOwn(item)}
                   onEdit={onEdit}
                   onCancel={setCancelTarget}
+                  onViewAttachment={setPreviewItem}
                 />
               ))}
             </tbody>
@@ -220,12 +239,44 @@ export function LeaveListView({ items: itemsProp, loading: loadingProp = false, 
               canManage={canManageOwnRequests && isOwn(item)}
               onEdit={onEdit}
               onCancel={setCancelTarget}
+              onViewAttachment={setPreviewItem}
             />
           ))}
         </div>
         {!loading && filtered.length === 0 ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">ไม่พบคำขอลาในหมวดนี้</p> : null}
         {loading ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
       </section>
+      <HrmDialog
+        open={Boolean(previewItem?.attachmentUrl)}
+        onClose={() => setPreviewItem(null)}
+        title="หลักฐานประกอบการลา"
+        description={previewItem ? `${previewItem.employeeName} · ${previewItem.leaveTypeName} (${formatDateRange(previewItem.startOn, previewItem.endOn)})` : ""}
+        footer={
+          <>
+            {previewItem?.attachmentUrl ? (
+              <a
+                href={previewItem.attachmentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-primary hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                เปิดในแท็บใหม่ <RiExternalLinkLine className="size-3.5" aria-hidden="true" />
+              </a>
+            ) : null}
+            <Button variant="secondary" onClick={() => setPreviewItem(null)}>ปิด</Button>
+          </>
+        }
+      >
+        {previewItem?.attachmentUrl ? (
+          <div className="overflow-hidden rounded-lg border border-border bg-muted/20 p-2">
+            <img
+              src={previewItem.attachmentUrl}
+              alt="หลักฐานประกอบการลา"
+              className="mx-auto max-h-[60vh] w-auto rounded object-contain"
+            />
+          </div>
+        ) : null}
+      </HrmDialog>
       <HrmDialog
         open={Boolean(cancelTarget)}
         onClose={() => { setCancelTarget(null); setCancelError(""); }}

@@ -107,4 +107,42 @@ describe("HrmShell", () => {
     expect(screen.getByText(/บางบริการภายนอกยังไม่พร้อมใช้งาน/)).toBeInTheDocument();
     expect(screen.getByText(/Google Drive, Cloudinary/)).toBeInTheDocument();
   });
+
+  it("shows a database connection error banner when dbStatus is not ready", () => {
+    render(
+      <HrmShell
+        user={hrUser}
+        permissions={permissionsForRole("hr")}
+        dbStatus={{
+          ready: false,
+          migrated: false,
+          reason: "ipv6_direct_host",
+          message: "ไม่สามารถเชื่อมต่อโฮสต์ db.*.supabase.co จากสภาพแวดล้อม IPv4",
+          hint: "ให้ใช้ Supabase Pooler (pooler.supabase.com)",
+        }}
+      >
+        <div>content</div>
+      </HrmShell>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("db.*.supabase.co");
+    expect(screen.getByText("ให้ใช้ Supabase Pooler (pooler.supabase.com)")).toBeInTheDocument();
+  });
+
+  it("shows the data import link for HR/admin accounts and hides it for employees", () => {
+    const { rerender } = render(
+      <HrmShell user={employeeUser} permissions={permissionsForRole("employee")}>
+        <div>content</div>
+      </HrmShell>,
+    );
+    expect(screen.queryByRole("link", { name: "นำเข้าข้อมูล" })).not.toBeInTheDocument();
+
+    rerender(
+      <HrmShell user={hrUser} permissions={permissionsForRole("hr")}>
+        <div>content</div>
+      </HrmShell>,
+    );
+    const importLink = screen.getByRole("link", { name: "นำเข้าข้อมูล" });
+    expect(importLink).toHaveAttribute("href", "/settings/import");
+  });
 });

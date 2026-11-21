@@ -8,6 +8,7 @@ import {
   assetRequestAttachments,
   assetRequests,
   employees,
+  leaveRequests,
 } from "@/lib/db/schema";
 import {
   containsImgbbUrl,
@@ -271,6 +272,25 @@ export async function healEmployeeAvatarImgbbUrl<
   return { ...row, avatarUrl: migrated };
 }
 
+export async function healLeaveAttachmentImgbbUrl<
+  T extends { id: string; attachmentUrl: string | null },
+>(row: T): Promise<T> {
+  if (!isCloudinaryConfigured() || !isImgbbUrl(row.attachmentUrl)) {
+    return row;
+  }
+
+  const migrated = await migrateImgbbUrlToCloudinary(row.attachmentUrl!, "leave");
+  if (migrated === row.attachmentUrl) return row;
+
+  try {
+    await db.update(leaveRequests).set({ attachmentUrl: migrated }).where(eq(leaveRequests.id, row.id));
+  } catch (error) {
+    console.warn("Failed to persist healed ImgBB leave attachment URL", row.id, error instanceof Error ? error.message : error);
+  }
+
+  return { ...row, attachmentUrl: migrated };
+}
+
 type TableMigrationStats = {
   scannedRows: number;
   updatedRows: number;
@@ -300,6 +320,7 @@ export async function migrateAllImgbbRecordsInDb(
     asset_agreement_signers: { scannedRows: 0, updatedRows: 0, migratedUrls: 0, failedUrls: 0 },
     asset_agreements: { scannedRows: 0, updatedRows: 0, migratedUrls: 0, failedUrls: 0 },
     asset_agreement_templates: { scannedRows: 0, updatedRows: 0, migratedUrls: 0, failedUrls: 0 },
+    leave_requests: { scannedRows: 0, updatedRows: 0, migratedUrls: 0, failedUrls: 0 },
   };
 
   // 1. employees.avatarUrl
@@ -568,6 +589,30 @@ export async function migrateAllImgbbRecordsInDb(
         .where(eq(assetAgreementTemplates.id, row.id));
       tables.asset_agreement_templates.updatedRows += 1;
       tables.asset_agreement_templates.migratedUrls += migratedCount;
+    }
+  }
+
+  // 7. leave_requests.attachmentUrl
+  const leaveRows = await db
+    .select({ id: leaveRequests.id, attachmentUrl: leaveRequests.attachmentUrl })
+    .from(leaveRequests)
+    .where(ilike(leaveRequests.attachmentUrl, "%ibb.co%"));
+  for (const row of leaveRows) {
+    tables.leave_requests.scannedRows += 1;
+    if (!row.attachmentUrl || !isImgbbUrl(row.attachmentUrl)) continue;
+    if (dryRun) {
+      tables.leave_requests.updatedRows += 1;
+      tables.leave_requests.migratedUrls += 1;
+      continue;
+    }
+    const migrated = await migrateImgbbUrlToCloudinary(row.attachmentUrl, "leave");
+    if (migrated !== row.attachmentUrl) {
+      await db.update(leaveRequests).set({ attachmentUrl: migrated }).where(eq(leaveRequests.id, row.id));
+      tables.leave_requests.updatedRows += 1;
+      tables.leave_requests.migratedUrls += 1;
+    } else {
+      tables.leave_requests.failedUrls += 1;
+      failedUrls.add(row.attachmentUrl);
     }
   }
 

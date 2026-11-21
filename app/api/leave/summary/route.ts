@@ -151,7 +151,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   if (!canViewOwnLeaveRequests(user.permissions) && !canViewCompanyLeave(user.permissions)) {
     return jsonError(403, "Leave view permission required");
   }
-  const employeeIdParam = request.nextUrl.searchParams.get("employeeId");
+  const employeeIdParam = request.nextUrl.searchParams.get("employeeId")?.trim() || null;
   const yearParam = request.nextUrl.searchParams.get("year");
   const year = yearParam == null ? new Date().getFullYear() : Number(yearParam);
   if (yearParam != null && (!/^\d{4}$/.test(yearParam) || !Number.isInteger(year) || year < 1 || year > 9999)) {

@@ -126,6 +126,14 @@ export const employees = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    check("employees_code_length_valid", sql`char_length(${t.code}) = 4`),
+    check("employees_date_order", sql`${t.endDate} IS NULL OR ${t.endDate} >= ${t.startDate}`),
+    check("employees_base_salary_nonnegative", sql`${t.baseSalary} IS NULL OR ${t.baseSalary} >= 0`),
+    check("employees_work_hours_positive", sql`${t.workHoursPerDay} > 0 AND ${t.workHoursPerDay} <= 24`),
+    check(
+      "employees_ot_multipliers_valid",
+      sql`${t.otWeekdayMultiplier} > 0 AND ${t.otWeekdayMultiplier} <= 10 AND ${t.otHolidayMultiplier} > 0 AND ${t.otHolidayMultiplier} <= 10`,
+    ),
     check("employees_weekly_holidays_valid", sql`${t.weeklyHolidays} <@ ARRAY[0, 1, 2, 3, 4, 5, 6]::integer[]`),
     index("employees_department_id_idx").on(t.departmentId),
     index("employees_position_id_idx").on(t.positionId),
@@ -144,7 +152,7 @@ export const overtimeRequests = pgTable(
     employeeId: uuid("employee_id")
       .notNull()
       .references(() => employees.id),
-    // start_at must be earlier than end_at (enforced in application code).
+    // start_at must be earlier than end_at (enforced by check constraint and application code).
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     reason: text("reason").notNull(),
@@ -169,6 +177,7 @@ export const overtimeRequests = pgTable(
     index("overtime_requests_decided_by_employee_id_idx").on(t.decidedByEmployeeId),
     index("overtime_requests_source_line_day_status_idx").on(t.source, t.lineDayKey, t.statusCode),
     check("overtime_requests_source_valid", sql`${t.source} IN ('hrm', 'line_bot')`),
+    check("overtime_requests_time_order", sql`${t.endAt} > ${t.startAt}`),
   ],
 );
 
@@ -182,13 +191,12 @@ export const leaveRequests = pgTable(
     leaveTypeCode: varchar("leave_type_code", { length: 30 })
       .notNull()
       .references(() => leaveTypes.code),
-    // start_on <= end_on; sessions must be valid (enforced in application code).
+    // start_on <= end_on; half-day sessions ('am'/'pm') require start_on = end_on.
     startOn: date("start_on").notNull(),
     endOn: date("end_on").notNull(),
-    // "full" | "am" | "pm" — only meaningful when startOn === endOn (a single-day
-    // half-day request); app-validated, not a DB enum/check.
     session: varchar("session", { length: 10 }).notNull().default("full"),
     reason: text("reason"),
+    attachmentUrl: text("attachment_url"),
     statusCode: varchar("status_code", { length: 20 })
       .notNull()
       .default("pending")
@@ -206,6 +214,9 @@ export const leaveRequests = pgTable(
     index("leave_requests_status_code_start_on_idx").on(t.statusCode, t.startOn),
     index("leave_requests_leave_type_code_idx").on(t.leaveTypeCode),
     index("leave_requests_decided_by_employee_id_idx").on(t.decidedByEmployeeId),
+    check("leave_requests_date_order", sql`${t.endOn} >= ${t.startOn}`),
+    check("leave_requests_session_valid", sql`${t.session} IN ('full', 'am', 'pm')`),
+    check("leave_requests_half_day_single_day", sql`${t.session} = 'full' OR ${t.startOn} = ${t.endOn}`),
   ],
 );
 
@@ -283,7 +294,7 @@ export const assetRequests = pgTable(
     legacySheetId: text("legacy_sheet_id"),
     borrowerEmployeeId: uuid("borrower_employee_id").notNull().references(() => employees.id, { onDelete: "restrict" }),
     // Snapshots preserve the form and agreement as submitted if employee details later change.
-    borrowerEmployeeCode: varchar("borrower_employee_code", { length: 20 }).notNull(),
+    borrowerEmployeeCode: varchar("borrower_employee_code", { length: 4 }).notNull(),
     borrowerName: varchar("borrower_name", { length: 255 }).notNull(),
     borrowerDepartment: varchar("borrower_department", { length: 255 }).notNull().default(""),
     borrowerPosition: varchar("borrower_position", { length: 255 }).notNull().default(""),
@@ -316,6 +327,7 @@ export const assetRequests = pgTable(
     uniqueIndex("asset_requests_legacy_sheet_id_unique").on(t.legacySheetId),
     check("asset_requests_date_order", sql`${t.toDate} IS NULL OR ${t.toDate} >= ${t.fromDate}`),
     check("asset_requests_version_positive", sql`${t.version} > 0`),
+    check("asset_requests_borrower_code_length_valid", sql`char_length(${t.borrowerEmployeeCode}) = 4`),
   ],
 );
 
@@ -386,12 +398,15 @@ export const assetAgreements = pgTable("asset_agreements", {
   status: assetAgreementStatusEnum("status").notNull(),
   createdByEmployeeId: uuid("created_by_employee_id").references(() => employees.id, { onDelete: "set null" }),
   createdByName: varchar("created_by_name", { length: 255 }).notNull().default(""),
-  createdByEmployeeCode: varchar("created_by_employee_code", { length: 20 }).notNull().default(""),
+  createdByEmployeeCode: varchar("created_by_employee_code", { length: 4 }).notNull().default(""),
   returnCondition: assetReturnConditionEnum("return_condition"),
   documentDate: date("document_date").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
-}, (t) => [check("asset_agreements_version_positive", sql`${t.version} > 0`)]);
+}, (t) => [
+  check("asset_agreements_version_positive", sql`${t.version} > 0`),
+  check("asset_agreements_creator_code_length_valid", sql`${t.createdByEmployeeCode} = '' OR char_length(${t.createdByEmployeeCode}) = 4`),
+]);
 
 export const assetAgreementSigners = pgTable(
   "asset_agreement_signers",
@@ -526,7 +541,7 @@ export const workTrackingRequests = pgTable(
     statusSource: varchar("status_source", { length: 20 }).notNull().default("default"),
     checkerRequestStatus: varchar("checker_request_status", { length: 20 }),
     latestEmployeeId: uuid("latest_employee_id").references(() => employees.id, { onDelete: "set null" }),
-    latestEmployeeCode: varchar("latest_employee_code", { length: 20 }).notNull(),
+    latestEmployeeCode: varchar("latest_employee_code", { length: 4 }).notNull(),
     latestEmployeeName: varchar("latest_employee_name", { length: 255 }).notNull(),
     latestStartTime: varchar("latest_start_time", { length: 10 }).notNull(),
     latestEndTime: varchar("latest_end_time", { length: 10 }).notNull(),
@@ -542,6 +557,7 @@ export const workTrackingRequests = pgTable(
     index("work_tracking_requests_work_date_idx").on(t.workDate),
     check("work_tracking_requests_latest_status_valid", sql`${t.latestStatus} IN ('in_progress', 'completed', 'delivered')`),
     check("work_tracking_requests_status_source_valid", sql`${t.statusSource} IN ('checker', 'line', 'tracking', 'default', 'hrm')`),
+    check("work_tracking_requests_employee_code_length_valid", sql`${t.latestEmployeeCode} = '' OR char_length(${t.latestEmployeeCode}) = 4`),
   ],
 );
 
@@ -555,7 +571,7 @@ export const workTrackingActivities = pgTable(
     workTrackingRecordId: uuid("work_tracking_record_id").references(() => workTrackingRecords.id, { onDelete: "set null" }),
     overtimeRequestId: uuid("overtime_request_id").references(() => overtimeRequests.id, { onDelete: "set null" }),
     employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
-    employeeCode: varchar("employee_code", { length: 20 }).notNull(),
+    employeeCode: varchar("employee_code", { length: 4 }).notNull(),
     employeeName: varchar("employee_name", { length: 255 }).notNull(),
     eventDate: date("event_date").notNull(),
     workDate: date("work_date").notNull(),
@@ -580,5 +596,6 @@ export const workTrackingActivities = pgTable(
     index("work_tracking_activities_record_id_idx").on(t.workTrackingRecordId),
     check("work_tracking_activities_status_valid", sql`${t.status} IN ('in_progress', 'completed', 'delivered')`),
     check("work_tracking_activities_status_source_valid", sql`${t.statusSource} IN ('checker', 'line', 'tracking', 'default', 'hrm')`),
+    check("work_tracking_activities_employee_code_length_valid", sql`${t.employeeCode} = '' OR char_length(${t.employeeCode}) = 4`),
   ],
 );

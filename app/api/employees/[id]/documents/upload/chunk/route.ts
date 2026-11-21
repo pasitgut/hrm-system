@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employeeDocuments } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import { canUploadEmployeeDocuments } from "@/lib/auth/permissions";
 import { isUuid, validateEmployeeDocumentHeader } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
@@ -113,8 +114,8 @@ export const PUT = withApiAuth(async (request: NextRequest, context: RouteContex
         mimeType: token.mimeType,
         fileSize: token.fileSize,
         driveFileId: result.driveFileId,
-        sharedWithUserIds: [user.sub],
-        uploadedByUserId: user.sub,
+        sharedWithUserIds: isSystemAdminSession(user) ? [] : [user.sub],
+        uploadedByUserId: isSystemAdminSession(user) ? null : user.sub,
       })
       .returning({
         id: employeeDocuments.id,

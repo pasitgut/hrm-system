@@ -19,6 +19,30 @@ export function useHrmIntegrations() {
   return useContext(IntegrationContext);
 }
 
+export function DatabaseStatusBanner({ dbStatus, className }) {
+  if (!dbStatus || dbStatus.ready !== false) return null;
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "mb-5 flex items-start gap-3 rounded-lg border border-status-danger/30 bg-status-danger/10 px-4 py-3 text-sm text-foreground",
+        className,
+      )}
+    >
+      <RiErrorWarningLine className="mt-0.5 size-4 shrink-0 text-status-danger" aria-hidden="true" />
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="font-medium leading-5 text-status-danger">
+          {dbStatus.message || "เชื่อมต่อฐานข้อมูลไม่สำเร็จ"}
+        </p>
+        {dbStatus.hint ? (
+          <p className="text-xs leading-5 text-muted-foreground">{dbStatus.hint}</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function GlobalIntegrationBanner({ integrations, className }) {
   const [dismissed, setDismissed] = useState(false);
   const unconfigured = integrations?.unconfigured ?? [];

@@ -397,6 +397,26 @@ export default function ApprovalModule() {
               <div><dt className="text-xs text-muted-foreground">ส่งคำขอเมื่อ</dt><dd className="mt-1 text-sm text-foreground">{formatSubmittedAt(selected.submittedAt)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">สถานะ</dt><dd className="mt-1"><StatusBadge status={selected.statusCode}>{selected.statusName}</StatusBadge></dd></div>
             </dl>
+            {selected.attachmentUrl ? (
+              <div className="mt-4 border-t border-border pt-3">
+                <h4 className="text-xs font-semibold text-foreground">หลักฐานแนบ</h4>
+                <div className="mt-2 flex items-center gap-3 rounded-lg border border-border bg-muted/20 p-2.5">
+                  <img
+                    src={selected.attachmentUrl}
+                    alt="หลักฐานประกอบคำขอ"
+                    className="size-16 shrink-0 rounded-md border border-border object-cover"
+                  />
+                  <a
+                    href={selected.attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-10 items-center text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    เปิดดูรูปขนาดเต็ม
+                  </a>
+                </div>
+              </div>
+            ) : null}
             {selected.assetItems?.length ? <div className="mt-4 border-t border-border pt-3">
               <h4 className="text-xs font-semibold text-foreground">รายการทรัพย์สิน</h4>
               <ul className="mt-2 grid gap-1 text-sm text-muted-foreground sm:grid-cols-2">

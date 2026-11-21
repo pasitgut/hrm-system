@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RiDownload2Line, RiFileExcel2Line, RiFilePdf2Line, RiUpload2Line } from "@remixicon/react";
-import { PageHeader } from "@/components/hrm/PageHeader";
+import { useMemo, useRef, useState } from "react";
+import {
+  RiFileExcel2Line,
+  RiFilePdf2Line,
+  RiFileSearchLine,
+  RiInformationLine,
+  RiUpload2Line,
+} from "@remixicon/react";
+import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,26 +17,75 @@ import { hasPermission } from "@/lib/auth/permissions";
 
 const SAFE_BATCH_BYTES = 3.5 * 1024 * 1024;
 const MAX_SINGLE_WORKBOOK_BYTES = 4 * 1024 * 1024;
+const PREVIEW_ROW_LIMIT = 50;
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => ({
   value: String(index + 1),
   label: new Intl.DateTimeFormat("th-TH", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, index, 1))),
 }));
-const formatMoney = (value) => value == null ? "—" : `${Number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`;
-const formatHours = (value) => Number(value || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB"];
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  return `${(bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+}
+
+function formatBahtFromSatang(satang) {
+  if (typeof satang !== "number" || !Number.isFinite(satang)) return "—";
+  return `${(satang / 100).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`;
+}
+
+function buildWorkbookBatches(files) {
+  const oversized = files.find((file) => file.size > MAX_SINGLE_WORKBOOK_BYTES);
+  if (oversized) {
+    throw new Error(`ไฟล์ ${oversized.name} มีขนาดเกิน 4 MB กรุณาแบ่งแยกไฟล์รายเดือนก่อนอัปโหลด`);
+  }
+
+  const batches = [];
+  let currentBatch = [];
+  let currentBytes = 0;
+  for (const file of files) {
+    if (currentBatch.length > 0 && currentBytes + file.size > SAFE_BATCH_BYTES) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentBytes = 0;
+    }
+    currentBatch.push(file);
+    currentBytes += file.size;
+  }
+  if (currentBatch.length > 0) batches.push(currentBatch);
+  return batches;
+}
+
+async function parseFilesInBatches(files, onProgress) {
+  const batches = buildWorkbookBatches(files);
+  const combinedRows = [];
+  for (let index = 0; index < batches.length; index += 1) {
+    onProgress?.(`กำลังอ่านไฟล์ชุดที่ ${index + 1}/${batches.length}…`);
+    const batchForm = new FormData();
+    for (const file of batches[index]) batchForm.append("files", file);
+    const parseResponse = await fetch("/api/salary-slips/parse", {
+      method: "POST",
+      body: batchForm,
+    });
+    const parsePayload = await parseResponse.json().catch(() => ({}));
+    if (!parseResponse.ok) {
+      throw new Error(parsePayload.error || "อ่านไฟล์ Excel ไม่สำเร็จ");
+    }
+    combinedRows.push(...(parsePayload.rows ?? []));
+  }
+  return combinedRows;
+}
 
 export default function PayrollModule({ permissions = [] }) {
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1));
-  const [payroll, setPayroll] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const [reloadCount, setReloadCount] = useState(0);
   const [slipFiles, setSlipFiles] = useState([]);
   const [slipScope, setSlipScope] = useState("selected");
+  const [previewRows, setPreviewRows] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
   const [slipExporting, setSlipExporting] = useState("");
   const [slipProgress, setSlipProgress] = useState("");
   const [slipError, setSlipError] = useState("");
@@ -38,6 +94,33 @@ export default function PayrollModule({ permissions = [] }) {
   const slipInputRef = useRef(null);
   const canExport = hasPermission(permissions, "salary_slips.export");
   const years = useMemo(() => Array.from({ length: 8 }, (_, index) => now.getFullYear() - index), []);
+
+  function resetFeedback() {
+    setSlipError("");
+    setSlipNotice("");
+    setSlipMissing(null);
+  }
+
+  async function previewSalarySlips() {
+    if (!slipFiles.length) {
+      setSlipError("กรุณาเลือกไฟล์ Excel (.xlsx) อย่างน้อย 1 ไฟล์");
+      return;
+    }
+    setPreviewing(true);
+    setSlipProgress("");
+    resetFeedback();
+    try {
+      const rows = await parseFilesInBatches(slipFiles, setSlipProgress);
+      setPreviewRows(rows);
+      setSlipNotice(`ตรวจสอบไฟล์สำเร็จ: อ่านข้อมูลทั้งหมด ${rows.length} แถว`);
+    } catch (parseError) {
+      setPreviewRows(null);
+      setSlipError(parseError instanceof Error ? parseError.message : "อ่านไฟล์ Excel ไม่สำเร็จ");
+    } finally {
+      setPreviewing(false);
+      setSlipProgress("");
+    }
+  }
 
   async function generateSalarySlips(format, acknowledgeMissing = false) {
     if (!slipFiles.length) {
@@ -54,7 +137,20 @@ export default function PayrollModule({ permissions = [] }) {
       const totalBytes = slipFiles.reduce((sum, file) => sum + file.size, 0);
       let response;
 
-      if (totalBytes <= SAFE_BATCH_BYTES) {
+      if (previewRows && previewRows.length > 0) {
+        setSlipProgress("กำลังสร้างไฟล์สลิป…");
+        response = await fetch("/api/salary-slips/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            format,
+            year: Number(year),
+            ...(slipScope === "selected" ? { month: Number(month) } : {}),
+            acknowledgeMissing,
+            rows: previewRows,
+          }),
+        });
+      } else if (totalBytes <= SAFE_BATCH_BYTES) {
         const form = new FormData();
         for (const file of slipFiles) form.append("files", file);
         form.append("format", format);
@@ -67,41 +163,8 @@ export default function PayrollModule({ permissions = [] }) {
           body: form,
         });
       } else {
-        const oversized = slipFiles.find((file) => file.size > MAX_SINGLE_WORKBOOK_BYTES);
-        if (oversized) {
-          throw new Error(`ไฟล์ ${oversized.name} มีขนาดเกิน 4 MB กรุณาแบ่งแยกไฟล์รายเดือนก่อนอัปโหลด`);
-        }
-
-        const batches = [];
-        let currentBatch = [];
-        let currentBatchBytes = 0;
-        for (const file of slipFiles) {
-          if (currentBatch.length > 0 && currentBatchBytes + file.size > SAFE_BATCH_BYTES) {
-            batches.push(currentBatch);
-            currentBatch = [];
-            currentBatchBytes = 0;
-          }
-          currentBatch.push(file);
-          currentBatchBytes += file.size;
-        }
-        if (currentBatch.length > 0) batches.push(currentBatch);
-
-        const combinedRows = [];
-        for (let index = 0; index < batches.length; index += 1) {
-          setSlipProgress(`กำลังอ่านไฟล์ชุดที่ ${index + 1}/${batches.length}…`);
-          const batchForm = new FormData();
-          for (const file of batches[index]) batchForm.append("files", file);
-          const parseResponse = await fetch("/api/salary-slips/parse", {
-            method: "POST",
-            body: batchForm,
-          });
-          const parsePayload = await parseResponse.json().catch(() => ({}));
-          if (!parseResponse.ok) {
-            throw new Error(parsePayload.error || "อ่านไฟล์ Excel ไม่สำเร็จ");
-          }
-          combinedRows.push(...(parsePayload.rows ?? []));
-        }
-
+        const combinedRows = await parseFilesInBatches(slipFiles, setSlipProgress);
+        setPreviewRows(combinedRows);
         setSlipProgress("กำลังสร้างไฟล์สลิป…");
         response = await fetch("/api/salary-slips/export", {
           method: "POST",
@@ -137,154 +200,67 @@ export default function PayrollModule({ permissions = [] }) {
       setSlipMissing(null);
       setSlipNotice(`สร้างไฟล์สลิปเงินเดือน (.${format}) และเริ่มดาวน์โหลดแล้ว`);
     } catch (exportError) {
-      setSlipError(exportError.message);
+      setSlipError(exportError instanceof Error ? exportError.message : "ออกสลิปเงินเดือนไม่สำเร็จ");
     } finally {
       setSlipExporting("");
       setSlipProgress("");
     }
   }
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true); setError(""); setNotice("");
-      setPayroll(null);
-      try {
-        const response = await fetch(`/api/payroll?year=${year}&month=${month}`, { cache: "no-store" });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "โหลดข้อมูลเงินเดือนไม่สำเร็จ");
-        if (!cancelled) setPayroll(payload);
-      } catch (loadError) {
-        if (!cancelled) setError(loadError.message);
-      } finally { if (!cancelled) setLoading(false); }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [year, month, reloadCount]);
+  const previewSummary = useMemo(() => {
+    if (!previewRows) return null;
+    const valid = previewRows.filter((row) => row.data && row.errors.length === 0);
+    const employeeCodes = new Set(valid.map((row) => row.data.code));
+    const monthsFound = [...new Set(valid.map((row) => `${row.data.month}/${row.data.year + 543}`))];
+    const issueCount = previewRows.filter((row) => row.errors.length > 0 || row.warnings.length > 0).length;
+    return {
+      totalRows: previewRows.length,
+      validRows: valid.length,
+      employeeCount: employeeCodes.size,
+      monthsFound,
+      issueCount,
+      sampleRows: previewRows.slice(0, PREVIEW_ROW_LIMIT),
+    };
+  }, [previewRows]);
 
-  const rows = payroll?.rows ?? [];
-  const unreadyCount = rows.filter((row) => row.netPay == null).length;
-  const readyRows = rows.filter((row) => row.netPay != null);
-  const totals = readyRows.reduce((summary, row) => ({
-    income: summary.income + row.incomeTotal,
-    deduction: summary.deduction + row.deductionTotal,
-    net: summary.net + row.netPay,
-    otHours: summary.otHours + row.weekdayOtHours + row.holidayOtHours,
-  }), { income: 0, deduction: 0, net: 0, otHours: 0 });
+  const busy = previewing || Boolean(slipExporting);
 
-  async function exportExcel() {
-    setExporting(true); setError(""); setNotice("");
-    try {
-      const response = await fetch(`/api/payroll?year=${year}&month=${month}&format=xlsx`, { cache: "no-store" });
-      if (!response.ok) {
-        const payload = await response.json();
-        throw new Error(payload.error || "สร้างไฟล์ Excel ไม่สำเร็จ");
-      }
-      const file = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = file;
-      anchor.download = `payroll-${year}-${String(month).padStart(2, "0")}.xlsx`;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(file), 1000);
-      setNotice("สร้างไฟล์ Excel และเริ่มดาวน์โหลดแล้ว");
-    } catch (exportError) { setError(exportError.message); }
-    finally { setExporting(false); }
-  }
+  return (
+    <div className="hrm-page space-y-5">
+      <PageHeader
+        eyebrow="ข้อมูล · สลิปเงินเดือน"
+        title="สลิปเงินเดือน"
+        description="สร้างและส่งออกสลิปเงินเดือน (.pdf / .xlsx) จากไฟล์ Excel ที่นำเข้า พร้อมคำนวณยอดสะสมรายปี (YTD) อัตโนมัติ"
+      />
 
-  return <div className="hrm-page space-y-5">
-    <PageHeader
-      eyebrow="ข้อมูล · Payroll"
-      title="เงินเดือน"
-      description="คำนวณจากเงินเดือนและรายการประจำในโปรไฟล์พนักงาน พร้อม OT ที่อนุมัติแล้ว"
-      actions={canExport ? <Button leadingIcon={RiDownload2Line} disabled={loading || exporting || rows.length === 0 || unreadyCount > 0} onClick={exportExcel}>{exporting ? "กำลังสร้าง Excel…" : "ส่งออก Excel"}</Button> : null}
-    />
-
-    <section aria-label="เลือกงวดเงินเดือน" className="flex flex-wrap items-end gap-3">
-      <div className="grid w-full gap-1.5 sm:w-44">
-        <label htmlFor="payroll-month" className="text-sm font-medium text-foreground">เดือนที่จ่าย</label>
-        <Select id="payroll-month" selectedKey={month} onSelectionChange={(value) => setMonth(String(value))}>
-          {MONTHS.map((item) => <SelectItem id={item.value} key={item.value}>{item.label}</SelectItem>)}
-        </Select>
+      <div className="flex items-start gap-2.5 rounded-md border border-border bg-muted/40 px-4 py-3 text-xs leading-5 text-muted-foreground">
+        <RiInformationLine className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+        <p>
+          โหมดปัจจุบันใช้<strong>ไฟล์ Excel เงินเดือนที่อัปโหลด</strong>เป็นแหล่งข้อมูลหลักในการออกสลิปโดยไม่บันทึกข้อมูลลงฐานข้อมูล ส่วนการเชื่อมกับระบบคำนวณเงินเดือนภายใน HRM ถูกวางแผนไว้ในเอกสารออกแบบสำหรับเฟสถัดไป
+        </p>
       </div>
-      <div className="grid w-full gap-1.5 sm:w-36">
-        <label htmlFor="payroll-year" className="text-sm font-medium text-foreground">ปี พ.ศ.</label>
-        <Select id="payroll-year" selectedKey={year} onSelectionChange={(value) => setYear(String(value))}>
-          {years.map((value) => <SelectItem id={String(value)} key={value}>{value + 543}</SelectItem>)}
-        </Select>
-      </div>
-      {payroll ? <p className="pb-2 text-xs text-muted-foreground">รอบคำนวณ {payroll.periodStart} ถึง {payroll.periodEnd}</p> : null}
-    </section>
 
-    {error ? <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-status-danger"><span>{error}</span><Button variant="outline" onClick={() => setReloadCount((value) => value + 1)}>โหลดใหม่</Button></div> : null}
-    {notice ? <p role="status" className="text-sm text-status-success">{notice}</p> : null}
+      <section aria-label="ออกสลิปเงินเดือนจากไฟล์ Excel" className="space-y-4 rounded-lg border border-border bg-card p-5">
+        <SectionHeading
+          title="อัปโหลดไฟล์ Excel เงินเดือน (.xlsx)"
+          description="เลือกไฟล์รายเดือนตั้งแต่เดือนมกราคมจนถึงเดือนที่ต้องการออกสลิป ระบบจะรวมยอดเงินได้ ภาษี ประกันสังคม และกองทุนสำรองเลี้ยงชีพสะสมตั้งแต่ต้นปีให้อัตโนมัติ"
+        />
 
-    <section aria-label="สรุปยอดเงินเดือน" className="flex flex-wrap gap-x-6 gap-y-2 border-y border-border py-3 text-sm">
-      <p><span className="text-muted-foreground">พนักงาน</span> <strong className="tabular-nums">{loading ? "…" : rows.length}</strong></p>
-      <p><span className="text-muted-foreground">รายได้</span> <strong className="tabular-nums">{loading ? "…" : formatMoney(unreadyCount ? null : totals.income)}</strong></p>
-      <p><span className="text-muted-foreground">รายหัก</span> <strong className="tabular-nums">{loading ? "…" : formatMoney(unreadyCount ? null : totals.deduction)}</strong></p>
-      <p><span className="text-muted-foreground">รับสุทธิ</span> <strong className="tabular-nums">{loading ? "…" : formatMoney(unreadyCount ? null : totals.net)}</strong></p>
-      <p><span className="text-muted-foreground">OT อนุมัติรวม</span> <strong className="tabular-nums">{loading ? "…" : `${formatHours(totals.otHours)} ชม.`}</strong></p>
-    </section>
-
-    {unreadyCount > 0 ? <div role="alert" className="border-l-2 border-status-warning pl-3 text-sm text-foreground">
-      ส่งออกไม่ได้จนกว่าจะตรวจรายการข้อมูลที่ยังคำนวณไม่ได้ในตาราง เช่น เงินเดือน หรือรายการคิดตามวัน/ชั่วโมงที่ยังไม่มีปริมาณ ({unreadyCount} คน)
-    </div> : null}
-    <p className="text-xs leading-5 text-muted-foreground">
-      OT คิดจากรายการที่อนุมัติในเดือนที่เลือก (วันที่ 1 ถึงวันสุดท้ายของเดือน) โดยใช้เงินเดือน ÷ 30 ÷ ชั่วโมงทำงานต่อวัน × เรทรายบุคคล. วันลาที่อนุมัติแสดงเป็นจำนวนคำขอและยังไม่หักเงินอัตโนมัติ; รายการประจำที่ใช้คำนวณต้องตั้งหน่วยเป็น “งวด” ในโปรไฟล์พนักงาน.
-    </p>
-
-    <div className="overflow-x-auto rounded-md border border-border" aria-label="ตารางคำนวณเงินเดือน">
-      <Table>
-        <TableHeader><TableRow>
-          <TableHead>พนักงาน</TableHead><TableHead>แผนก</TableHead><TableHead className="text-right">เงินเดือน</TableHead>
-          <TableHead className="text-right">OT วันธรรมดา</TableHead><TableHead className="text-right">OT วันหยุด</TableHead>
-          <TableHead className="text-right">OT รออนุมัติ</TableHead><TableHead className="text-right">ค่าล่วงเวลา</TableHead><TableHead className="text-right">คำขอลาที่อนุมัติ</TableHead>
-          <TableHead className="text-right">รายได้</TableHead><TableHead className="text-right">รายหัก</TableHead><TableHead className="text-right">รับสุทธิ</TableHead>
-        </TableRow></TableHeader>
-        <TableBody>
-          {loading ? <TableRow><TableCell colSpan={11} role="status">กำลังคำนวณเงินเดือน…</TableCell></TableRow>
-            : rows.length ? rows.map((row) => <TableRow key={row.employeeId}>
-              <TableCell><span className="font-medium">{row.name}</span><span className="block text-xs text-muted-foreground">{row.code}</span>
-                {row.baseSalary == null ? <span className="mt-1 block text-xs text-status-danger">ยังไม่กำหนดเงินเดือน</span> : null}
-                {row.workHoursPerDay <= 0 ? <span className="mt-1 block text-xs text-status-danger">ยังไม่กำหนดชั่วโมงทำงานต่อวัน</span> : null}
-                {row.unpricedItems.length > 0 ? <span className="mt-1 block text-xs text-status-warning">มีรายการที่ยังคำนวณไม่ได้: {row.unpricedItems.map((item) => `${item.label} (${item.unit})`).join(", ")}</span> : null}
-                <details className="mt-1 text-xs">
-                  <summary className="flex min-h-10 cursor-pointer items-center text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">ดูรายการรายรับและรายหัก</summary>
-                  <ul className="space-y-1 pb-2 text-muted-foreground">
-                    <li>บัญชีรับเงิน · {row.bankName || "ไม่ระบุธนาคาร"} · {row.bankAccount || "ไม่ระบุเลขบัญชี"}</li>
-                    {row.incomes.map((item, index) => <li key={`income-${index}`}>รายได้ · {item.label}: {formatMoney(item.amount)}</li>)}
-                    {row.deductions.map((item, index) => <li key={`deduction-${index}`}>รายหัก · {item.label}: {formatMoney(item.amount)}</li>)}
-                    {row.unpricedItems.map((item, index) => <li key={`unpriced-${index}`} className="text-status-warning">ยังไม่รวม · {item.label}: {formatMoney(item.amount)} / {item.unit}</li>)}
-                    {row.approvedLeaves.map((item, index) => <li key={`leave-${index}`}>ลาอนุมัติ · {item.type} · {item.startOn}{item.endOn !== item.startOn ? ` ถึง ${item.endOn}` : ""} · {item.session === "full" ? "เต็มวัน" : item.session === "am" ? "ครึ่งวันเช้า" : "ครึ่งวันบ่าย"}</li>)}
-                    {!row.incomes.length && !row.deductions.length && !row.unpricedItems.length && !row.approvedLeaves.length ? <li>ไม่มีรายการรายรับ รายหัก หรือวันลาที่อนุมัติในรอบนี้</li> : null}
-                  </ul>
-                </details>
-              </TableCell>
-              <TableCell>{row.department || "—"}</TableCell><TableCell className="text-right tabular-nums">{formatMoney(row.baseSalary)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatHours(row.weekdayOtHours)} ชม.</TableCell>
-              <TableCell className="text-right tabular-nums">{formatHours(row.holidayOtHours)} ชม.</TableCell>
-              <TableCell className="text-right tabular-nums">{formatHours(row.pendingOtHours)} ชม. ({row.pendingOtRequests} คำขอ)</TableCell>
-              <TableCell className="text-right tabular-nums">{formatMoney(row.otAmount)}</TableCell>
-              <TableCell className="text-right tabular-nums">{row.approvedLeaveRequests}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatMoney(row.incomeTotal)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatMoney(row.deductionTotal)}</TableCell>
-              <TableCell className="text-right font-medium tabular-nums">{formatMoney(row.netPay)}</TableCell>
-            </TableRow>)
-            : <TableRow><TableCell colSpan={11}><div className="py-10 text-center"><p className="font-medium">ไม่พบพนักงานในรอบที่เลือก</p><p className="mt-1 text-sm text-muted-foreground">พนักงานจะแสดงเมื่อวันเริ่มงานและวันสิ้นสุดงานครอบคลุมรอบเงินเดือนนี้</p></div></TableCell></TableRow>}
-        </TableBody>
-      </Table>
-    </div>
-    {canExport ? (
-      <section aria-label="ออกสลิปเงินเดือนจากไฟล์ Excel" className="space-y-3 rounded-md border border-border bg-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">ออกสลิปเงินเดือน (.pdf / .xlsx)</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              อัปโหลดไฟล์ Excel เงินเดือนตั้งแต่ต้นปีจนถึงเดือนที่เลือก ระบบจะคำนวณยอดสะสมรายปีและสร้างไฟล์สลิปให้ดาวน์โหลดทันทีโดยไม่บันทึกลงฐานข้อมูล
-            </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="grid w-full gap-1.5 sm:w-44">
+            <label htmlFor="payroll-month" className="text-sm font-medium text-foreground">เดือนที่จ่าย</label>
+            <Select id="payroll-month" selectedKey={month} onSelectionChange={(value) => { setMonth(String(value)); setSlipMissing(null); }}>
+              {MONTHS.map((item) => <SelectItem id={item.value} key={item.value}>{item.label}</SelectItem>)}
+            </Select>
           </div>
-          <div className="w-full sm:w-52">
-            <label htmlFor="slip-scope" className="sr-only">ช่วงเดือนที่ต้องการออกสลิป</label>
+          <div className="grid w-full gap-1.5 sm:w-36">
+            <label htmlFor="payroll-year" className="text-sm font-medium text-foreground">ปี พ.ศ.</label>
+            <Select id="payroll-year" selectedKey={year} onSelectionChange={(value) => { setYear(String(value)); setSlipMissing(null); }}>
+              {years.map((value) => <SelectItem id={String(value)} key={value}>{value + 543}</SelectItem>)}
+            </Select>
+          </div>
+          <div className="grid w-full gap-1.5 sm:w-56">
+            <label htmlFor="slip-scope" className="text-sm font-medium text-foreground">ขอบเขตสลิปที่ออก</label>
             <Select id="slip-scope" selectedKey={slipScope} onSelectionChange={(value) => { setSlipScope(String(value)); setSlipMissing(null); }}>
               <SelectItem id="selected">เฉพาะเดือนที่เลือก ({MONTHS[Number(month) - 1]?.label})</SelectItem>
               <SelectItem id="all">ทุกเดือนที่มีในไฟล์ (ปี {Number(year) + 543})</SelectItem>
@@ -292,57 +268,71 @@ export default function PayrollModule({ permissions = [] }) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 pt-1">
           <input
             ref={slipInputRef}
             type="file"
             accept=".xlsx"
             multiple
-            className="hidden"
+            className="sr-only"
+            disabled={busy}
             onChange={(event) => {
               const selected = Array.from(event.target.files ?? []);
               setSlipFiles(selected);
-              setSlipError("");
-              setSlipNotice("");
-              setSlipMissing(null);
+              setPreviewRows(null);
+              resetFeedback();
             }}
           />
           <Button
             type="button"
             variant="outline"
             leadingIcon={RiUpload2Line}
-            disabled={Boolean(slipExporting)}
+            disabled={busy}
             onClick={() => slipInputRef.current?.click()}
           >
             {slipFiles.length ? `เลือกไฟล์แล้ว ${slipFiles.length} ไฟล์` : "เลือกไฟล์ .xlsx"}
           </Button>
-          <Button
-            type="button"
-            leadingIcon={RiFilePdf2Line}
-            disabled={!slipFiles.length || Boolean(slipExporting)}
-            onClick={() => generateSalarySlips("pdf")}
-          >
-            {slipExporting === "pdf" ? "กำลังสร้าง PDF…" : "ออกสลิป PDF"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            leadingIcon={RiFileExcel2Line}
-            disabled={!slipFiles.length || Boolean(slipExporting)}
-            onClick={() => generateSalarySlips("xlsx")}
-          >
-            {slipExporting === "xlsx" ? "กำลังสร้าง Excel…" : "ออกสลิป Excel"}
-          </Button>
+          {canExport ? (
+            <Button
+              type="button"
+              variant="outline"
+              leadingIcon={RiFileSearchLine}
+              disabled={!slipFiles.length || busy}
+              onClick={previewSalarySlips}
+            >
+              {previewing ? "กำลังตรวจสอบไฟล์…" : "ตรวจสอบไฟล์ก่อนออกสลิป"}
+            </Button>
+          ) : null}
+          {canExport ? (
+            <>
+              <Button
+                type="button"
+                leadingIcon={RiFilePdf2Line}
+                disabled={!slipFiles.length || busy}
+                onClick={() => generateSalarySlips("pdf")}
+              >
+                {slipExporting === "pdf" ? "กำลังสร้าง PDF…" : "ออกสลิป PDF"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                leadingIcon={RiFileExcel2Line}
+                disabled={!slipFiles.length || busy}
+                onClick={() => generateSalarySlips("xlsx")}
+              >
+                {slipExporting === "xlsx" ? "กำลังสร้าง Excel…" : "ออกสลิป Excel"}
+              </Button>
+            </>
+          ) : null}
           {slipFiles.length > 0 ? (
             <Button
               type="button"
               variant="ghost"
-              disabled={Boolean(slipExporting)}
+              disabled={busy}
               onClick={() => {
                 setSlipFiles([]);
-                setSlipError("");
-                setSlipNotice("");
-                setSlipMissing(null);
+                setPreviewRows(null);
+                resetFeedback();
                 if (slipInputRef.current) slipInputRef.current.value = "";
               }}
             >
@@ -352,14 +342,21 @@ export default function PayrollModule({ permissions = [] }) {
         </div>
 
         {slipFiles.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            ไฟล์ที่เลือก: {slipFiles.map((file) => file.name).join(", ")}
-          </p>
+          <ul className="flex flex-wrap gap-2">
+            {slipFiles.map((file) => (
+              <li key={`${file.name}-${file.size}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 py-1 text-xs text-foreground">
+                <RiFileExcel2Line className="size-3.5 text-primary" aria-hidden="true" />
+                <span>{file.name}</span>
+                <span className="text-muted-foreground">({formatBytes(file.size)})</span>
+              </li>
+            ))}
+          </ul>
         ) : null}
 
         {slipProgress ? <p role="status" className="text-xs text-muted-foreground">{slipProgress}</p> : null}
         {slipError ? <p role="alert" className="text-sm text-status-danger">{slipError}</p> : null}
         {slipNotice ? <p role="status" className="text-sm text-status-success">{slipNotice}</p> : null}
+
         {slipMissing ? (
           <div role="alert" className="space-y-2 rounded-md border border-status-warning/40 bg-status-warning/10 p-3 text-xs text-foreground">
             <p className="font-medium">{slipMissing.message}</p>
@@ -369,16 +366,99 @@ export default function PayrollModule({ permissions = [] }) {
             <Button
               type="button"
               size="sm"
-              disabled={Boolean(slipExporting)}
+              disabled={busy}
               onClick={() => generateSalarySlips(slipMissing.format, true)}
             >
               ยืนยันออกสลิป (.{slipMissing.format}) ตามข้อมูลที่มีในไฟล์
             </Button>
           </div>
         ) : null}
-      </section>
-    ) : null}
 
-    {!canExport ? <p role="status" className="text-xs text-muted-foreground">บัญชีนี้ไม่มีสิทธิ์ส่งออกข้อมูลเงินเดือน</p> : null}
-  </div>;
+        {!canExport ? (
+          <p role="status" className="text-xs text-muted-foreground">บัญชีนี้ไม่มีสิทธิ์ส่งออกข้อมูลสลิปเงินเดือน</p>
+        ) : null}
+      </section>
+
+      {previewSummary ? (
+        <section aria-label="ผลตรวจสอบไฟล์ Excel เงินเดือน" className="space-y-4 rounded-lg border border-border bg-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SectionHeading
+              title="ผลตรวจสอบข้อมูลในไฟล์ Excel"
+              description={previewSummary.totalRows > PREVIEW_ROW_LIMIT ? `แสดงตัวอย่าง ${PREVIEW_ROW_LIMIT} จาก ${previewSummary.totalRows} แถว` : `ทั้งหมด ${previewSummary.totalRows} แถว`}
+            />
+            {previewSummary.monthsFound.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {previewSummary.monthsFound.map((period) => (
+                  <Badge key={period} variant="caption">{period}</Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border bg-background sm:grid-cols-4">
+            <div className="border-b border-r border-border px-4 py-3 sm:border-b-0">
+              <p className="text-xs text-muted-foreground">แถวที่นำเข้าได้</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{previewSummary.validRows}</p>
+            </div>
+            <div className="border-b border-border px-4 py-3 sm:border-b-0 sm:border-r">
+              <p className="text-xs text-muted-foreground">พนักงาน (คน)</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{previewSummary.employeeCount}</p>
+            </div>
+            <div className="border-r border-border px-4 py-3">
+              <p className="text-xs text-muted-foreground">จำนวนเดือนในไฟล์</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{previewSummary.monthsFound.length}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-xs text-muted-foreground">แถวที่มีคำเตือน/ข้อผิดพลาด</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{previewSummary.issueCount}</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ไฟล์ / แถว</TableHead>
+                  <TableHead>พนักงาน</TableHead>
+                  <TableHead>งวด</TableHead>
+                  <TableHead className="text-right">รายได้รวม</TableHead>
+                  <TableHead className="text-right">รายหักรวม</TableHead>
+                  <TableHead className="text-right">รับสุทธิ</TableHead>
+                  <TableHead>หมายเหตุ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {previewSummary.sampleRows.map((row) => (
+                  <TableRow key={row.key}>
+                    <TableCell className="text-xs text-muted-foreground">{row.file} · แถว {row.row}</TableCell>
+                    <TableCell>
+                      {row.data ? (
+                        <div>
+                          <span className="font-medium text-foreground">{row.data.name}</span>
+                          <span className="block text-xs text-muted-foreground">{row.data.code} · {row.data.department || "—"}</span>
+                        </div>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-xs">{row.data ? `${row.data.month}/${row.data.year + 543}` : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.data ? formatBahtFromSatang(row.data.incomeTotal) : "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{row.data ? formatBahtFromSatang(row.data.deductionTotal) : "—"}</TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{row.data ? formatBahtFromSatang(row.data.netPay) : "—"}</TableCell>
+                    <TableCell className="text-xs">
+                      {row.errors.length > 0 ? (
+                        <span className="text-status-danger">{row.errors.join(", ")}</span>
+                      ) : row.warnings.length > 0 ? (
+                        <span className="text-status-warning">{row.warnings.join(", ")}</span>
+                      ) : (
+                        <span className="text-status-success">พร้อมออกสลิป</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
 }

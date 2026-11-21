@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { overtimeRequests } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import { fetchOtItemById, jsonError } from "@/app/api/ot/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -46,7 +47,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
     .update(overtimeRequests)
     .set({
       statusCode: decision,
-      decidedByEmployeeId: user.employeeId,
+      decidedByEmployeeId: isSystemAdminSession(user) ? null : user.employeeId,
       decidedAt: new Date(),
       decisionNote,
       updatedAt: new Date(),

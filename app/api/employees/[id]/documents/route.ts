@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, employeeDocuments } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import {
   canShareEmployeeDocuments,
   canUploadEmployeeDocuments,
@@ -111,8 +112,8 @@ export const POST = withApiAuth(async (request: NextRequest, context: RouteConte
         mimeType: validation.mimeType,
         fileSize: fileData.byteLength,
         driveFileId,
-        sharedWithUserIds: [user.sub],
-        uploadedByUserId: user.sub,
+        sharedWithUserIds: isSystemAdminSession(user) ? [] : [user.sub],
+        uploadedByUserId: isSystemAdminSession(user) ? null : user.sub,
       })
       .returning({
         id: employeeDocuments.id,

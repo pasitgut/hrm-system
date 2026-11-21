@@ -1,5 +1,8 @@
 # AppSheet → HRM migration
 
+> [!TIP]
+> **สำหรับผู้ดูแลระบบ:** สามารถนำเข้าข้อมูลจากไฟล์ Google Sheet (`.xlsx`) ผ่านหน้าเว็บได้โดยตรงที่ **`/settings/import` (เมนู ระบบ → นำเข้าข้อมูล)** ซึ่งรองรับครบทั้ง 5 แท็บ (`ข้อมูลพนักงาน`, `ข้อมูลการยืมทรัพย์สิน` รวม Agreement HTML/ลายเซ็น 3 ฝ่าย/รูปแนบ, `ข้อมูลการทำโอที`, `ข้อมูลการลา`, และ `ข้อมูลงาน` → `work_tracking_records`) พร้อมตรวจสอบตัวอย่างก่อนบันทึกทับข้อมูลทั้งหมดใน Transaction เดียว (`lib/migration/appsheet.ts`, `lib/migration/import-db.ts`, `app/api/migration/sheets/route.ts`) — เอกสารด้านล่างนี้สำหรับการใช้งานผ่าน CLI รุ่นเดิม (`appsheet_to_sql.py` ซึ่งครอบคลุมเฉพาะ 4 แท็บแรกโดยไม่รวม Agreement/ลายเซ็น และข้อมูลงาน)
+
 `appsheet_to_sql.py` reads `THOME-Appsheet-1.xlsx` (only the 4 sheets below) and writes one SQL file.
 Python 3 standard library only — no `pip install` needed.
 

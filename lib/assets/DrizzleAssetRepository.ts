@@ -122,11 +122,20 @@ async function loadAgreement(tx: AssetTransaction, agreementId: string | null): 
   return agreementFromDb(agreement, boxes);
 }
 
-async function writeAgreement(tx: AssetTransaction, agreementId: string, value: AssetAgreement, actorEmployeeId: string): Promise<void> {
+async function writeAgreement(
+  tx: AssetTransaction,
+  agreementId: string,
+  value: AssetAgreement,
+  actorEmployeeId: string | null,
+  actorDisplayName = "ผู้ดูแลระบบ",
+): Promise<void> {
   const agreement = assetAgreementSchema.parse(value);
-  const [actor] = await tx.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq(employees.id, actorEmployeeId));
-  if (!actor) throw new AssetRepositoryError("ไม่พบข้อมูลผู้ลงนามในระบบ HRM");
-  const actorName = `${actor.firstName} ${actor.lastName}`.trim();
+  let actorName = actorDisplayName.trim() || "ผู้ดูแลระบบ";
+  if (actorEmployeeId) {
+    const [actor] = await tx.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq(employees.id, actorEmployeeId));
+    if (!actor) throw new AssetRepositoryError("ไม่พบข้อมูลผู้ลงนามในระบบ HRM");
+    actorName = `${actor.firstName} ${actor.lastName}`.trim();
+  }
   const oldBoxes = await tx.select().from(assetAgreementSigners).where(eq(assetAgreementSigners.agreementId, agreementId));
   const oldById = new Map(oldBoxes.map((box) => [box.boxId, box]));
 
@@ -188,11 +197,11 @@ async function writeAgreement(tx: AssetTransaction, agreementId: string, value: 
       yPercent: box.y == null ? null : String(box.y),
       signatureData: box.signatureData ?? null,
       signatureStatus: box.status,
-      signedByEmployeeId: box.status !== "signed" ? null : changedSignature ? (expectedSignerSigned ? actorEmployeeId : null) : old?.signedByEmployeeId ?? null,
+      signedByEmployeeId: box.status !== "signed" ? null : changedSignature ? (actorEmployeeId && expectedSignerSigned ? actorEmployeeId : null) : old?.signedByEmployeeId ?? null,
       signedByName: box.status !== "signed" ? "" : changedSignature ? actorName : old?.signedByName || box.name,
       signedAt: box.signedAt ? new Date(box.signedAt) : null,
       returnSignatureData: box.returnSignatureData ?? null,
-      returnSignedByEmployeeId: !box.returnSignatureData ? null : changedReturnSignature ? (expectedSignerSigned ? actorEmployeeId : null) : old?.returnSignedByEmployeeId ?? null,
+      returnSignedByEmployeeId: !box.returnSignatureData ? null : changedReturnSignature ? (actorEmployeeId && expectedSignerSigned ? actorEmployeeId : null) : old?.returnSignedByEmployeeId ?? null,
       returnSignedByName: !box.returnSignatureData ? "" : changedReturnSignature ? actorName : old?.returnSignedByName || box.name,
       returnSignedAt: box.returnSignedAt ? new Date(box.returnSignedAt) : null,
     };
@@ -203,13 +212,14 @@ async function writeAgreementForRequest(
   tx: AssetTransaction,
   requestId: string,
   value: AssetAgreement,
-  actorEmployeeId: string,
+  actorEmployeeId: string | null,
+  actorDisplayName?: string,
 ): Promise<string> {
   const [request] = await tx.select({ agreementId: assetRequests.agreementId }).from(assetRequests)
     .where(eq(assetRequests.id, requestId)).for("update");
   if (!request) throw new AssetRepositoryError("ไม่พบคำขอยืมทรัพย์สิน");
   const agreementId = request.agreementId ?? globalThis.crypto.randomUUID();
-  await writeAgreement(tx, agreementId, value, actorEmployeeId);
+  await writeAgreement(tx, agreementId, value, actorEmployeeId, actorDisplayName);
   if (!request.agreementId) {
     await tx.update(assetRequests).set({ agreementId }).where(eq(assetRequests.id, requestId));
   }
@@ -219,7 +229,7 @@ async function writeAgreementForRequest(
 async function addEvent(
   tx: AssetTransaction,
   requestId: string,
-  actorEmployeeId: string,
+  actorEmployeeId: string | null,
   eventType: string,
   fromStatus: keyof typeof statusToDb | null,
   toStatus: keyof typeof statusToDb | null,
@@ -236,7 +246,10 @@ async function addEvent(
 }
 
 export class DrizzleAssetRepository implements AssetRepository {
-  constructor(private readonly actorEmployeeId: string) {}
+  constructor(
+    private readonly actorEmployeeId: string | null,
+    private readonly actorDisplayName = "ผู้ดูแลระบบ",
+  ) {}
 
   async getById(id: string): Promise<AssetRequest | null> {
     const [row] = await db.select({ id: assetRequests.id }).from(assetRequests)
@@ -281,7 +294,7 @@ export class DrizzleAssetRepository implements AssetRepository {
       for (const input of inputs) {
         const items = parseAssetItems(input.items);
         const agreementId = input.agreement ? globalThis.crypto.randomUUID() : null;
-        if (input.agreement && agreementId) await writeAgreement(tx, agreementId, input.agreement, this.actorEmployeeId);
+        if (input.agreement && agreementId) await writeAgreement(tx, agreementId, input.agreement, this.actorEmployeeId, this.actorDisplayName);
         await tx.insert(assetRequests).values({
           id: input.id,
           agreementId,
@@ -348,8 +361,8 @@ export class DrizzleAssetRepository implements AssetRepository {
   }
 
   async markSeen(ids: readonly string[]): Promise<void> {
-    if (!ids.length) return;
-    await db.insert(assetRequestReads).values(ids.map((requestId) => ({ requestId, employeeId: this.actorEmployeeId })))
+    if (!ids.length || !this.actorEmployeeId) return;
+    await db.insert(assetRequestReads).values(ids.map((requestId) => ({ requestId, employeeId: this.actorEmployeeId! })))
       .onConflictDoUpdate({ target: [assetRequestReads.requestId, assetRequestReads.employeeId], set: { seenAt: new Date() } });
   }
 
@@ -377,7 +390,7 @@ export class DrizzleAssetRepository implements AssetRepository {
     await db.transaction(async (tx) => {
       await tx.delete(assetRequestItems).where(eq(assetRequestItems.requestId, id));
       await tx.insert(assetRequestItems).values(items.map((item, position) => ({ requestId: id, position, ...item })));
-      await writeAgreementForRequest(tx, id, agreement, this.actorEmployeeId);
+      await writeAgreementForRequest(tx, id, agreement, this.actorEmployeeId, this.actorDisplayName);
       await tx.update(assetRequests).set({ version: sql`${assetRequests.version} + 1`, updatedAt: new Date() }).where(eq(assetRequests.id, id));
       await addEvent(tx, id, this.actorEmployeeId, "request_updated", null, null);
     });
@@ -392,7 +405,7 @@ export class DrizzleAssetRepository implements AssetRepository {
       if (!currentAgreement || (!isAssetFormOnly(currentAgreement) && !hasBothReturnSignatures(currentAgreement))) {
         throw new AssetRepositoryError("ต้องมีลายเซ็นผู้ยืมและผู้รับคืนก่อนยืนยันรับคืน");
       }
-      await writeAgreementForRequest(tx, row.id, input.agreement, this.actorEmployeeId);
+      await writeAgreementForRequest(tx, row.id, input.agreement, this.actorEmployeeId, this.actorDisplayName);
       await tx.update(assetRequests).set({
         status: "returned",
         returnInspectorEmployeeId: this.actorEmployeeId,
@@ -412,13 +425,16 @@ export class DrizzleAssetRepository implements AssetRepository {
     await db.transaction(async (tx) => {
       const [request] = await tx.select().from(assetRequests).where(eq(assetRequests.id, id)).for("update");
       if (!request || request.deletedAt) throw new AssetRepositoryError("ไม่พบคำขอยืมทรัพย์สิน");
-      await writeAgreementForRequest(tx, id, agreement, this.actorEmployeeId);
+      await writeAgreementForRequest(tx, id, agreement, this.actorEmployeeId, this.actorDisplayName);
       const managerSigner = agreement.signatureBoxes.find((box) => box.id === "admin");
       const completesPendingRequest = request.status === "pending" && agreement.type === "borrow" && agreement.status === "completed" && managerSigner?.status === "signed";
-      const [actor] = completesPendingRequest
+      const [actor] = completesPendingRequest && this.actorEmployeeId
         ? await tx.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq(employees.id, this.actorEmployeeId))
         : [];
-      const actorName = `${actor?.firstName ?? ""} ${actor?.lastName ?? ""}`.trim() || managerSigner?.name || "";
+      const actorName = `${actor?.firstName ?? ""} ${actor?.lastName ?? ""}`.trim()
+        || (this.actorEmployeeId ? managerSigner?.name : this.actorDisplayName)
+        || managerSigner?.name
+        || "";
       await tx.update(assetRequests).set({
         ...(completesPendingRequest ? {
           status: "approved" as const,
@@ -487,8 +503,10 @@ export class DrizzleAssetRepository implements AssetRepository {
       db.select().from(assetRequestAttachments).where(inArray(assetRequestAttachments.requestId, requestIds)).orderBy(asc(assetRequestAttachments.position)),
       agreementIds.length ? db.select().from(assetAgreements).where(inArray(assetAgreements.id, agreementIds)) : Promise.resolve([]),
       agreementIds.length ? db.select().from(assetAgreementSigners).where(inArray(assetAgreementSigners.agreementId, agreementIds)).orderBy(asc(assetAgreementSigners.position)) : Promise.resolve([]),
-      db.select({ requestId: assetRequestReads.requestId }).from(assetRequestReads)
-        .where(and(inArray(assetRequestReads.requestId, requestIds), eq(assetRequestReads.employeeId, this.actorEmployeeId))),
+      this.actorEmployeeId
+        ? db.select({ requestId: assetRequestReads.requestId }).from(assetRequestReads)
+          .where(and(inArray(assetRequestReads.requestId, requestIds), eq(assetRequestReads.employeeId, this.actorEmployeeId)))
+        : Promise.resolve([]),
     ]);
     const itemsByRequest = groupBy(allItems, (item) => item.requestId);
     const attachmentsByRequest = groupBy(allAttachments, (attachment) => attachment.requestId);

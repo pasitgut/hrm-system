@@ -1,6 +1,10 @@
 # Spec: ปรับปรุง DB Constraints และ Indexing (Quick Wins)
 
-สถานะที่สำรวจ: `lib/db/schema.ts` ยังขาด DB-level `CHECK` constraints หลายจุดที่เดิมพึ่งพาการตรวจใน application code (ทั้งที่ปัจจุบันฐานข้อมูลถูกเขียนร่วมกับ `line-work-tracking` ผ่าน Supabase RPC), `employees.code` จำกัด `varchar(4)` ไม่ตรงกับตารางอื่นที่ใช้ `varchar(20)` และขาด index สำหรับ query ที่ใช้งานบ่อย
+สถานะล่าสุด (อัปเดต Migration `0028`): **ดำเนินการแล้วในส่วน `CHECK` constraints และปรับรหัสพนักงานเป็น `varchar(4)` ทุกตาราง** (`employees`, `overtime_requests`, `leave_requests`, `asset_requests`, `asset_agreements`, `work_tracking_requests`, `work_tracking_activities`); ส่วนหัวข้อที่ 3 (Missing Indexes) และหัวข้อที่ 4 (`updated_at` trigger) รวมถึง Partial Unique Index สำหรับ soft-deleted records ยังคงเป็นงานระยะถัดไป
+
+---
+
+*(ประวัติบริบทเดิมที่สำรวจก่อนหน้า: `employees.code` เดิมจำกัด `varchar(4)` ในขณะที่ตารางอื่นใช้ `varchar(20)` — ปัจจุบันมาตรฐานระบบกำหนดให้ **รหัสพนักงานมีขนาด 4 ตัวอักษร (`varchar(4)`)** เหมือนกันทุกตารางและตรวจ `char_length = 4` ในระดับฐานข้อมูลแล้ว)*
 
 ## เป้าหมาย
 
@@ -23,9 +27,9 @@
 
 > ก่อน apply migration บน production ต้องรัน query ตรวจสอบข้อมูลเดิมที่ไม่ผ่าน constraint (pre-flight audit) และแก้ไขข้อมูลผิดปกติให้เรียบร้อยก่อน
 
-### 2. ขยายขนาดคอลัมน์และปรับ Soft-Delete Uniqueness
-- ขยาย `employees.code` จาก `varchar(4)` เป็น `varchar(20)` ให้สอดคล้องกับ `asset_requests.borrower_employee_code`, `work_tracking_requests.latest_employee_code` และ `work_tracking_activities.employee_code`
-- ทบทวน `UNIQUE` constraint บน `employees` (`email`, `line_uid`, `citizen_id`) สำหรับกรณีพนักงานพ้นสภาพ (`deleted_at IS NOT NULL`) แล้วกลับมาร่วมงานใหม่ — พิจารณาเปลี่ยนเป็น partial unique index (`WHERE deleted_at IS NULL`) สำหรับฟิลด์ที่อนุญาตให้ใช้ซ้ำเมื่อบัญชีเดิมถูก offboard แล้ว
+### 2. มาตรฐานรหัสพนักงาน `varchar(4)` และ Soft-Delete Uniqueness
+- **[ดำเนินการแล้วใน Migration `0028`]** ปรับขนาดคอลัมน์รหัสพนักงานทุกตารางให้เป็น `varchar(4)` ตรงกันทั้งหมด (`employees.code`, `asset_requests.borrower_employee_code`, `asset_agreements.created_by_employee_code`, `work_tracking_requests.latest_employee_code`, `work_tracking_activities.employee_code`) พร้อม `CHECK` Constraint กำหนด `char_length = 4` (หรืออนุญาต `''` ในตารางที่รองรับค่าว่างเริ่มต้น)
+- **[รอพิจารณา]** ทบทวน `UNIQUE` constraint บน `employees` (`email`, `line_uid`, `citizen_id`) สำหรับกรณีพนักงานพ้นสภาพ (`deleted_at IS NOT NULL`) แล้วกลับมาร่วมงานใหม่ — พิจารณาเปลี่ยนเป็น partial unique index (`WHERE deleted_at IS NULL`) สำหรับฟิลด์ที่อนุญาตให้ใช้ซ้ำเมื่อบัญชีเดิมถูก offboard แล้ว
 
 ### 3. เพิ่ม Missing Indexes
 - `employees`: partial index สำหรับ active records (`WHERE deleted_at IS NULL`)

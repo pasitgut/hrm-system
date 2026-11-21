@@ -1,28 +1,19 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import { migrate } from "drizzle-orm/postgres-js/migrator";
-import postgres from "postgres";
-import { resolvePostgresOptions } from "@/lib/db/connection";
+import {
+  maskDatabaseUrl,
+  resolveMigrationConnectionString,
+  runDatabaseMigrations,
+} from "@/lib/db/auto-migrate";
 
 async function main() {
-  // Migrations run DDL, so target Supabase Direct/Session Pooler (:5432) or Neon's unpooled URL in production.
-  const connectionString = process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL;
+  // Migrations run DDL, so target Supabase Session Pooler (:5432) or Neon's unpooled URL in production.
+  const connectionString = resolveMigrationConnectionString();
   if (!connectionString) {
     throw new Error("DATABASE_URL (or DIRECT_DATABASE_URL) is not set");
   }
 
-  const { prepare, ssl } = resolvePostgresOptions(connectionString, { isServerless: false });
-  const client = postgres(connectionString, { max: 1, prepare, ssl });
-  const db = drizzle(client);
-
-  console.log(`Running migrations against ${maskPassword(connectionString)} ...`);
-  await migrate(db, { migrationsFolder: "./drizzle" });
+  console.log(`Running migrations against ${maskDatabaseUrl(connectionString)} ...`);
+  await runDatabaseMigrations(connectionString);
   console.log("Migrations complete.");
-
-  await client.end();
-}
-
-function maskPassword(url: string) {
-  return url.replace(/:\/\/([^:]+):[^@]+@/, "://$1:***@");
 }
 
 main().catch((error) => {

@@ -15,7 +15,7 @@ import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 import { canManageLeaveQuotas, canManageOwnLeaveRequests, canViewCompanyLeave, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 
 export default function LeaveModule() {
-  const { permissions = [] } = useHrmRole();
+  const { permissions = [], employeeId } = useHrmRole();
   const [addOpen, setAddOpen] = useState(false);
   const [quotaOpen, setQuotaOpen] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
@@ -76,9 +76,9 @@ export default function LeaveModule() {
         eyebrow="การทำงาน · วันลา"
         title="การลา"
         description={`ตรวจสอบสิทธิ์ ยื่นคำขอ และติดตามการลาของคุณ${isTeamView ? "และทีม" : ""}`}
-        actions={canRequestOwnLeave || (!canViewLeaveData && canManageQuotas) ? (
+        actions={canRequestOwnLeave || (canManageQuotas && (!canViewLeaveData || !employeeId)) ? (
           <div className="flex flex-wrap items-center gap-2">
-            {!canViewLeaveData && canManageQuotas ? <Button variant="outline" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
+            {canManageQuotas && (!canViewLeaveData || !employeeId) ? <Button variant="outline" onClick={() => setQuotaOpen(true)}>ตั้งค่าโควตา</Button> : null}
             {canRequestOwnLeave ? <Button leadingIcon={RiAddLine} onClick={() => setAddOpen(true)}>ยื่นคำขอลา</Button> : null}
           </div>
         ) : null}
@@ -92,7 +92,7 @@ export default function LeaveModule() {
       ) : null}
       {loadError ? <p role="alert" className="rounded-xl border border-status-danger/25 bg-status-danger/10 px-4 py-3 text-xs leading-5 text-status-danger">{loadError}</p> : null}
 
-      {canViewLeaveData ? (
+      {canViewLeaveData && employeeId ? (
         <section aria-labelledby="leave-balance-heading">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>

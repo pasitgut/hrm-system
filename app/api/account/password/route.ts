@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import { COOKIE_NAME, createSessionToken, readSessionCookieFromRequest, verifySessionToken } from "@/lib/auth/session";
 import { hashPassword } from "@/lib/auth/password";
 
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
   const sessionToken = readSessionCookieFromRequest(request);
   const session = sessionToken ? await verifySessionToken(sessionToken) : null;
   if (!session) return NextResponse.json({ error: "กรุณาเข้าสู่ระบบใหม่ก่อนเปลี่ยนรหัสผ่าน" }, { status: 401 });
+  if (isSystemAdminSession(session)) {
+    return NextResponse.json({ error: "บัญชีผู้ดูแลระบบกลางกำหนดรหัสผ่านผ่านตัวแปรสภาพแวดล้อม ADMIN_PASSWORD" }, { status: 403 });
+  }
   if (!session.mustChangePassword) {
     return NextResponse.json({ error: "บัญชีนี้ไม่จำเป็นต้องเปลี่ยนรหัสผ่านเริ่มต้น" }, { status: 403 });
   }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CalendarDate, getLocalTimeZone, parseDate, today } from "@internationalized/date";
-import { RiInformationLine } from "@remixicon/react";
+import { RiDeleteBin6Line, RiExternalLinkLine, RiImageAddLine, RiInformationLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { DatePickerField } from "@/components/ui/date-picker-field";
@@ -10,8 +10,10 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { useHrmRole } from "@/components/hrm/HrmShell";
+import { IntegrationFeatureNotice, useHrmIntegrations } from "@/components/hrm/IntegrationNotice";
 import { formatDays } from "@/components/hrm/leave/leaveStatus";
 import { withCustomLeaveTypes } from "@/components/hrm/leave/leaveTypes";
+import { uploadImage } from "@/lib/client/upload-image";
 
 function defaultDate() {
   try {
@@ -46,7 +48,11 @@ function daySpan(start, end, session) {
 // the form.
 export function LeaveRequestDialog({ open, mode = "create", initialValues = null, onClose, onSaved = () => {} }) {
   const isEdit = mode === "edit";
+  const attachmentInputId = useId();
+  const attachmentInputRef = useRef(null);
   const employeeId = useHrmRole()?.employeeId;
+  const integrations = useHrmIntegrations();
+  const cloudinaryReady = integrations?.cloudinary !== false;
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [leaveTypesLoading, setLeaveTypesLoading] = useState(false);
   const [leaveTypesError, setLeaveTypesError] = useState("");
@@ -59,6 +65,9 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
   const [endDate, setEndDate] = useState(defaultDate);
   const [session, setSession] = useState("full");
   const [reason, setReason] = useState("");
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -156,13 +165,17 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
       setEndDate(initialValues.endOn ? parseDate(initialValues.endOn) : defaultDate());
       setSession(initialValues.session || "full");
       setReason(initialValues.reason || "");
+      setAttachmentUrl(initialValues.attachmentUrl || "");
     } else {
       setLeaveTypeCode((current) => current || "");
       setStartDate(defaultDate());
       setEndDate(defaultDate());
       setSession("full");
       setReason("");
+      setAttachmentUrl("");
     }
+    setAttachmentError("");
+    setUploadingAttachment(false);
     setError("");
   }, [open, isEdit, initialValues]);
 
@@ -186,7 +199,7 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
     : Math.max(0, (selectedQuota.availableDays ?? selectedQuota.remainingDays) + ownPendingDays);
   const quotaExceeded = selectedQuota?.annualQuotaDays != null && days > availableDays;
   const quotaReady = !quotaLoading && !quotaError && quotaLoadedFor === `${employeeId}:${quotaYear}` && Boolean(selectedQuota);
-  const canSubmit = leaveTypes.some((type) => type.code === leaveTypeCode) && isValidRange && isValidSession && quotaReady && !quotaExceeded && !leaveTypesLoading && !submitting;
+  const canSubmit = leaveTypes.some((type) => type.code === leaveTypeCode) && isValidRange && isValidSession && quotaReady && !quotaExceeded && !leaveTypesLoading && !uploadingAttachment && !submitting;
 
   function resetForm() {
     setLeaveTypeCode("");
@@ -194,7 +207,30 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
     setEndDate(defaultDate());
     setSession("full");
     setReason("");
+    setAttachmentUrl("");
+    setAttachmentError("");
+    setUploadingAttachment(false);
     setError("");
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
+  }
+
+  async function handleAttachmentChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || isEdit) return;
+    setAttachmentError("");
+    setUploadingAttachment(true);
+    try {
+      const uploadedUrl = await uploadImage(file, {
+        scope: "leave",
+        maxBytes: 10 * 1024 * 1024,
+      });
+      setAttachmentUrl(uploadedUrl);
+    } catch (uploadError) {
+      setAttachmentError(uploadError instanceof Error ? uploadError.message : "อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่");
+    } finally {
+      setUploadingAttachment(false);
+    }
   }
 
   function handleClose() {
@@ -231,6 +267,7 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
         endOn: endDate.toString(),
         session,
         reason: reason.trim(),
+        ...(!isEdit && attachmentUrl ? { attachmentUrl } : {}),
       };
       const url = isEdit ? `/api/leave/${initialValues.id}` : "/api/leave";
       const response = await fetch(url, {
@@ -344,6 +381,92 @@ export function LeaveRequestDialog({ open, mode = "create", initialValues = null
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
+        {!isEdit ? (
+          <div className="space-y-2">
+            <label htmlFor={attachmentInputId} className="block text-xs font-medium leading-5 text-muted-foreground">
+              หลักฐานประกอบการลา (รูปภาพ)
+            </label>
+            {!cloudinaryReady ? (
+              <IntegrationFeatureNotice service="cloudinary" />
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  id={attachmentInputId}
+                  ref={attachmentInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={uploadingAttachment || submitting}
+                  onChange={handleAttachmentChange}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  leadingIcon={RiImageAddLine}
+                  disabled={uploadingAttachment || submitting}
+                  onClick={() => attachmentInputRef.current?.click()}
+                >
+                  {uploadingAttachment ? "กำลังอัปโหลดรูป..." : attachmentUrl ? "เปลี่ยนรูปแนบ" : "อัปโหลดรูปหลักฐาน"}
+                </Button>
+                {attachmentUrl ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    leadingIcon={RiDeleteBin6Line}
+                    disabled={uploadingAttachment || submitting}
+                    onClick={() => setAttachmentUrl("")}
+                  >
+                    ลบรูปแนบ
+                  </Button>
+                ) : null}
+              </div>
+            )}
+            {attachmentUrl ? (
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+                <img
+                  src={attachmentUrl}
+                  alt="ตัวอย่างหลักฐานการลา"
+                  className="size-16 shrink-0 rounded-md border border-border object-cover"
+                />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="truncate text-xs text-foreground">อัปโหลดรูปเรียบร้อยแล้ว</p>
+                  <a
+                    href={attachmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    เปิดดูรูป <RiExternalLinkLine className="size-3.5" aria-hidden="true" />
+                  </a>
+                </div>
+              </div>
+            ) : null}
+            {attachmentError ? <p role="alert" className="text-xs leading-5 text-status-danger">{attachmentError}</p> : null}
+          </div>
+        ) : initialValues?.attachmentUrl ? (
+          <div className="space-y-2">
+            <span className="block text-xs font-medium leading-5 text-muted-foreground">
+              หลักฐานแนบเดิม (ดูอย่างเดียว)
+            </span>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+              <img
+                src={initialValues.attachmentUrl}
+                alt="หลักฐานประกอบการลา"
+                className="size-16 shrink-0 rounded-md border border-border object-cover"
+              />
+              <a
+                href={initialValues.attachmentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center gap-1 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                เปิดดูรูปขนาดเต็ม <RiExternalLinkLine className="size-3.5" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        ) : null}
         {error ? <p className="text-xs leading-5 text-status-danger">{error}</p> : null}
       </form>
     </HrmDialog>

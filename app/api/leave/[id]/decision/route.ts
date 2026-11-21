@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { leaveRequests } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import { fetchLeaveItemById, jsonError } from "@/app/api/leave/_shared";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -47,7 +48,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
     .update(leaveRequests)
     .set({
       statusCode: decision,
-      decidedByEmployeeId: user.employeeId,
+      decidedByEmployeeId: isSystemAdminSession(user) ? null : user.employeeId,
       decidedAt,
       decisionNote,
       updatedAt: decidedAt,

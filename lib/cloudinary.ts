@@ -5,6 +5,7 @@ export const CLOUDINARY_FOLDERS = {
   signature: "hrm/signatures",
   avatar: "hrm/avatars",
   agreement: "hrm/agreements",
+  leave: "hrm/leave",
 } as const;
 
 export type CloudinaryScope = keyof typeof CLOUDINARY_FOLDERS;

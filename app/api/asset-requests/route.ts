@@ -9,6 +9,7 @@ import { jsonError, assetRequestDtos, isHttpUrl, requestId, toDate } from "@/app
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates as agreementTemplateTable, departments, employees, positions } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession, SYSTEM_ADMIN_DISPLAY_NAME, SYSTEM_ADMIN_USER_ID } from "@/lib/auth/admin";
 import { canCreateOwnAssetRequests, canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
@@ -21,7 +22,16 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   if (!canViewOwnAssetRequests(user.permissions) && !canViewCompanyAssetRequests(user.permissions)) {
     return jsonError(403, "Asset request view permission required");
   }
-  const repository = new DrizzleAssetRepository(user.employeeId);
+  const isAdmin = isSystemAdminSession(user);
+  const repository = new DrizzleAssetRepository(
+    isAdmin ? null : user.employeeId,
+    SYSTEM_ADMIN_DISPLAY_NAME,
+  );
+  if (isAdmin) {
+    const items = await repository.listAll();
+    const healedItems = await Promise.all(items.map((item) => healAssetRequestImgbbUrls(item)));
+    return NextResponse.json({ items: assetRequestDtos(healedItems) });
+  }
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
   const items = canViewCompanyAssetRequests(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
@@ -41,8 +51,12 @@ export const POST = withApiAuth(async (request: NextRequest) => {
 
   const input = body as Record<string, unknown>;
   const flow = input.flow === "admin-managed" ? "admin-managed" : "self-service";
+  const isAdmin = isSystemAdminSession(user);
   const manager = canManageAssets(user.permissions);
   if (flow === "admin-managed" && !manager) return jsonError(403, "Asset management permission required");
+  if (flow === "self-service" && isAdmin) {
+    return jsonError(400, "บัญชีผู้ดูแลระบบกลางไม่สามารถสร้างคำขอยืมในนามตัวเองได้ กรุณาเลือกสร้างคำขอให้พนักงาน");
+  }
   if (flow === "self-service" && !canCreateOwnAssetRequests(user.permissions)) return jsonError(403, "Asset self-service permission required");
 
   let selectedAgreementTemplate: BorrowAgreementTemplate | null = null;
@@ -106,9 +120,11 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     .leftJoin(positions, eq(employees.positionId, positions.id))
     .where(and(inArray(employees.id, borrowerIds), isNull(employees.deletedAt)));
   if (borrowers.length !== borrowerIds.length) return jsonError(400, "One or more selected employees could not be found");
-  const actor = borrowers.find((employee) => employee.id === user.employeeId) ?? (await db.select({
-    id: employees.id, employeeName: employees.firstName, lastName: employees.lastName, employeeCode: employees.code,
-  }).from(employees).where(eq(employees.id, user.employeeId)).limit(1))[0];
+  const actor = isAdmin
+    ? { id: SYSTEM_ADMIN_USER_ID, employeeName: SYSTEM_ADMIN_DISPLAY_NAME, lastName: "", employeeCode: "0000" }
+    : (borrowers.find((employee) => employee.id === user.employeeId) ?? (await db.select({
+        id: employees.id, employeeName: employees.firstName, lastName: employees.lastName, employeeCode: employees.code,
+      }).from(employees).where(eq(employees.id, user.employeeId)).limit(1))[0]);
   if (!actor) return jsonError(404, "Employee not found");
 
   const borrowerSignature = typeof input.borrowerSignature === "string" ? input.borrowerSignature.trim() : "";
@@ -121,7 +137,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   ]);
 
   try {
-    const repository = new DrizzleAssetRepository(user.employeeId);
+    const repository = new DrizzleAssetRepository(isAdmin ? null : user.employeeId, SYSTEM_ADMIN_DISPLAY_NAME);
     const service = new AssetApplicationService(repository, agreementTemplates);
     const created = await service.submitBorrowRequests({
       borrowers: borrowers.map((employee) => ({

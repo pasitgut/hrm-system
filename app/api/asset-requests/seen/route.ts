@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession } from "@/lib/auth/admin";
 import { jsonError } from "@/app/api/asset-requests/_shared";
 import { DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { db } from "@/lib/db/client";
@@ -23,6 +24,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   }
   const ids = (body as { ids: unknown[] }).ids;
   if (ids.length > 200 || !ids.every((id) => typeof id === "string")) return jsonError(400, "Invalid request ids");
+  if (isSystemAdminSession(user)) return NextResponse.json({ ok: true });
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
   const repository = new DrizzleAssetRepository(user.employeeId);

@@ -34,9 +34,9 @@ There is no lint script and no ESLint config in the repo.
 app/ot/page.jsx  →  <OTModule />  (components/hrm/ot/OTModule.jsx)
 ```
 
-All real logic, state, and markup lives in the `components/hrm/<feature>/` module, not the page file. Routes: `/` (overview), `/employees`, `/work-tracking`, `/ot`, `/leave`, `/assets`, `/approvals`, `/payroll`, `/reports`, `/documents`, `/settings`. `/payroll` handles both internal payroll calculation and stateless salary-slip PDF/Excel export (`lib/salary-slips/` and `/api/salary-slips/export`).
+All real logic, state, and markup lives in the `components/hrm/<feature>/` module, not the page file. Routes: `/` (overview), `/employees`, `/work-tracking`, `/ot`, `/leave` (supports Cloudinary attachment upload on create via `leave_requests.attachment_url`, read-only preview thereafter), `/assets`, `/approvals`, `/payroll` (currently runs Excel-first stateless `.pdf`/`.xlsx` salary-slip parsing & export via `lib/salary-slips/` and `/api/salary-slips/*`, while preserving `lib/payroll/*` for future integration), `/reports`, `/documents`, `/settings`, `/settings/import` (5-sheet Google Sheet `.xlsx` full-replace migration UI covering employees, asset requests with agreements/signers/attachments, OT, leave with `attachment_url`, and `work_tracking_records`, backed by `lib/migration/` and `/api/migration/sheets`). All employee code columns across the DB schema (`lib/db/schema.ts`) are standardized to 4 characters (`varchar(4)`) with DB `CHECK` constraints.
 
-**Auth and permissions.** Access is controlled by per-account permission keys stored in `users.permissions` (catalogue and helpers in `lib/auth/permissions.ts`), paired with the 3 system roles (`employee`, `hr`, `executive` in `lib/auth/roles.ts`). The JWT session (`lib/auth/session.ts`) carries identity only; `lib/auth/dal.ts` re-reads role and permissions from the database on every request.
+**Auth and permissions.** Access is controlled by per-account permission keys stored in `users.permissions` (catalogue and helpers in `lib/auth/permissions.ts`), paired with the 3 system roles (`employee`, `hr`, `executive` in `lib/auth/roles.ts`), plus a built-in hardcoded system admin account (`lib/auth/admin.ts`, no DB row required, defaults to `admin`/`admin` unless overridden by `ADMIN_PASSWORD`/`ADMIN_USERNAME`/`ADMIN_EMAIL`). The JWT session (`lib/auth/session.ts`) carries identity only; `lib/auth/dal.ts` re-reads role and permissions from the database (or resolves built-in admin grants) on every request.
 - Route Handlers: wrap the handler in `withApiAuth` and call `requireApiUser` / `requireApiPermission` / `requireApiAnyPermission`.
 - Server Components: `requireUser` / `requirePermission` / `requireAnyPermission` (they redirect).
 - Add a new permission by extending `PERMISSIONS` in `lib/auth/permissions.ts`; use `MANAGER_PERMISSIONS` for default admin grants.
@@ -63,6 +63,7 @@ All real logic, state, and markup lives in the `components/hrm/<feature>/` modul
 
 ## Database and migrations
 
+- On Node.js startup (`instrumentation.ts`), `lib/db/auto-migrate.ts` runs pending Drizzle migrations in `drizzle/` (`DIRECT_DATABASE_URL ?? DATABASE_URL`) and idempotently ensures core lookup rows (`ensureCoreLookupData`), surfacing actionable diagnostics in `RootLayout` / `DatabaseStatusBanner` if the DB is unreachable.
 - Change `lib/db/schema.ts`, then `npm run db:generate` for a schema diff. Hand-written SQL migrations are fine for data changes — add the SQL file, a `_journal.json` entry (strictly increasing `when`), and keep the latest `drizzle/meta/*_snapshot.json` matching `schema.ts` (`npm run db:generate` must report "No schema changes").
 - Always run `npm run db:check` and apply the migrations to a scratch database before committing.
 - OT day type (weekday/holiday) is **derived** from the date worked and `employees.weekly_holidays` (`lib/ot/overtime-type.ts`); there is no `overtime_type` column.

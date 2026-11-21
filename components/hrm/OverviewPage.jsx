@@ -61,7 +61,7 @@ function QuickLinks({ permissions }) {
 
 export default function OverviewPage() {
   const router = useRouter();
-  const { permissions = [] } = useHrmRole();
+  const { permissions = [], employeeId } = useHrmRole();
 
   return (
     <div className="hrm-page">
@@ -85,7 +85,7 @@ export default function OverviewPage() {
         ) : null}
       />
 
-      {canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) ? (
+      {employeeId && (canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions)) ? (
         <section aria-labelledby="overview-leave-heading" className="min-w-0">
           <SectionHeading
             id="overview-leave-heading"

@@ -18,6 +18,7 @@ import { db } from "@/lib/db/client";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
 import { assetAgreementTemplates, assetRequests, employees } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession, SYSTEM_ADMIN_DISPLAY_NAME } from "@/lib/auth/admin";
 import { canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
 import { migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
 import { healAssetRequestImgbbUrls, migrateAgreementImgbbUrls } from "@/lib/cloudinary-migration";
@@ -59,6 +60,13 @@ async function requestContext(request: NextRequest, id: string) {
     return { response: jsonError(403, "Asset request view permission required") } as const;
   }
   if (!canViewCompanyAssetRequests(user.permissions) && row.borrowerEmployeeId !== user.employeeId) return { response: jsonError(403, "Forbidden") } as const;
+  if (isSystemAdminSession(user)) {
+    return {
+      user,
+      employee: { code: "ADMIN", name: SYSTEM_ADMIN_DISPLAY_NAME, lastName: "" },
+      repository: new DrizzleAssetRepository(null, SYSTEM_ADMIN_DISPLAY_NAME),
+    } as const;
+  }
   const [employee] = await db.select({
     code: employees.code,
     name: employees.firstName,

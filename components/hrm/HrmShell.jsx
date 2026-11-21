@@ -20,6 +20,7 @@ import {
   RiSunLine,
   RiTimerLine,
   RiTaskLine,
+  RiUploadCloud2Line,
   RiUserLine,
 } from "@remixicon/react";
 import { Avatar } from "@/components/ui/avatar";
@@ -31,6 +32,7 @@ import {
   canApproveAnything,
   canManageAssetTemplates,
   canManageLeaveQuotas,
+  canManageUserPermissions,
   canOpenSettings,
   canViewCompanyAssetRequests,
   canViewCompanyLeave,
@@ -46,6 +48,7 @@ import { logoutAction } from "@/app/login/actions";
 import { getRoleShortLabel, normalizeRole } from "@/lib/auth/roles";
 import { DEFAULT_INTEGRATION_STATUS } from "@/lib/integrations/constants";
 import {
+  DatabaseStatusBanner,
   GlobalIntegrationBanner,
   IntegrationProvider,
   useHrmIntegrations,
@@ -200,6 +203,7 @@ export default function HrmShell({
   employeeName = null,
   employeeCode = null,
   integrations = DEFAULT_INTEGRATION_STATUS,
+  dbStatus = null,
 }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -214,8 +218,9 @@ export default function HrmShell({
           : pathname === "/documents" ? "documents"
             : pathname === "/approvals" ? "approvals"
               : pathname === "/reports" ? "reports"
-                : pathname === "/settings" ? "settings"
-                  : "overview";
+                : pathname.startsWith("/settings/import") ? "import"
+                  : pathname === "/settings" ? "settings"
+                    : "overview";
   const groups = useMemo(() => {
     const nextGroups = baseGroups.map((group) => ({
       ...group,
@@ -238,17 +243,31 @@ export default function HrmShell({
       workGroup?.items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
     }
     const visibleGroups = nextGroups.filter((group) => group.items.length > 0);
+    const systemItems = [];
     if (canOpenSettings(permissions)) {
+      systemItems.push({ key: "settings", label: "ตั้งค่า", icon: RiSettings4Line, href: "/settings" });
+    }
+    if (canManageUserPermissions(permissions)) {
+      systemItems.push({ key: "import", label: "นำเข้าข้อมูล", icon: RiUploadCloud2Line, href: "/settings/import" });
+    }
+    if (systemItems.length > 0) {
       visibleGroups.push({
         label: "ระบบ",
-        items: [{ key: "settings", label: "ตั้งค่า", icon: RiSettings4Line, href: "/settings" }],
+        items: systemItems,
       });
     }
     return visibleGroups;
   }, [permissions]);
   const userRole = normalizeRole(user?.role);
   const roleContextValue = useMemo(
-    () => (user ? { role: userRole, permissions, employeeId: user.employeeId, employeeCode, email: user.email } : null),
+    () => (user ? {
+      role: userRole,
+      permissions,
+      employeeId: user.employeeId,
+      employeeCode,
+      email: user.email,
+      isSystemAdmin: Boolean(user.isSystemAdmin),
+    } : null),
     [user, userRole, permissions, employeeCode],
   );
   const displayName = employeeName || user?.email || "";
@@ -309,7 +328,7 @@ export default function HrmShell({
               <div className={cx("min-w-0", collapsed && "lg:sr-only")}>
                 <strong className="block truncate text-xs font-medium">{displayName}</strong>
                 <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-                  {getRoleShortLabel(userRole)}{employeeCode ? ` · ${employeeCode}` : ""}
+                  {user?.isSystemAdmin ? "ผู้ดูแลระบบ" : getRoleShortLabel(userRole)}{employeeCode ? ` · ${employeeCode}` : ""}
                 </span>
               </div>
             </div>
@@ -333,6 +352,7 @@ export default function HrmShell({
               </div>
             ) : null}
             <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl min-w-0 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
+              <DatabaseStatusBanner dbStatus={dbStatus} />
               <GlobalIntegrationBanner integrations={integrations} />
               {children}
             </main>

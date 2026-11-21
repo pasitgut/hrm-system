@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { employees, leaveRequests, leaveTypes, requestStatuses } from "@/lib/db/schema";
 import { jsonError } from "@/lib/api/response";
+import { healLeaveAttachmentImgbbUrl } from "@/lib/cloudinary-migration";
 
 // Shared helpers for the app/api/leave/** Route Handlers: request-body
 // validation, day-span math, the GET /api/leave response DTO, and the
@@ -54,12 +55,30 @@ export type ValidatedLeaveInput = {
   endOn: string;
   session: string;
   reason: string | null;
+  attachmentUrl: string | null;
 };
 
 export type LeaveInputResult = { ok: true; value: ValidatedLeaveInput } | { ok: false; message: string };
 
+function parseOptionalAttachmentUrl(raw: unknown): { ok: true; value: string | null } | { ok: false; message: string } {
+  if (raw == null) return { ok: true, value: null };
+  if (typeof raw !== "string") return { ok: false, message: "Invalid attachment URL" };
+  const trimmed = raw.trim();
+  if (!trimmed) return { ok: true, value: null };
+  if (trimmed.length > 2048) return { ok: false, message: "Attachment URL is too long" };
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { ok: false, message: "Invalid attachment URL" };
+    }
+    return { ok: true, value: trimmed };
+  } catch {
+    return { ok: false, message: "Invalid attachment URL" };
+  }
+}
+
 export function parseLeaveInput(body: Record<string, unknown>): LeaveInputResult {
-  const { leaveTypeCode, startOn, endOn, session, reason } = body;
+  const { leaveTypeCode, startOn, endOn, session, reason, attachmentUrl } = body;
 
   if (typeof leaveTypeCode !== "string" || !leaveTypeCode.trim()) {
     return { ok: false, message: "Invalid leave type" };
@@ -80,6 +99,10 @@ export function parseLeaveInput(body: Record<string, unknown>): LeaveInputResult
   if (reason != null && typeof reason !== "string") {
     return { ok: false, message: "Invalid reason" };
   }
+  const attachmentResult = parseOptionalAttachmentUrl(attachmentUrl);
+  if (attachmentResult.ok === false) {
+    return attachmentResult;
+  }
 
   return {
     ok: true,
@@ -89,6 +112,7 @@ export function parseLeaveInput(body: Record<string, unknown>): LeaveInputResult
       endOn,
       session: sessionValue,
       reason: typeof reason === "string" ? reason.trim() || null : null,
+      attachmentUrl: attachmentResult.value,
     },
   };
 }
@@ -107,6 +131,7 @@ export const leaveSelectColumns = {
   endOn: leaveRequests.endOn,
   session: leaveRequests.session,
   reason: leaveRequests.reason,
+  attachmentUrl: leaveRequests.attachmentUrl,
   statusCode: leaveRequests.statusCode,
   statusName: requestStatuses.name,
   decidedByEmployeeId: leaveRequests.decidedByEmployeeId,
@@ -129,6 +154,7 @@ type LeaveRow = {
   endOn: string;
   session: string;
   reason: string | null;
+  attachmentUrl: string | null;
   statusCode: string;
   statusName: string;
   decidedByEmployeeId: string | null;
@@ -154,6 +180,7 @@ export function toLeaveItemDto(row: LeaveRow) {
     session: row.session,
     days: leaveDaySpan(row.startOn, row.endOn, row.session),
     reason: row.reason,
+    attachmentUrl: row.attachmentUrl,
     statusCode: row.statusCode,
     statusName: row.statusName,
     decidedByEmployeeId: row.decidedByEmployeeId,
@@ -176,5 +203,7 @@ export function leaveBaseSelect() {
 
 export async function fetchLeaveItemById(id: string): Promise<LeaveItemDto | null> {
   const [row] = await leaveBaseSelect().where(eq(leaveRequests.id, id));
-  return row ? toLeaveItemDto(row) : null;
+  if (!row) return null;
+  const healed = await healLeaveAttachmentImgbbUrl(row);
+  return toLeaveItemDto(healed);
 }

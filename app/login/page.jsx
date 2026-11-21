@@ -33,7 +33,7 @@ export default function LoginPage() {
               name="identifier"
               type="text"
               autoComplete="username"
-              placeholder="name@example.com หรือ 2603"
+              placeholder="admin, อีเมล หรือรหัสพนักงาน"
               isRequired
             />
           </div>

@@ -8,6 +8,11 @@ vi.mock("@/components/hrm/HrmShell", () => ({
   useHrmRole: () => ({ employeeId: "emp-1", permissions: [], email: "user@example.com" }),
 }));
 
+const uploadImageMock = vi.fn().mockResolvedValue("https://res.cloudinary.com/demo/image/upload/leave-proof.jpg");
+vi.mock("@/lib/client/upload-image", () => ({
+  uploadImage: (...args: unknown[]) => uploadImageMock(...args),
+}));
+
 // The real DatePickerField is a popup calendar; a native date input stands in
 // so these tests can exercise the dialog's own validation logic.
 vi.mock("@/components/ui/date-picker-field", async () => {
@@ -113,10 +118,38 @@ describe("LeaveRequestDialog (create mode)", () => {
     expect(screen.getByRole("combobox", { name: "ช่วงที่ลา" })).toBeDisabled();
     expect(getSubmitButton()).not.toBeDisabled();
   });
+
+  it("uploads an image attachment to Cloudinary in create mode and sends attachmentUrl on POST /api/leave", async () => {
+    uploadImageMock.mockClear();
+    const fetchMock = stubFetch();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LeaveRequestDialog open mode="create" onClose={() => {}} />);
+    await waitFor(() => expect(getSubmitButton()).not.toBeDisabled());
+
+    const fileInput = screen.getByLabelText("หลักฐานประกอบการลา (รูปภาพ)") as HTMLInputElement;
+    const imageFile = new File(["img"], "medical.png", { type: "image/png" });
+    fireEvent.change(fileInput, { target: { files: [imageFile] } });
+
+    await waitFor(() => expect(uploadImageMock).toHaveBeenCalledTimes(1));
+    expect(uploadImageMock.mock.calls[0][1]).toMatchObject({ scope: "leave" });
+    expect(await screen.findByText("อัปโหลดรูปเรียบร้อยแล้ว")).toBeInTheDocument();
+
+    const form = document.getElementById("add-leave-form") as HTMLFormElement;
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(([url]: [string]) => url === "/api/leave");
+      expect(postCall).toBeDefined();
+    });
+    const postCall = fetchMock.mock.calls.find(([url]: [string]) => url === "/api/leave") as [string, RequestInit];
+    const body = JSON.parse(postCall[1].body as string);
+    expect(body.attachmentUrl).toBe("https://res.cloudinary.com/demo/image/upload/leave-proof.jpg");
+  });
 });
 
 describe("LeaveRequestDialog (edit mode)", () => {
-  it("pre-fills fields from initialValues and PATCHes on submit", async () => {
+  it("pre-fills fields from initialValues, keeps existing attachmentUrl read-only, and PATCHes without attachmentUrl", async () => {
     const fetchMock = stubFetch({ item: { id: "leave-1", statusCode: "pending", leaveTypeCode: "annual" } });
     vi.stubGlobal("fetch", fetchMock);
     const onSaved = vi.fn();
@@ -125,13 +158,27 @@ describe("LeaveRequestDialog (edit mode)", () => {
       <LeaveRequestDialog
         open
         mode="edit"
-        initialValues={{ id: "leave-1", leaveTypeCode: "annual", startOn: "2026-10-05", endOn: "2026-10-05", session: "am", reason: "ธุระ" }}
+        initialValues={{
+          id: "leave-1",
+          leaveTypeCode: "annual",
+          startOn: "2026-10-05",
+          endOn: "2026-10-05",
+          session: "am",
+          reason: "ธุระ",
+          attachmentUrl: "https://res.cloudinary.com/demo/image/upload/existing-doc.jpg",
+        }}
         onClose={() => {}}
         onSaved={onSaved}
       />,
     );
 
     await waitFor(() => expect((screen.getByLabelText("สาเหตุการลา") as HTMLTextAreaElement).value).toBe("ธุระ"));
+    expect(screen.getByText("หลักฐานแนบเดิม (ดูอย่างเดียว)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /เปิดดูรูปขนาดเต็ม/ })).toHaveAttribute(
+      "href",
+      "https://res.cloudinary.com/demo/image/upload/existing-doc.jpg",
+    );
+    expect(screen.queryByRole("button", { name: /อัปโหลดรูปหลักฐาน|เปลี่ยนรูปแนบ|ลบรูปแนบ/ })).not.toBeInTheDocument();
 
     const form = document.getElementById("edit-leave-form");
     fireEvent.submit(form as HTMLFormElement);
@@ -142,5 +189,7 @@ describe("LeaveRequestDialog (edit mode)", () => {
     });
     const patchCall = fetchMock.mock.calls.find(([url]: [string]) => url === "/api/leave/leave-1") as [string, RequestInit];
     expect(patchCall[1].method).toBe("PATCH");
+    const patchBody = JSON.parse(patchCall[1].body as string);
+    expect("attachmentUrl" in patchBody).toBe(false);
   });
 });

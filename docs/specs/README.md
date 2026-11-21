@@ -14,8 +14,10 @@
 | **เงินเดือน (`/payroll`)** | [การคำนวณเงินเดือนส่วนขยาย (หน่วยวัน/ชั่วโมง และวันลา)](payroll-variable-items-and-leave.md) | `รอการตัดสินใจ` / `ยังไม่ implement` |
 | **เงินเดือน (`/payroll`)** | [เก็บกวาดระบบสลิปเงินเดือนแบบ Stateless และสิทธิ์เดิม](salary-slip-stateless-cleanup.md) | `เก็บกวาดโค้ดและ schema แล้ว` (เหลืออัปเดตเอกสาร) |
 | **เงินเดือน (`/payroll`)** | [การเก็บไฟล์ต้นฉบับสลิปเงินเดือน](salary-slip-source-retention.md) | `รออัปเดตเอกสาร` (สลิปเปลี่ยนเป็น stateless แล้ว) |
+| **เงินเดือน (`/payroll`)** | [การเชื่อมต่อสลิปเงินเดือน (Excel-First) เข้ากับระบบเงินเดือน HRM](payroll-excel-to-hrm-integration.md) | `วางแนวทางสถาปัตยกรรม` (หน้าหลักใช้ Excel อย่างเดียวในเฟสนี้) |
 | **ติดตามงาน (`/work-tracking`)** | [ฟอร์มสร้างรายการติดตามงานจาก UI](work-tracking-create-ui.md) | `รอการตัดสินใจ` (มี API `POST /api/work`, ไม่มีฟอร์ม UI) |
-| **ฐานข้อมูล (Database Design)** | [ปรับปรุง DB Constraints และ Indexing (Quick Wins)](db-constraints-and-indexing.md) | `ยังไม่ implement` (พร้อมทำทันที) |
+| **ติดตามงาน / ฐานข้อมูล** | [บันทึกปัญหาโครงสร้าง JSONB ใน `work_tracking_records`](work-tracking-jsonb-problem.md) | `บันทึกปัญหาเพื่อพิจารณาในเฟสถัดไป` |
+| **ฐานข้อมูล (Database Design)** | [ปรับปรุง DB Constraints และ Indexing (Quick Wins)](db-constraints-and-indexing.md) | `implement CHECK constraints & varchar(4) แล้ว` (เหลือ Index/Trigger เสริม) |
 | **ฐานข้อมูล (Database Design)** | [ปรับปรุง Normalization และเก็บกวาด Schema เดิม](db-schema-cleanup-and-normalization.md) | `เก็บกวาด dead tables/columns แล้ว` (เหลือแยก `employee_document_shares`) |
 | **ฐานข้อมูล (Database Design)** | [โครงสร้างข้อมูลประวัติย้อนหลังและการรองรับ Payroll ระยะยาว](db-historical-and-payroll-modeling.md) | `รอการตัดสินใจ` / `ยังไม่ implement` |
 | **โครงสร้างพื้นฐาน & Deploy** | [บริการภายนอก Google Drive และ Cloudinary](external-service-integrations.md) | `รอตั้งค่า integration` (+ API Checker) |

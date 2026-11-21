@@ -24,9 +24,14 @@
 
 ### 2.1 Supabase (PostgreSQL)
 1. สร้างโปรเจกต์บน Supabase (แนะนำ Region **Singapore `ap-southeast-1`** ให้ตรงกับ Vercel `sin1`).
-2. เตรียม Connection String **2 เส้น** จาก **Connect / Database Settings**:
+2. เตรียม Connection String **2 เส้น** จาก **Connect → Connection String** โดยเลือก **Pooler (`*.pooler.supabase.com`)** และใช้ Username รูปแบบ `postgres.<project-ref>`:
    - **Transaction Pooler (Port `6543` พร้อม `?pgbouncer=true`)** → ใช้เป็น `DATABASE_URL` สำหรับ Serverless Runtime (`lib/db/connection.ts` จะปิด `prepare` statement, เปิด `ssl: "require"`, และจำกัด pool `{ max: 5, idle_timeout: 20, connect_timeout: 15 }` ให้อัตโนมัติ)
-   - **Direct Connection / Session Pooler (Port `5432`)** → ใช้เป็น `DIRECT_DATABASE_URL` สำหรับรัน Migration (`scripts/db/migrate.ts` ใช้ `max: 1`)
+   - **Session Pooler (Port `5432` บน `*.pooler.supabase.com`)** → ใช้เป็น `DIRECT_DATABASE_URL` สำหรับการรัน Drizzle Migration อัตโนมัติตอนเริ่มเซิร์ฟเวอร์ (`instrumentation.ts` / `lib/db/auto-migrate.ts`) และ `npm run db:migrate`
+
+> [!WARNING]
+> **ข้อควรระวังสำคัญสำหรับ Vercel + Supabase (IPv4 vs IPv6):**
+> โดเมน Direct Connection ของ Supabase (`db.<project-ref>.supabase.co:5432`) รองรับเฉพาะ **IPv6** เท่านั้น แต่ Vercel Runtime ใช้ **IPv4** เป็นหลัก — หากใส่ `db.<project-ref>.supabase.co` จะเกิดอาการเชื่อมต่อฐานข้อมูลไม่ได้ (`ENETUNREACH`) และสร้างตารางไม่สำเร็จ ให้ใช้ **Pooler Host (`aws-0-<region>.pooler.supabase.com`)** เท่านั้น ทั้ง Transaction Pooler (`6543`) และ Session Pooler (`5432`) พร้อมตรวจสอบว่าเข้ารหัสอักขระพิเศษในรหัสผ่าน (`@`, `#`, `?`, `/`) ด้วย URL-encoding แล้ว
+
 3. ตรวจสอบว่า **RLS (Row Level Security)** เปิดครบทั้ง 24 ตารางใน schema `public` เพื่อป้องกันการเข้าถึงตรงผ่าน PostgREST โดยไม่ผ่าน Server API ของระบบ (ดูรายละเอียดใน [vercel-deployment.md](./specs/vercel-deployment.md))
 4. หากใช้งานร่วมกับ `line-work-tracking` ให้ตั้งค่า Environment Variables ของฝั่งนั้นแยกต่างหากตามสเปก (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `CHECKER_EMAIL`, `CHECKER_PASS`)
 
@@ -54,10 +59,13 @@ openssl rand -base64 32
 
 | ตัวแปร | จำเป็น | ใช้ใน | คำอธิบาย |
 | :--- | :---: | :--- | :--- |
-| `DATABASE_URL` | จำเป็น | Runtime (Vercel / Server) | PostgreSQL Connection String ผ่าน Pooler (`:6543?pgbouncer=true`) |
-| `DIRECT_DATABASE_URL` | จำเป็น (Migration) | CLI / CI Migration | Direct Connection String (`:5432`) สำหรับ `npm run db:migrate` |
+| `DATABASE_URL` | จำเป็น | Runtime (Vercel / Server) | Supabase Transaction Pooler (`aws-0-...pooler.supabase.com:6543/postgres?pgbouncer=true`) |
+| `DIRECT_DATABASE_URL` | แนะนำ (Migration) | Startup Auto-Migrate / CLI | Supabase Session Pooler (`aws-0-...pooler.supabase.com:5432/postgres`) สำหรับรัน `drizzle/` Migration |
 | `TEST_DATABASE_URL` | เฉพาะ Test | Local / CI Test | ฐานข้อมูลแยกสำหรับการทดสอบ **ห้ามชี้ไปที่ Production** |
 | `JWT_SECRET` | จำเป็น | Runtime (Server) | คีย์ลับสำหรับ JWT Session และ Upload Token |
+| `ADMIN_PASSWORD` | แนะนำ (Security) | Runtime (Server) | รหัสผ่านของบัญชีผู้ดูแลระบบกลาง (`admin`) — หากไม่ตั้งค่า ระบบจะใช้ค่าเริ่มต้น `admin` |
+| `ADMIN_USERNAME` | ไม่บังคับ | Runtime (Server) | ชื่อผู้ใช้ของบัญชีผู้ดูแลระบบกลาง (ค่าเริ่มต้น `admin`) |
+| `ADMIN_EMAIL` | ไม่บังคับ | Runtime (Server) | อีเมลอ้างอิงของบัญชีผู้ดูแลระบบกลาง (ค่าเริ่มต้น `admin@peopleos.co`) |
 | `SESSION_COOKIE_NAME` | ไม่บังคับ | Runtime (Server) | ชื่อ Cookie ของ Session (กรณีต้องการกำหนดเอง) |
 | `CHECKER_API_EMAIL` | จำเป็น (ถ้าใช้ Work Tracking) | Runtime (Server) | อีเมลสำหรับเชื่อมต่อ API Checker |
 | `CHECKER_API_PASSWORD` | จำเป็น (ถ้าใช้ Work Tracking) | Runtime (Server) | รหัสผ่านสำหรับเชื่อมต่อ API Checker |
@@ -80,26 +88,42 @@ DATABASE_URL="postgresql://user:pass@localhost:5432/db" npm run db:check
 ```
 *(หมายเหตุ: ในเครื่องที่ติดตั้ง Bun สามารถรันผ่าน `bun run` แทน `npm run` ได้)*
 
-### 4.2 รัน Database Migration ขึ้น Supabase Production
-ตั้งค่า `DIRECT_DATABASE_URL` (Port `5432`) แล้วรันจากเครื่องหรือ CI/CD Pipeline ก่อนปล่อยทราฟฟิก:
+### 4.2 การสร้างตารางอัตโนมัติ (Auto-Migration) และรัน Migration ด้วยตนเอง
+ระบบมีกลไก **Auto-Migration อัตโนมัติตอนเริ่มเซิร์ฟเวอร์** (`instrumentation.ts` → `lib/db/auto-migrate.ts`) เมื่อเริ่ม Instance หรือเปิดหน้าเว็บครั้งแรก:
+- ระบบจะรันไฟล์ SQL ทั้งหมดในโฟลเดอร์ `drizzle/` โดยใช้ `DIRECT_DATABASE_URL` (Session Pooler `:5432`) และ fallback ไป `DATABASE_URL` ให้อัตโนมัติ พร้อมเติมข้อมูลพื้นฐาน (`employment_statuses`, `employment_types`, `request_statuses`, `leave_types`, `ot_rate_settings`) ให้พร้อมใช้งานทันที
+- หากเชื่อมต่อฐานข้อมูลไม่ได้หรือยังไม่มีตาราง ระบบจะแสดงแบนเนอร์แจ้งสาเหตุและคำแนะนำชัดเจนบนหน้าเว็บ (เช่น แจ้งเตือนกรณีใช้ `db.*.supabase.co` ซึ่งเป็น IPv6 บน Vercel)
+
+กรณีต้องการรัน Migration ด้วยตนเองล่วงหน้าจากเครื่องหรือ CI/CD Pipeline:
 ```bash
-export DIRECT_DATABASE_URL="postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres?sslmode=require"
+export DIRECT_DATABASE_URL="postgresql://postgres.<project-ref>:<password>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require"
 npm run db:migrate
 ```
-สคริปต์ `scripts/db/migrate.ts` จะใช้ `DIRECT_DATABASE_URL` (fallback ไป `DATABASE_URL`) และรันไฟล์ SQL ทั้งหมดในโฟลเดอร์ `drizzle/`
+สคริปต์ `scripts/db/migrate.ts` จะใช้ `DIRECT_DATABASE_URL` (fallback ไป `DATABASE_URL`) และรัน Migration + เติมข้อมูลพื้นฐานชุดเดียวกัน
 
-### 4.3 การสร้างข้อมูลตั้งต้น (Seed — เฉพาะฐานข้อมูลใหม่เท่านั้น)
+### 4.3 บัญชีผู้ดูแลระบบกลาง (Built-in Admin) และ Seed ข้อมูลตัวอย่าง
+- **บัญชีผู้ดูแลระบบ (`admin`) ไม่จำเป็นต้องสร้างแถวในตาราง `employees` / `users` และไม่ต้องรัน Seed ก่อนเข้าสู่ระบบ:** ระบบฝังบัญชีผู้ดูแลระบบกลางไว้ในโค้ด (`lib/auth/admin.ts`) สามารถเข้าสู่ระบบทันทีด้วยชื่อผู้ใช้ `admin` และรหัสผ่านเริ่มต้น `admin` (หรือใช้ค่าจากตัวแปร `ADMIN_PASSWORD`, `ADMIN_USERNAME`, `ADMIN_EMAIL` ใน Environment Variables หากมีการกำหนดไว้)
+- สำหรับการใช้งานจริงบน Production ควรตั้งค่า `ADMIN_PASSWORD` เป็นรหัสผ่านที่ปลอดภัยใน Vercel / Environment Variables
+
 > [!CAUTION]
-> สคริปต์ `scripts/db/seed.ts` จะทำการ **TRUNCATE ข้อมูลเดิม** ในตาราง Master, พนักงาน, ผู้ใช้ และคำขอต่างๆ และจะบล็อกการรันบนฐานข้อมูล Production โดยอัตโนมัติ (ยกเว้นกำหนด `ALLOW_DESTRUCTIVE_DB_SCRIPTS=1`) **ห้ามรันบนระบบที่มีข้อมูลจริงแล้ว**
+> สคริปต์ `scripts/db/seed.ts` ใช้สำหรับทดสอบภายในเครื่องเท่านั้น โดยจะทำการ **TRUNCATE ข้อมูลเดิม** ในตาราง Master, พนักงาน, ผู้ใช้ และคำขอต่างๆ และจะบล็อกการรันบนฐานข้อมูล Production โดยอัตโนมัติ (ยกเว้นกำหนด `ALLOW_DESTRUCTIVE_DB_SCRIPTS=1`) **ห้ามรันบนระบบที่มีข้อมูลจริงแล้ว**
 
-สำหรับฐานข้อมูลที่เพิ่งสร้างใหม่ทั้งหมดเท่านั้น:
+สำหรับฐานข้อมูลทดสอบที่เพิ่งสร้างใหม่เท่านั้น (เติมแผนก/ตำแหน่ง/ข้อมูลอ้างอิงตัวอย่าง):
 ```bash
 ALLOW_DESTRUCTIVE_DB_SCRIPTS=1 DATABASE_URL="$DIRECT_DATABASE_URL" npm run db:seed
 ```
-- บัญชีผู้ดูแลระบบ HR ตั้งต้นที่สคริปต์สร้าง: รหัสพนักงาน `2603` / อีเมล `admin@peopleos.co` / รหัสผ่านเริ่มต้น `admin` (`role: "hr"`)
-- หลัง Seed แล้วให้เข้าสู่ระบบและเปลี่ยนรหัสผ่านทันที
 
-### 4.4 การย้ายลิงก์รูป ImgBB เดิมมา Cloudinary (ถ้ามีข้อมูลเดิม)
+### 4.4 การนำเข้าข้อมูลจาก Google Sheet (AppSheet `.xlsx`)
+- สามารถอัปโหลดไฟล์ `.xlsx` ที่ดาวน์โหลดจาก Google Sheet (**File → Download → Microsoft Excel (.xlsx)**) ได้โดยตรงที่หน้า **`/settings/import` (นำเข้าข้อมูล)** สำหรับผู้ดูแลระบบ (`users.permissions.manage`)
+- รองรับครบทั้ง **5 แท็บหลัก**:
+  1. `ข้อมูลพนักงาน` → `employees` (พร้อม `departments`, `positions`, `employment_statuses`, `employment_types` และสร้างประวัติพนักงาน `พ้นสภาพ` อัตโนมัติสำหรับรหัสที่อ้างอิงใน OT/ลา)
+  2. `ข้อมูลการยืมทรัพย์สิน` → `asset_requests`, `asset_request_items`, `asset_request_attachments`, `asset_agreements`, `asset_agreement_signers` (รองรับ Agreement HTML, กล่องลายเซ็น JSON 3 ฝ่าย รวมถึงเซลล์แบบ RichText+Hyperlink และรูปแนบ)
+  3. `ข้อมูลการทำโอที` → `overtime_requests`
+  4. `ข้อมูลการลา` → `leave_requests`
+  5. `ข้อมูลงาน` → `work_tracking_records` (กู้คืนเลขที่บ้านที่ Excel แปลงเป็นวันที่อัตโนมัติ, ดึงรายการเสริมในคอลัมน์ H–N, คำนวณ `delivered_date` และรวมรายการคีย์ซ้ำ)
+- ระบบจะตรวจสอบไฟล์และสรุปจำนวนรายการทั้ง 5 ตาราง พร้อมคำเตือน/ข้อผิดพลาดก่อนกดยืนยันบันทึกทับทั้งหมดใน 1 Transaction (`lib/migration/appsheet.ts` และ `lib/migration/import-db.ts`)
+- กรณีใช้งานผ่านสคริปต์ CLI รุ่นเดิม (`scripts/migration/appsheet_to_sql.py`) ดูรายละเอียดใน [scripts/migration/README.md](../scripts/migration/README.md) *(CLI รุ่นเดิมครอบคลุมเฉพาะ 4 แท็บแรกโดยไม่รวม Agreement/ลายเซ็น และ `ข้อมูลงาน`)*
+
+### 4.5 การย้ายลิงก์รูป ImgBB เดิมมา Cloudinary (ถ้ามีข้อมูลเดิม)
 ระบบมีกลไก 2 ชั้น:
 1. **อัตโนมัติ (Read/Write Auto-Migration):** เมื่อมีการเปิดดูหรือบันทึกข้อมูลพนักงาน, คำขอยืมทรัพย์สิน, ลายเซ็น หรือเทมเพลตสัญญาที่มีลิงก์ `ibb.co` ระบบจะดูดรูปมาเก็บใน Cloudinary และอัปเดตฐานข้อมูลให้อัตโนมัติ (`lib/cloudinary-migration.ts`)
 2. **ย้ายทั้งฐานข้อมูลแบบ Batch ล่วงหน้า:**
@@ -146,8 +170,8 @@ docker run -d --name hrm-system -p 3000:3000 --env-file .env.production hrm-syst
 > [!NOTE]
 > ข้อควรระวังสำหรับโหมด Container (รวมถึง Vercel Container Build ที่ใช้ `Dockerfile.vercel`):
 > - Environment Variables ที่ตั้งไว้ใน Vercel Dashboard จะถูกฉีดเข้าตอน **Runtime** เท่านั้น (ไม่ได้ส่งเข้าขั้นตอน `RUN npm run build` ระหว่าง Build Image) ซึ่ง `lib/db/client.ts` ออกแบบให้สร้างการเชื่อมต่อแบบ Lazy แล้วเพื่อให้ `next build` ผ่านได้โดยไม่ต้องฝัง `DATABASE_URL` ลงใน Image
-> - `Dockerfile.vercel` คัดลอก `package.json`, `node_modules`, `.next`, `public`, `lib/salary-slips/assets` และ `next.config.mjs` เข้าไปใน Stage `runner`
-> - ให้รัน `npm run db:migrate` จากภายนอก Container (CI/Local) ก่อนสตาร์ท Container ใหม่
+> - `Dockerfile.vercel` คัดลอก `package.json`, `node_modules`, `.next`, `public`, `drizzle`, `lib/salary-slips/assets` และ `next.config.mjs` เข้าไปใน Stage `runner` เพื่อให้ทั้ง Export PDF สลิปเงินเดือนและระบบ Auto-Migration ทำงานได้ทันทีเมื่อเริ่ม Container
+> - หากต้องการรัน `npm run db:migrate` ล่วงหน้าก่อน Deploy สามารถรันจาก CI/Local ด้วย `DIRECT_DATABASE_URL` (Session Pooler พอร์ต `5432`) ได้ตามปกติ
 
 ---
 

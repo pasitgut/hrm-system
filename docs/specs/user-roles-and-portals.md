@@ -31,6 +31,7 @@
 - **Auth & Context:**
   - ส่ง `role` ที่อ่านล่าสุดจาก DB ผ่าน `lib/auth/dal.ts` ไปยัง `HrmShell` (`RoleContext`) เพื่อใช้สลับมุมมอง Portal และเมนูให้เหมาะกับบทบาท
   - ลบค่า legacy `supervisor` / `ceo` ออกจาก `lib/auth/rolePermissionAccess.ts`, `tests/setup/permissions.ts` และ seed scripts
+  - **Built-in System Admin (`lib/auth/admin.ts`):** มีบัญชีผู้ดูแลระบบกลางแบบไม่ต้องสร้างแถวใน DB (`admin` / ค่าเริ่มต้นรหัสผ่าน `admin` หรือกำหนดผ่าน `ADMIN_PASSWORD`, `ADMIN_USERNAME`, `ADMIN_EMAIL` ใน `.env`) ที่ได้รับสิทธิ์ HR/ผู้ดูแลครบทุกส่วนและสามารถเข้าสู่ระบบได้ทันทีเมื่อเปิดระบบใหม่
 
 ## การตัดสินใจเพิ่มเติมที่ต้องยืนยันก่อน implement UI
 

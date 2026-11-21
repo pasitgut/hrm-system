@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { assetAgreementTemplateInputSchema } from "@/asset-borrowing/domain/agreementTemplate";
 import { jsonError } from "@/app/api/asset-requests/_shared";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
+import { isSystemAdminSession, SYSTEM_ADMIN_DISPLAY_NAME } from "@/lib/auth/admin";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates, employees } from "@/lib/db/schema";
 import { migrateHtmlImgbbUrlsToCloudinary } from "@/lib/cloudinary";
@@ -45,8 +46,11 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     migrateHtmlImgbbUrlsToCloudinary(parsed.data.footer, "agreement"),
   ]);
 
-  const [actor] = await db.select({ name: employees.firstName, lastName: employees.lastName })
-    .from(employees).where(eq(employees.id, user.employeeId));
+  const isAdmin = isSystemAdminSession(user);
+  const [actor] = isAdmin
+    ? []
+    : await db.select({ name: employees.firstName, lastName: employees.lastName })
+      .from(employees).where(eq(employees.id, user.employeeId));
   const [created] = await db.insert(assetAgreementTemplates).values({
     type: "borrow",
     title: parsed.data.title,
@@ -54,8 +58,8 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     bodyHtml: bodyRes.html,
     footerHtml: footerRes.html,
     isActive: parsed.data.isActive,
-    createdByEmployeeId: user.employeeId,
-    createdByName: `${actor?.name ?? ""} ${actor?.lastName ?? ""}`.trim(),
+    createdByEmployeeId: isAdmin ? null : user.employeeId,
+    createdByName: isAdmin ? SYSTEM_ADMIN_DISPLAY_NAME : `${actor?.name ?? ""} ${actor?.lastName ?? ""}`.trim(),
   }).returning();
   if (!created) return jsonError(500, "Unable to create Agreement template");
   return NextResponse.json({ item: templateDto(created) }, { status: 201 });

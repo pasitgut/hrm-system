@@ -12,6 +12,8 @@ import {
   toLeaveItemDto,
 } from "@/app/api/leave/_shared";
 import { checkLeaveQuota } from "@/app/api/leave/_quota";
+import { migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
+import { healLeaveAttachmentImgbbUrl } from "@/lib/cloudinary-migration";
 
 const STATUS_VALUES = new Set(["all", "pending", "approved", "rejected"]);
 
@@ -55,7 +57,8 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(leaveRequests.createdAt));
 
-  return NextResponse.json({ items: rows.map(toLeaveItemDto) });
+  const healedRows = await Promise.all(rows.map((row) => healLeaveAttachmentImgbbUrl(row)));
+  return NextResponse.json({ items: healedRows.map(toLeaveItemDto) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {
@@ -84,6 +87,10 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   if (parsed.ok === false) {
     return jsonError(400, parsed.message);
   }
+
+  const normalizedAttachmentUrl = parsed.value.attachmentUrl
+    ? await migrateImgbbUrlToCloudinary(parsed.value.attachmentUrl, "leave")
+    : null;
 
   const result = await db.transaction(async (tx) => {
     // Serialize quota checks for one employee so concurrent submissions
@@ -117,6 +124,7 @@ export const POST = withApiAuth(async (request: NextRequest) => {
         endOn: parsed.value.endOn,
         session: parsed.value.session,
         reason: parsed.value.reason,
+        attachmentUrl: normalizedAttachmentUrl,
         statusCode: "pending",
       })
       .returning({ id: leaveRequests.id });

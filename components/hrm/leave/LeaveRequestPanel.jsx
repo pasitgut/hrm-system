@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { RiImageLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
 import { formatDateRange, formatDays, statusColor } from "@/components/hrm/leave/leaveStatus";
@@ -29,6 +30,17 @@ function RequestItem({ item, canApprove, busy, onDecision }) {
             {item.leaveTypeName} · {formatDateRange(item.startOn, item.endOn)} · {formatDays(item.days)}
           </p>
           <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.reason || "ไม่ได้ระบุเหตุผล"}</p>
+          {item.attachmentUrl ? (
+            <a
+              href={item.attachmentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <RiImageLine className="size-3.5" aria-hidden="true" />
+              ดูรูปแนบ
+            </a>
+          ) : null}
         </div>
       </div>
       {canApprove && item.statusCode === "pending" ? (

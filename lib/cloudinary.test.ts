@@ -65,6 +65,8 @@ describe("cloudinary service and ImgBB migration", () => {
     process.env.CLOUDINARY_URL = "cloudinary://key99:sec99@cloud99";
     expect(isCloudinaryConfigured()).toBe(true);
     expect(createCloudinaryDirectUploadParams("avatar", { timestamp: 1735689600 }).cloudName).toBe("cloud99");
+    expect(createCloudinaryDirectUploadParams("leave", { timestamp: 1735689600 }).folder).toBe(CLOUDINARY_FOLDERS.leave);
+    expect(CLOUDINARY_FOLDERS.leave).toBe("hrm/leave");
   });
 
   it("matches Cloudinary SHA-1 signature specification exactly", () => {

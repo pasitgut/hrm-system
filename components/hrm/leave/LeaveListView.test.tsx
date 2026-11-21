@@ -14,10 +14,10 @@ vi.mock("@/components/hrm/HrmShell", () => ({
 import { LeaveListView } from "@/components/hrm/leave/LeaveListView";
 
 const fixtureItems = [
-  { id: "1", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "sick", leaveTypeName: "ลาป่วย", startOn: "2026-09-05", endOn: "2026-09-05", session: "full", days: 1, reason: "ไม่สบาย", statusCode: "pending", statusName: "รอจัดการ" },
-  { id: "2", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "annual", leaveTypeName: "ลาพักร้อน", startOn: "2026-09-10", endOn: "2026-09-12", session: "full", days: 3, reason: "เที่ยว", statusCode: "approved", statusName: "อนุมัติแล้ว" },
-  { id: "3", employeeId: "emp-2", employeeName: "ทดสอบ สอง", employeeCode: "E002", leaveTypeCode: "annual", leaveTypeName: "ลาพักร้อน", startOn: "2026-09-12", endOn: "2026-09-12", session: "full", days: 1, reason: "ธุระ", statusCode: "approved", statusName: "อนุมัติแล้ว" },
-  { id: "4", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "sick", leaveTypeName: "ลาป่วย", startOn: "2026-09-15", endOn: "2026-09-15", session: "am", days: 0.5, reason: "หมอนัด", statusCode: "rejected", statusName: "ไม่อนุมัติ" },
+  { id: "1", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "sick", leaveTypeName: "ลาป่วย", startOn: "2026-09-05", endOn: "2026-09-05", session: "full", days: 1, reason: "ไม่สบาย", attachmentUrl: "https://res.cloudinary.com/demo/image/upload/proof.jpg", statusCode: "pending", statusName: "รอจัดการ" },
+  { id: "2", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "annual", leaveTypeName: "ลาพักร้อน", startOn: "2026-09-10", endOn: "2026-09-12", session: "full", days: 3, reason: "เที่ยว", attachmentUrl: null, statusCode: "approved", statusName: "อนุมัติแล้ว" },
+  { id: "3", employeeId: "emp-2", employeeName: "ทดสอบ สอง", employeeCode: "E002", leaveTypeCode: "annual", leaveTypeName: "ลาพักร้อน", startOn: "2026-09-12", endOn: "2026-09-12", session: "full", days: 1, reason: "ธุระ", attachmentUrl: null, statusCode: "approved", statusName: "อนุมัติแล้ว" },
+  { id: "4", employeeId: "emp-1", employeeName: "ทดสอบ หนึ่ง", employeeCode: "E001", leaveTypeCode: "sick", leaveTypeName: "ลาป่วย", startOn: "2026-09-15", endOn: "2026-09-15", session: "am", days: 0.5, reason: "หมอนัด", attachmentUrl: null, statusCode: "rejected", statusName: "ไม่อนุมัติ" },
 ];
 
 function tab(name: string) {
@@ -65,5 +65,19 @@ describe("LeaveListView status tabs", () => {
     // layout), so each action button appears twice.
     expect(screen.getAllByRole("button", { name: "แก้ไข" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "ยกเลิก" })).toHaveLength(2);
+  });
+
+  it("renders view-only attachment buttons for rows with attachmentUrl and opens a preview dialog", () => {
+    render(<LeaveListView items={fixtureItems} />);
+
+    const viewButtons = screen.getAllByRole("button", { name: "ดูรูปแนบ" });
+    expect(viewButtons).toHaveLength(2);
+    fireEvent.click(viewButtons[0]);
+
+    expect(screen.getByRole("heading", { name: "หลักฐานประกอบการลา" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /เปิดในแท็บใหม่/ })).toHaveAttribute(
+      "href",
+      "https://res.cloudinary.com/demo/image/upload/proof.jpg",
+    );
   });
 });

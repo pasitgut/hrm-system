@@ -20,6 +20,7 @@ import {
   canViewOwnLeaveRequests,
   canViewOwnOtRequests,
 } from "@/lib/auth/permissions";
+import { healLeaveAttachmentImgbbUrl } from "@/lib/cloudinary-migration";
 import { deriveOvertimeType } from "@/lib/ot/overtime-type";
 import { formatOtDetail, formatThaiDateRange, jsonError, type ApprovalItem } from "@/app/api/approvals/_shared";
 
@@ -104,6 +105,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
         endOn: leaveRequests.endOn,
         leaveTypeName: leaveTypes.name,
         reason: leaveRequests.reason,
+        attachmentUrl: leaveRequests.attachmentUrl,
         statusCode: leaveRequests.statusCode,
         statusName: requestStatuses.name,
         createdAt: leaveRequests.createdAt,
@@ -114,7 +116,8 @@ export const GET = withApiAuth(async (request: NextRequest) => {
       .innerJoin(requestStatuses, eq(leaveRequests.statusCode, requestStatuses.code))
       .where(leaveConditions.length ? and(...leaveConditions) : undefined);
 
-    for (const row of leaveRows) {
+    const healedLeaveRows = await Promise.all(leaveRows.map((row) => healLeaveAttachmentImgbbUrl(row)));
+    for (const row of healedLeaveRows) {
       entries.push({
         createdAt: row.createdAt,
         item: {
@@ -125,6 +128,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
           employeeName: `${row.employeeFirstName} ${row.employeeLastName}`.trim(),
           detail: `${formatThaiDateRange(row.startOn, row.endOn)} · ${row.leaveTypeName}`,
           reason: row.reason,
+          attachmentUrl: row.attachmentUrl,
           submittedAt: row.createdAt.toISOString(),
           statusCode: row.statusCode,
           statusName: row.statusName,
