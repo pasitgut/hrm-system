@@ -204,6 +204,13 @@
       "when": 1795261560676,
       "tag": "0028_leave_attachments_code_len_and_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795271114234,
+      "tag": "0029_line_hrm_bot",
+      "breakpoints": true
     }
   ]
 }

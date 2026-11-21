@@ -24,6 +24,54 @@ import type { WorkTrackingRecordStatus, WorkTrackingSession, WorkTrackingSubStat
 import type { EmployeePayrollData } from "@/lib/employees/payroll-data";
 import type { Role } from "@/lib/auth/roles";
 
+// Operational bot data stays separate from the HRM's employee and leave records.
+export const lineBotStates = pgTable("line_bot_states", {
+  lineUid: varchar("line_uid", { length: 64 }).primaryKey(),
+  step: text("step").notNull().default("idle"),
+  data: jsonb("data").$type<Record<string, string>>().notNull().default({}),
+  lastEventAt: bigint("last_event_at", { mode: "number" }).notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull().defaultNow(),
+  linkAttempts: integer("link_attempts").notNull().default(0),
+  linkWindowAt: timestamp("link_window_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const lineLinkCodes = pgTable("line_link_codes", {
+  employeeId: uuid("employee_id").primaryKey().references(() => employees.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
+export const lineIntegrationJobs = pgTable("line_integration_jobs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  operationKey: text("operation_key").notNull().unique(),
+  kind: text("kind").notNull(),
+  payload: jsonb("payload").$type<Record<string, any>>().notNull(),
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  leaseToken: uuid("lease_token"),
+  retryKey: uuid("retry_key").notNull().defaultRandom(),
+  errorCode: text("error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("line_integration_jobs_pending_idx").on(t.status, t.nextAttemptAt)]);
+
+export const lineCalendarEvents = pgTable("line_calendar_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  employeeId: uuid("employee_id").notNull().references(() => employees.id),
+  leaveRequestId: uuid("leave_request_id").unique().references(() => leaveRequests.id),
+  title: text("title").notNull(),
+  startAt: timestamp("start_at", { withTimezone: true }),
+  endAt: timestamp("end_at", { withTimezone: true }),
+  startOn: date("start_on"),
+  endOn: date("end_on"),
+  location: text("location"),
+  googleEventId: text("google_event_id"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------- lookup tables ----------
 
 export const departments = pgTable("departments", {
@@ -512,6 +560,8 @@ export const lineWebhookEvents = pgTable(
     responsePayload: jsonb("response_payload"),
     errorCode: text("error_code"),
     pushRetryKey: uuid("push_retry_key").notNull().defaultRandom(),
+    // Nullable so existing work-tracking receipts retain their original contract.
+    requestPayload: jsonb("request_payload"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

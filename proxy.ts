@@ -7,6 +7,10 @@ const DISABLED_ASSET_PATHS = ["/api/assets", "/api/asset-loans", "/api/asset-cat
 // and server actions still enforce authorization in lib/auth/dal.ts.
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // These exact routes authenticate providers/service callers in their handlers.
+  if (pathname === "/api/line/webhook" || pathname === "/api/internal/integrations/retry") {
+    return NextResponse.next();
+  }
   // Keep the asset implementation dormant without exposing its API routes.
   if (DISABLED_ASSET_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))) {
     return NextResponse.json({ error: "Not Found" }, { status: 404 });
