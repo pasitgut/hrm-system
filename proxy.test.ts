@@ -21,7 +21,7 @@ describe("proxy", () => {
     expect((await proxy(requestFor("/api/line/webhook"))).headers.get("x-middleware-next")).toBe("1");
     expect((await proxy(requestFor("/api/internal/integrations/retry"))).headers.get("x-middleware-next")).toBe("1");
     expect((await proxy(requestFor("/api/line/webhook/other"))).status).toBe(307);
-    expect((await proxy(requestFor("/api/account/line-link"))).status).toBe(307);
+    expect((await proxy(requestFor("/api/leave"))).status).toBe(307);
   });
   it("redirects to /login when there is no session cookie on a protected path", async () => {
     const response = await proxy(requestFor("/"));

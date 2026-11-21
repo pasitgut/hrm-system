@@ -18,7 +18,7 @@ The existing application uses Next.js 16, TypeScript, Drizzle with the postgres 
 | LINE conversation | `lib/line/bot.ts`, advisory transaction lock per LINE UID, persisted state and existing receipt table |
 | Google Calendar | `lib/line/calendar.ts`, Service Account, Calendar events scope, explicit calendar ID |
 | Provider recovery | `lib/line/jobs.ts` and service-authenticated POST `/api/internal/integrations/retry` |
-| Identity linking | Authenticated same-origin POST `/api/account/line-link`, then one-use code sent to the bot; `employees.line_uid` remains the only permanent link |
+| Identity linking | `lib/line/registration.ts#registerUserByEmpCode`, employee code entered in LINE, stored in `employees.line_uid`; no HRM-issued token or link UI |
 
 The website authenticates through its own JWT cookie and `users` records; it does not assume Supabase Auth. The bot resolves the current linked employee and active user on every event. It uses the same permission helpers as the web. Jobs containing employee information check the recipient's current employee/LINE mapping and active account again before delivery.
 
@@ -55,6 +55,11 @@ npm run build
 - Provider calls happen after business commit. Worker claims use leases and fencing tokens. Calendar create/delete claims for one internal event are serialized, and Google event IDs remain deterministic across retries.
 - Reply results that may have succeeded are kept as unknown and never silently converted into duplicate push messages. Push uses a persistent UUID retry key from its first attempt.
 - Retried push jobs older than 23 hours from job creation are conservatively moved to unknown before HTTP; this avoids relying on LINE's expired 24-hour idempotency window, at the cost of manual reconciliation for some old queued jobs.
-- Redeemable link codes are hashed before receipt persistence, ignored group events keep no payload, and the runner cleans completed bot-owned operational data after seven days without touching shared work-tracking receipts.
+- Ignored group events keep no payload. Registration uses employee codes as explicitly requested; it does not claim they are secret proofs. The runner cleans completed bot-owned operational data after seven days without touching shared work-tracking receipts.
 - User-facing date pickers retain the existing flow; leave submission through LINE currently uses full-day sessions. The existing HRM web API continues to support half-day leave.
 - Deferred and environment-dependent work is tracked separately in [LINE Bot pending work](../line-bot-pending.md).
+
+
+## Legacy parity revision
+
+The employee-code registration and automatic resume behavior are restored. Original Flex builders live in lib/line/messages.ts, original reference files in docs/legacy/google-apps-script, and test-only VM comparisons verify the visible JSON. See docs/line-bot-function-mapping.md for every original function and docs/line-bot-differences.md for exact remaining differences. Calendar menus now retain the legacy carousel/message deletion presentation within the owned/mapped data boundary. Ignore the earlier one-use-token design in historical review notes; the user's latest requirement supersedes it.

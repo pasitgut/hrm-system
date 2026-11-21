@@ -85,6 +85,19 @@ describe("durable integration delivery", () => {
     expect(deleted).toBe(false);
     expect((await db.select().from(lineIntegrationJobs))[0].status).toBe("failed");
   });
+  it("notifies the owner of a terminal Calendar failure instead of claiming appointment success", async () => {
+    const account = await createUser({ role: "employee" });
+    await db.update(employees).set({ lineUid: "Utest" }).where(eq(employees.id, account.employee.id));
+    const [event] = await db.insert(lineCalendarEvents).values({ employeeId: account.employee.id, title: "Meeting", startAt: new Date("2026-12-01T02:00:00Z"), endAt: new Date("2026-12-01T03:00:00Z") }).returning();
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { format: "pem", type: "pkcs8" }, publicKeyEncoding: { format: "pem", type: "spki" } });
+    process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = "calendar@example.iam.gserviceaccount.com"; process.env.GOOGLE_PRIVATE_KEY = privateKey; process.env.GOOGLE_CALENDAR_ID = "test-calendar";
+    vi.stubGlobal("fetch", async (url: string) => url.includes("oauth2") ? Response.json({ access_token: "test-google", expires_in: 3600 }) : Response.json({ error: { errors: [{ reason: "forbidden" }] } }, { status: 403 }));
+    await db.insert(lineIntegrationJobs).values({ operationKey: "appointment-failure", kind: "calendar.upsert", payload: { eventId: event.id, employeeId: account.employee.id, notifyTo: "Utest", successMessage: "บันทึกนัดหมายสำเร็จ" } });
+    await runPendingWork(1);
+    const notifications = (await db.select().from(lineIntegrationJobs)).filter((job) => job.kind === "line.message");
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].payload.messages[0].text).toBe("⚠️ เกิดข้อผิดพลาดในการบันทึกนัดหมาย");
+  });
   it("cleans completed bot work after seven days without deleting unresolved jobs or shared receipts", async () => {
     const old = new Date(Date.now() - 8 * 86_400_000);
     await db.insert(lineIntegrationJobs).values([{ operationKey: "old-done", kind: "line.message", payload: {}, status: "completed", updatedAt: old }, { operationKey: "old-unknown", kind: "line.message", payload: {}, status: "unknown", updatedAt: old }]);

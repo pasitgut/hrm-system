@@ -4,10 +4,10 @@ import { SignJWT, importPKCS8 } from "jose";
 export class ProviderError extends Error {
   constructor(message: string, public readonly status: number, public readonly retryAfter = 0) { super(message); }
 }
-export type CalendarInput = { title: string; startOn?: string; endOn?: string; session?: string; startAt?: string; endAt?: string; location?: string };
+export type CalendarInput = { title: string; startOn?: string; endOn?: string; session?: string; startAt?: string; endAt?: string; location?: string; description?: string };
 export function calendarEventId(key: string) { return `hrm${createHash("sha256").update(key).digest("hex")}`; }
 export function buildCalendarBody(input: CalendarInput) {
-  const common = { summary: input.title, location: input.location || "", extendedProperties: { private: { application: "hrm-line" } } };
+  const common = { summary: input.title, location: input.location || "", description: input.description || "", extendedProperties: { private: { application: "hrm-line" } } };
   if (input.startOn && input.endOn) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startOn) || !/^\d{4}-\d{2}-\d{2}$/.test(input.endOn) || input.startOn > input.endOn) throw new Error("Invalid Calendar dates");
     if (input.session && input.session !== "full") {

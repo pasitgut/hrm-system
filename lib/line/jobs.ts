@@ -4,6 +4,8 @@ import { db } from "@/lib/db/client";
 import { employees, users, lineIntegrationJobs, lineCalendarEvents, lineBotStates, lineLinkCodes } from "@/lib/db/schema";
 import { hasPermission, canViewOwnLeaveRequests } from "@/lib/auth/permissions";
 import { calendarEventId, calendarRequest, upsertCalendarEvent, ProviderError } from "@/lib/line/calendar";
+import { enqueue } from "@/lib/line/outbox";
+import { buildTextMessages } from "@/lib/line/messages";
 import { processPendingEvents } from "@/lib/line/bot";
 
 async function deliverLine(job: typeof lineIntegrationJobs.$inferSelect) {
@@ -37,13 +39,19 @@ async function deliverCalendar(job: typeof lineIntegrationJobs.$inferSelect) {
       await calendarRequest("DELETE", `events/${remoteId}`);
     }
     catch (error) { if (!(error instanceof ProviderError) || ![404, 410].includes(error.status)) throw error; }
-    await db.update(lineCalendarEvents).set({ status: "deleted" }).where(eq(lineCalendarEvents.id, event.id));
+    await db.transaction(async (tx) => {
+      await tx.update(lineCalendarEvents).set({ status: "deleted" }).where(eq(lineCalendarEvents.id, event.id));
+      if (job.payload.notifyTo && job.payload.successMessage) await enqueue(tx, `event:${event.id}:deleted:notice`, "line.message", { to: job.payload.notifyTo, employeeId: job.payload.employeeId, messages: buildTextMessages(job.payload.successMessage) });
+    });
     return;
   }
   if (event.status === "deleted") return;
-  const id = await upsertCalendarEvent(event.id, { title: event.title, startOn: event.startOn || undefined, endOn: event.endOn || undefined, session: job.payload.session, startAt: event.startAt?.toISOString(), endAt: event.endAt?.toISOString(), location: event.location || undefined });
+  const id = await upsertCalendarEvent(event.id, { title: event.title, startOn: event.startOn || undefined, endOn: event.endOn || undefined, session: job.payload.session, startAt: event.startAt?.toISOString(), endAt: event.endAt?.toISOString(), location: event.location || undefined, description: job.payload.description });
   // A delete may have been requested while the Google call was in flight.
-  await db.update(lineCalendarEvents).set({ googleEventId: id, status: "synced" }).where(and(eq(lineCalendarEvents.id, event.id), sql`${lineCalendarEvents.status} not in ('deleting', 'deleted')`));
+  await db.transaction(async (tx) => {
+    const [updated] = await tx.update(lineCalendarEvents).set({ googleEventId: id, status: "synced" }).where(and(eq(lineCalendarEvents.id, event.id), sql`${lineCalendarEvents.status} not in ('deleting', 'deleted')`)).returning({ id: lineCalendarEvents.id });
+    if (updated && job.payload.notifyTo && job.payload.successMessage) await enqueue(tx, `event:${event.id}:created:notice`, "line.message", { to: job.payload.notifyTo, employeeId: job.payload.employeeId, messages: buildTextMessages(job.payload.successMessage) });
+  });
 }
 export async function runPendingWork(limit = 5) {
   if (process.env.LINE_BOT_ENABLED !== "true") return { completed: 0, failed: 0 };
@@ -86,6 +94,9 @@ export async function runPendingWork(limit = 5) {
       const retry = transient && job.attempts <= 5 && !unknownReply && !expiredPush;
       const delay = Math.max(60 * 2 ** Math.min(job.attempts - 1, 4), error instanceof ProviderError ? error.retryAfter : 0);
       await db.update(lineIntegrationJobs).set({ status: unknownReply || expiredPush ? "unknown" : retry ? "pending" : "failed", errorCode: unknownReply ? "REPLY_RESULT_UNKNOWN" : expiredPush ? "PUSH_RETRY_WINDOW_EXPIRED" : `PROVIDER_${status || "NETWORK"}`, nextAttemptAt: new Date(Date.now() + delay * 1000), leaseUntil: null, updatedAt: new Date() }).where(and(eq(lineIntegrationJobs.id, job.id), eq(lineIntegrationJobs.leaseToken, token)));
+      if (!retry && !unknownReply && !expiredPush && job.kind.startsWith("calendar.") && job.payload.notifyTo) {
+        await db.transaction((tx) => enqueue(tx, `event:${job.payload.eventId}:failed:${job.kind}`, "line.message", { to: job.payload.notifyTo, employeeId: job.payload.employeeId, messages: [{ type: "text", text: job.kind === "calendar.upsert" ? "⚠️ เกิดข้อผิดพลาดในการบันทึกนัดหมาย" : "⚠️ เกิดข้อผิดพลาดในการลบนัดหมาย" }] }));
+      }
       result.failed++;
     }
   }

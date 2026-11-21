@@ -2,6 +2,8 @@
 
 สถานะ: โค้ด integration อยู่ใน branch feat/line-hrm-bot ยังไม่ได้ Deploy, เปลี่ยน webhook, migrate ฐานจริง หรือส่งข้อความ/แก้ปฏิทินจริง
 
+ข้อกำหนดล่าสุด: ลงทะเบียนด้วยรหัสพนักงานและเก็บ employees.line_uid ไม่มีขั้นตอนขอ OTP จาก HRM แล้ว หน้าตา Flex ใช้ต้นฉบับ ดู [ความต่างปัจจุบัน](line-bot-differences.md) และ [mapping ฟังก์ชัน](line-bot-function-mapping.md)
+
 ## 1. ตั้งค่าระบบจริงและทดสอบ provider
 
 ต้องกำหนด LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, LINE_INTEGRATION_SECRET, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY และ GOOGLE_CALENDAR_ID ใน server environment โดยไม่ส่ง key ลงแชทหรือ commit ลง Git
@@ -40,7 +42,7 @@ LINE รับรองการกันซ้ำด้วย push retry key �
 
 ## 4. Calendar เดิม รายการร่วม และวันลาครึ่งวัน
 
-คำสั่งดู/ลบนัดหมายในรุ่นนี้แสดงเฉพาะรายการที่มี mapping ใน line_calendar_events และเป็นของพนักงานคนนั้น การดูจำกัดช่วง 7 วัน การลบไม่ใช้ชื่อกิจกรรมเป็นตัวระบุ และไม่อนุญาตให้ลบ event ใบลาจากเมนูนัดหมาย
+คำสั่งดู/ลบนัดหมายในรุ่นนี้แสดงเฉพาะรายการที่มี mapping ใน line_calendar_events และเป็นของพนักงานคนนั้น การดูจำกัดช่วง 7 วัน ผู้ใช้พิมพ์ชื่อ/วันหรือกด ลบ : ชื่อ แบบเดิม แต่ backend resolve เป็น event ID และตรวจเจ้าของก่อน ไม่อนุญาตให้ลบ event ใบลาจากเมนูนัดหมาย
 
 รายการที่สร้างด้วยมือใน Google Calendar หรือสร้างจาก Apps Script เดิมยังไม่ถูกนำมาแสดง/ลบผ่าน bot ต้องยืนยันสิทธิ์ดูทั้งปฏิทิน สิทธิ์ผู้ดูแล และ map เจ้าของกับ Calendar API event ID ก่อน ไม่ถือว่า CalendarApp iCalUID คือ API event ID
 
@@ -64,6 +66,6 @@ npm ci รายงานช่องโหว่ของ dependency ที่�
 
 ผล audit และผลตรวจโค้ดล่าสุดให้ดูจากรายงานการส่งมอบของ branch นี้ ไม่ถือว่า build/test ที่ผ่านลบความเสี่ยงของ advisory
 
-## 7. UI ที่เลื่อนไว้
+## 7. การลงทะเบียนเวอร์ชันก่อนหน้า
 
-ปุ่ม เชื่อม LINE ใน header ยังแสดงเมื่อ LINE_BOT_ENABLED=false โดย endpoint จะคืน 503 และหน้าจอแสดงข้อความให้ติดต่อ HR การซ่อนปุ่มตาม server feature flag เป็นงานปรับ UI ที่เลื่อนไว้ ไม่ได้ทำให้ endpoint ข้ามการตรวจบัญชีหรือเปิดเผยรหัส
+เอาปุ่มเชื่อม LINE และ endpoint ออกรหัสจาก HRM ออกแล้ว ตาราง line_link_codes เดิมคงไว้เพื่อให้ migration ที่มีอยู่ไม่ถูกแก้ย้อนหลัง แต่ไม่มีการออกรหัสใหม่ใน runtime ปัจจุบัน ลงทะเบียนด้วยรหัสพนักงานตามต้นฉบับ และยังคงตรวจบัญชี active/สิทธิ์/ไม่เขียนทับ LINE เดิม

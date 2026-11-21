@@ -1,5 +1,7 @@
 # LINE Bot implementation decisions and review
 
+Historical review of the initial implementation at cc8fd8b. The user subsequently required employee-code registration and original Flex payloads. That revision supersedes the one-use-link-code design below; current behavior is in [function mapping](line-bot-function-mapping.md) and [remaining differences](line-bot-differences.md).
+
 ## Source and delivery boundary
 
 Work is in the isolated clone of pasitgut/hrm-system on feat/line-hrm-bot, based on 70feeec. The user confirmed this repository. No production database, webhook URL or hosting environment was changed. The original Apps Script code remains unchanged.
@@ -52,6 +54,16 @@ These decisions can reduce automation until the gates close; they do not permit 
 Local PostgreSQL verification after the fix pass: 75 test files and 414 tests passed. TypeScript typecheck, Drizzle migration check, production Next.js build and git whitespace checks passed. Migration 0028 was applied successfully to the disposable local database; all four new tables report RLS enabled. No new package dependency or lockfile change was required.
 
 Provider HTTP behavior was tested with controlled responses, including lost reply responses, an expired push retry window, concurrent Calendar creation/deletion, ownership collisions and Google throttling. This evidence does not replace the live provider, production role/policy and cutover checks listed in the pending-work document.
+
+## Employee-code and original-Flex revision
+
+The user explicitly replaced the original one-use-token requirement with employee-code registration. The obsolete HRM link endpoint/button were removed. The registration persists employees.line_uid and resumes leave entry after registration; existing active-account, first-login, permission, rate-limit and non-overwrite protections remain documented differences.
+
+Four original GAS files are byte-identical archives; config is redacted. All 33 original functions have a mapping. The eight Flex/card builders are compared against actual archived-source execution with identical input data, normalizing only hidden draft/revision/row metadata. DB tests verify notification reason, source, employee code, duration, annual statistics, deciding administrator and cancellation recipients.
+
+A fresh read-only reviewer confirmed these mappings and identified one concrete edge case: a long location could make the appointment success text exceed LINE's limit. A boundary test failed first, then passed after splitting text into complete Unicode-safe chunks without dropping content. The reviewer declined OTP restoration, ownership expansion, half-day schedule invention, data migration and first-login relaxation as explicit user choices or documented policy/data gates.
+
+Final verification: 76 test files, 427 tests passed using the full Vitest suite; TypeScript typecheck, production build and git whitespace checks passed. The archived original blobs were checked in the Git index against their SHA-256 manifest. The archive alone preserves original whitespace/EOL bytes through path-specific attributes; production code keeps normal whitespace checks. No schema migration or new dependency is required for this revision. Live LINE rendering and provider/deployment checks remain pending.
 
 ## Provider references
 

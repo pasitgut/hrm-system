@@ -7,7 +7,7 @@ import { enqueueLeaveChange, type Transaction } from "@/lib/line/outbox";
 
 type Actor = { employeeId: string; permissions?: string[] };
 export type CommandResult = { id: string } | { error: string; status: 400 | 403 | 404 | 409 };
-export async function createLeave(tx: Transaction, user: Actor, input: ValidatedLeaveInput): Promise<CommandResult> {
+export async function createLeave(tx: Transaction, user: Actor, input: ValidatedLeaveInput, channel = "Web"): Promise<CommandResult> {
   if (!canManageOwnLeaveRequests(user.permissions)) return { error: "Leave self-service permission required", status: 403 };
   // Serialize quota checks for one employee so concurrent submissions
   // cannot both spend the same remaining balance.
@@ -16,7 +16,7 @@ export async function createLeave(tx: Transaction, user: Actor, input: Validated
   const quotaFailure = await checkLeaveQuota({ tx, employeeId: user.employeeId, employeeStartDate: employee.startDate, ...input });
   if (quotaFailure) return quotaFailure;
   const [inserted] = await tx.insert(leaveRequests).values({ employeeId: user.employeeId, ...input, statusCode: "pending" }).returning({ id: leaveRequests.id });
-  await enqueueLeaveChange(tx, inserted.id, "pending");
+  await enqueueLeaveChange(tx, inserted.id, "pending", channel);
   return { id: inserted.id };
 }
 export async function decideLeave(tx: Transaction, user: Actor, id: string, decision: "approved" | "rejected", note: string | null = null, expectedRevision?: string): Promise<CommandResult> {

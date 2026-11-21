@@ -1,38 +1,20 @@
-import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull, sql, asc } from "drizzle-orm";
+import { randomBytes } from "node:crypto";
+import { and, eq, isNull, sql, asc, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
-import { employees, users, leaveTypes, leaveRequests, lineBotStates, lineLinkCodes, lineWebhookEvents, lineCalendarEvents } from "@/lib/db/schema";
+import { employees, users, leaveTypes, leaveRequests, lineBotStates, lineWebhookEvents, lineCalendarEvents } from "@/lib/db/schema";
 import { hasPermission } from "@/lib/auth/permissions";
 import { createLeave, decideLeave, cancelLeave } from "@/lib/leave/commands";
 import { parseLeaveInput } from "@/app/api/leave/_shared";
 import { enqueue, type Transaction } from "@/lib/line/outbox";
 import type { LineEvent } from "@/lib/line/webhook";
+import { registerUserByEmpCode } from "@/lib/line/registration";
+import { getLeaveTypeFlex, getDateTimePickerFlex, getLeaveConfirmationFlex, buildUserLeaveSuccessFlex, getEventDateTimeFlex, createEventCard, formatDateTime } from "@/lib/line/messages";
 
-const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const text = (value: string) => ({ type: "text", text: value.slice(0, 4900) });
-export async function issueLinkCode(userId: string) {
-  return db.transaction(async (tx) => {
-    const [account] = await tx.select({ employeeId: users.employeeId, active: users.isActive, firstLogin: users.mustChangePassword, deletedAt: employees.deletedAt }).from(users).innerJoin(employees, eq(users.employeeId, employees.id)).where(eq(users.id, userId)).for("update", { of: users });
-    if (!account?.active || account.firstLogin || account.deletedAt) throw new Error("Inactive HRM account");
-    const code = randomBytes(16).toString("base64url");
-    const expiresAt = new Date(Date.now() + 600_000);
-    await tx.insert(lineLinkCodes).values({ employeeId: account.employeeId, codeHash: hash(code), expiresAt }).onConflictDoUpdate({ target: lineLinkCodes.employeeId, set: { codeHash: hash(code), expiresAt } });
-    return { code, expiresAt: expiresAt.toISOString() };
-  });
-}
 async function actorFor(tx: Transaction, uid: string) {
   const [actor] = await tx.select({ employeeId: employees.id, userId: users.id, permissions: users.permissions, firstName: employees.firstName }).from(employees).innerJoin(users, eq(users.employeeId, employees.id)).where(and(eq(employees.lineUid, uid), eq(users.isActive, true), eq(users.mustChangePassword, false), isNull(employees.deletedAt))).for("share", { of: users });
   return actor;
-}
-function datePicker(action: string, label: string, draft: string) {
-  return { type: "template", altText: label, template: { type: "buttons", text: label, actions: [{ type: "datetimepicker", label, data: JSON.stringify({ action, draft }), mode: "datetime" }] } };
-}
-function choice(label: string, action: string, data: Record<string, string> = {}) {
-  return { type: "postback", label: label.slice(0, 20), data: JSON.stringify({ action, ...data }) };
-}
-function buttons(label: string, actions: object[]) {
-  return { type: "template", altText: label.slice(0, 200), template: { type: "buttons", text: label.slice(0, 160), actions: actions.slice(0, 4) } };
 }
 async function processEvent(tx: Transaction, event: LineEvent) {
   const uid = event.source.userId!;
@@ -58,105 +40,138 @@ async function processEvent(tx: Transaction, event: LineEvent) {
   if (event.type === "postback") {
     try { const value = JSON.parse(event.postback?.data || "{}"); if (value && typeof value === "object" && !Array.isArray(value)) action = value; } catch { say("ข้อมูลปุ่มไม่ถูกต้อง กรุณาเริ่มใหม่"); }
   }
-  const actor = await actorFor(tx, uid);
+  let actor = await actorFor(tx, uid);
+  const startLeaveFlow = () => { step = "leave_type"; data = { draft: randomBytes(16).toString("base64url") }; messages.push(getLeaveTypeFlex(data.draft)); };
+  const dateTime = (value: string | undefined) => {
+    if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+    const result = `${value}:00+07:00`;
+    return Number.isFinite(Date.parse(result)) && formatDateTime(result).replace(" ", "T") === value ? result : null;
+  };
   const stateful = ["select_type", "pick_start", "pick_end", "submit_leave", "event_pick_start", "event_pick_end"];
   if (["ยกเลิก", "ออก", "กลับ"].includes(msg)) {
-    step = "idle"; data = {}; say("ยกเลิกรายการแล้ว");
+    step = "idle"; data = {}; say("✅ ยกเลิกรายการแล้ว");
   } else if (stateful.includes(String(action.action)) && (!data.draft || action.draft !== data.draft)) {
     say("ปุ่มนี้หมดอายุ กรุณาใช้ปุ่มจากรายการล่าสุดหรือเริ่มใหม่");
-  } else if (event.linkProofHash || msg.startsWith("ลงทะเบียน ") || (step === "link" && msg)) {
+  } else if (step === "register" && msg || msg.startsWith("ลงทะเบียน ")) {
     const now = new Date();
     const inWindow = now.getTime() - saved.linkWindowAt.getTime() < 600_000;
     const attempts = inWindow ? saved.linkAttempts : 0;
-    const code = msg.startsWith("ลงทะเบียน ") ? msg.slice("ลงทะเบียน ".length).trim() : msg;
-    if (actor) say("บัญชี LINE นี้เชื่อมกับ HRM แล้ว");
-    else if (attempts >= 5) say("ลองรหัสเกินจำนวนที่กำหนด กรุณารอ 10 นาที");
+    const empCode = msg.startsWith("ลงทะเบียน ") ? msg.slice("ลงทะเบียน ".length).trim() : msg;
+    if (attempts >= 5) say("ลองรหัสเกินจำนวนที่กำหนด กรุณารอ 10 นาที");
     else {
-      const [link] = await tx.select().from(lineLinkCodes).where(eq(lineLinkCodes.codeHash, event.linkProofHash || hash(code))).for("update");
-      if (!link || link.expiresAt <= now) say("รหัสไม่ถูกต้องหรือหมดอายุ กรุณาขอรหัสใหม่จาก HRM");
-      else {
-        const [account] = await tx.select({ id: employees.id, uid: employees.lineUid, active: users.isActive, firstLogin: users.mustChangePassword, deletedAt: employees.deletedAt }).from(employees).innerJoin(users, eq(users.employeeId, employees.id)).where(eq(employees.id, link.employeeId)).for("update");
-        if (!account?.active || account.firstLogin || account.deletedAt || account.uid) say("ไม่สามารถเชื่อมบัญชีนี้ได้ กรุณาติดต่อ HR");
-        else {
-          await tx.update(employees).set({ lineUid: uid, updatedAt: now }).where(eq(employees.id, account.id));
-          await tx.delete(lineLinkCodes).where(eq(lineLinkCodes.employeeId, account.id));
-          say("ลงทะเบียนสำเร็จ เชื่อมบัญชี LINE กับ HRM แล้ว"); step = "idle"; data = {};
-        }
-      }
+      const result = await registerUserByEmpCode(tx, uid, empCode);
       await tx.update(lineBotStates).set({ linkAttempts: attempts + 1, linkWindowAt: inWindow ? saved.linkWindowAt : now }).where(eq(lineBotStates.lineUid, uid));
+      if (result.success) {
+        const pendingAction = data.pendingAction;
+        step = "idle"; data = {};
+        say(`✅ ลงทะเบียนสำเร็จ!\n👤 คุณ ${result.name}\n🆔 รหัสพนักงาน: ${empCode}`);
+        actor = await actorFor(tx, uid);
+        if (pendingAction === "start_leave" && actor && hasPermission(actor.permissions, "leave.request.self")) startLeaveFlow();
+      } else if (result.alreadyRegistered) {
+        step = "idle"; data = {};
+        say(`⚠️ LINE Account นี้ได้ลงทะเบียนไว้แล้ว\n👤 ชื่อ: ${result.name}`);
+      } else if (result.alreadyLinked) say("⚠️ รหัสพนักงานนี้เชื่อมกับ LINE อื่นแล้ว กรุณาติดต่อ HR เพื่อเปลี่ยนบัญชี");
+      else if (result.unavailable) say("⚠️ บัญชีพนักงานยังไม่พร้อมใช้งาน กรุณาติดต่อ HR");
+      else say(`❌ ไม่พบรหัสพนักงาน "${empCode}" ในระบบ\n\nกรุณาตรวจสอบรหัสและพิมพ์ใหม่อีกครั้ง\nหรือพิมพ์ "ยกเลิก"`);
     }
   } else if (msg === "ลงทะเบียน") {
-    step = "link"; say("เข้าสู่ HRM เพื่อขอรหัสเชื่อม LINE แล้วส่ง: ลงทะเบียน <รหัส>\nรหัสพนักงานเพียงอย่างเดียวใช้ยืนยันบัญชีไม่ได้");
+    step = "register"; data = { pendingAction: "manual_register" };
+    say('📌 กรุณาพิมพ์ "รหัสพนักงาน" ของคุณ เพื่อลงทะเบียน');
+  } else if (!actor && msg === "ส่งคำขอลางาน") {
+    step = "register"; data = { pendingAction: "start_leave" };
+    say('⚠️ ยังไม่พบข้อมูลการลงทะเบียนของคุณ\n\n📌 กรุณาพิมพ์ "รหัสพนักงาน" ของคุณเพื่อเชื่อมต่อบัญชี LINE ก่อนครับ');
   } else if (!actor) {
-    say("กรุณาเชื่อมบัญชี LINE ผ่าน HRM ก่อนใช้งาน หรือให้ HR ตรวจสอบสถานะบัญชี");
-  } else if (["ยกเลิก", "ออก", "กลับ"].includes(msg)) {
-    step = "idle"; data = {}; say("ยกเลิกรายการแล้ว");
+    say("กรุณาลงทะเบียนด้วยรหัสพนักงานก่อนใช้งาน หรือให้ HR ตรวจสอบสถานะบัญชี");
   } else if (msg === "ส่งคำขอลางาน") {
     if (!hasPermission(actor.permissions, "leave.request.self")) say("ไม่มีสิทธิ์ยื่นคำขอลา");
-    else {
-      const types = await tx.select({ code: leaveTypes.code, name: leaveTypes.name }).from(leaveTypes).where(eq(leaveTypes.isActive, true));
-      step = "leave_type"; data = { draft: randomBytes(16).toString("base64url") };
-      if (types.length) messages.push({ type: "text", text: "เลือกประเภทการลา", quickReply: { items: types.slice(0, 13).map((t) => ({ type: "action", action: choice(t.name, "select_type", { type: t.code, draft: data.draft }) })) } });
-      else say("ยังไม่มีประเภทลาที่เปิดใช้งาน กรุณาติดต่อ HR");
-    }
+    else startLeaveFlow();
   } else if (action.action === "select_type" && step === "leave_type" && typeof action.type === "string") {
-    const [type] = await tx.select({ code: leaveTypes.code }).from(leaveTypes).where(and(eq(leaveTypes.code, action.type), eq(leaveTypes.isActive, true)));
+    const [type] = await tx.select({ code: leaveTypes.code, name: leaveTypes.name }).from(leaveTypes).where(and(or(eq(leaveTypes.code, action.type), eq(leaveTypes.name, action.type), ...(action.type === "ลาวันเกิด" ? [eq(leaveTypes.name, "Birthday Leave")] : [])), eq(leaveTypes.isActive, true)));
     if (!type) say("ประเภทลาไม่พร้อมใช้งาน");
-    else { data.type = type.code; step = "leave_start"; messages.push(datePicker("pick_start", "เลือกวันเริ่มลา", data.draft)); }
-  } else if (action.action === "pick_start" && step === "leave_start") {
-    const value = event.postback?.params?.datetime?.slice(0, 10);
-    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) say("วันเริ่มไม่ถูกต้อง");
-    else { data.start = value; step = "leave_end"; messages.push(datePicker("pick_end", "เลือกวันสิ้นสุดลา", data.draft)); }
-  } else if (action.action === "pick_end" && step === "leave_end") {
-    const value = event.postback?.params?.datetime?.slice(0, 10);
-    const parsed = parseLeaveInput({ leaveTypeCode: data.type, startOn: data.start, endOn: value, session: "full" });
-    if (parsed.ok === false) say(parsed.message);
-    else { data.end = value!; step = "leave_reason"; say("พิมพ์เหตุผลการลา หรือ ไม่ระบุเหตุผล"); }
-  } else if (step === "leave_reason" && msg) {
-    data.reason = msg === "ไม่ระบุเหตุผล" ? "" : msg;
-    step = "leave_confirm"; messages.push(buttons(`ยืนยันลา ${data.start} ถึง ${data.end}`, [choice("ยืนยันส่งคำขอลา", "submit_leave", { draft: data.draft })]));
-  } else if (action.action === "submit_leave" && step === "leave_confirm") {
-    const parsed = parseLeaveInput({ leaveTypeCode: data.type, startOn: data.start, endOn: data.end, reason: data.reason, session: "full" });
+    else { data.type = type.code; data.typeLabel = type.name; step = "leave_dates"; messages.push(getDateTimePickerFlex(data.draft)); }
+  } else if (action.action === "pick_start" && ["leave_dates", "leave_reason"].includes(step)) {
+    const value = dateTime(event.postback?.params?.datetime);
+    if (!value) say("วันเริ่มไม่ถูกต้อง");
+    else { data.start = value; say(`✅ บันทึกเวลาเริ่มลาแล้ว\n📅 วันเวลาที่เลือก: ${formatDateTime(value, "display")} น.`); }
+  } else if (action.action === "pick_end" && ["leave_dates", "leave_reason"].includes(step)) {
+    const value = dateTime(event.postback?.params?.datetime);
+    const parsed = parseLeaveInput({ leaveTypeCode: data.type, startOn: data.start?.slice(0, 10), endOn: value?.slice(0, 10), session: "full" });
     if (parsed.ok === false) say(parsed.message);
     else {
-      const result = await createLeave(tx, actor, parsed.value);
+      data.end = value!; step = "leave_reason";
+      messages.push(text(`✅ บันทึกเวลาสิ้นสุดลาแล้ว\n📅 วันเวลาที่เลือก: ${formatDateTime(value!, "display")} น.`), { type: 'text', text: '📝 กรุณาพิมพ์ "เหตุผลการลา" ของคุณส่งกลับมาในแชทนี้ครับ', quickReply: { items: [{ type: "action", action: { type: "message", label: "❌ ไม่ระบุเหตุผล", text: "ไม่ระบุเหตุผล" } }] } });
+    }
+  } else if (step === "leave_reason" && msg) {
+    data.reason = msg === "ไม่ระบุเหตุผล" ? "ไม่ได้ระบุเหตุผล" : msg;
+    step = "leave_confirm"; messages.push(getLeaveConfirmationFlex({ type: data.typeLabel, start: data.start, end: data.end, reason: data.reason }, data.draft));
+  } else if (action.action === "submit_leave" && step === "leave_confirm") {
+    const parsed = parseLeaveInput({ leaveTypeCode: data.type, startOn: data.start?.slice(0, 10), endOn: data.end?.slice(0, 10), reason: data.reason, session: "full" });
+    if (parsed.ok === false) say(parsed.message);
+    else {
+      const result = await createLeave(tx, actor, parsed.value, "Line");
       if ("error" in result) say(result.error);
-      else { messages.push(buttons("ส่งคำขอลาแล้ว รอผู้อนุมัติพิจารณา", [choice("ยกเลิกคำขอนี้", "cancel_leave_by_user", { id: result.id })])); step = "idle"; data = {}; }
+      else { messages.push(buildUserLeaveSuccessFlex(data.typeLabel, data.start.slice(0, 10), data.end.slice(0, 10), "Line", data.reason || "ไม่ได้ระบุเหตุผล", JSON.stringify({ action: "cancel_leave_by_user", id: result.id }))); step = "idle"; data = {}; }
     }
   } else if (["approve_leave", "reject_leave", "cancel_leave_by_user"].includes(String(action.action))) {
     const id = z.string().uuid().safeParse(action.id);
     if (!id.success || (action.action !== "cancel_leave_by_user" && typeof action.version !== "string")) say("ปุ่มนี้หมดอายุ กรุณาเปิดรายการใน HRM เพื่อทำรายการต่อ");
     else {
       const result = action.action === "cancel_leave_by_user" ? await cancelLeave(tx, actor, id.data) : await decideLeave(tx, actor, id.data, action.action === "approve_leave" ? "approved" : "rejected", null, String(action.version));
-      say("error" in result ? result.error : "บันทึกผลใน HRM แล้ว");
+      if ("error" in result) say(result.error);
+      else if (action.action === "cancel_leave_by_user") say("✅ ยกเลิกคำขอลาเรียบร้อยแล้วครับ");
     }
   } else if (msg === "สร้างนัดหมาย") {
-    step = "event_title"; data = { draft: randomBytes(16).toString("base64url") }; say("พิมพ์ชื่อนัดหมาย");
+    step = "event_title"; data = { draft: randomBytes(16).toString("base64url") }; say("📌 พิมพ์ชื่อนัดหมายของคุณ เช่น:\nประชุมงบประมาณ");
   } else if (step === "event_title" && msg) {
-    data.title = msg.slice(0, 200); step = "event_start"; messages.push(datePicker("event_pick_start", "เลือกเวลาเริ่มนัดหมาย", data.draft));
-  } else if (action.action === "event_pick_start" && step === "event_start") {
-    const value = event.postback?.params?.datetime;
-    if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || !Number.isFinite(Date.parse(`${value}:00+07:00`))) say("เวลาไม่ถูกต้อง");
-    else { data.start = `${value}:00+07:00`; step = "event_end"; messages.push(datePicker("event_pick_end", "เลือกเวลาสิ้นสุดนัดหมาย", data.draft)); }
-  } else if (action.action === "event_pick_end" && step === "event_end") {
-    const value = event.postback?.params?.datetime;
-    const end = `${value}:00+07:00`;
-    if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || !(Date.parse(end) > Date.parse(data.start))) say("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม");
-    else { data.end = end; step = "event_location"; say("พิมพ์สถานที่/ลิงก์ หรือ ไม่ระบุสถานที่"); }
+    data.title = msg.slice(0, 200); step = "event_dates"; messages.push(getEventDateTimeFlex(data.draft));
+  } else if (action.action === "event_pick_start" && step === "event_dates") {
+    const value = dateTime(event.postback?.params?.datetime);
+    if (!value) say("เวลาไม่ถูกต้อง");
+    else { data.start = value; say(`✅ บันทึกเวลาเริ่มนัดหมายแล้ว\n📅 วันเวลาที่เลือก: ${formatDateTime(value, "display")} น.`); }
+  } else if (action.action === "event_pick_end" && step === "event_dates") {
+    const end = dateTime(event.postback?.params?.datetime);
+    if (!end || !data.start || Date.parse(end) <= Date.parse(data.start)) say("เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม");
+    else {
+      data.end = end; step = "event_location";
+      messages.push(text(`✅ บันทึกเวลาสิ้นสุดนัดหมายแล้ว\n📅 วันเวลาที่เลือก: ${formatDateTime(end, "display")} น.`), { type: 'text', text: '📝 กรุณาพิมพ์ "ชื่อสถานที่ หรือ Link" ของคุณส่งกลับมาในแชทนี้ครับ', quickReply: { items: [{ type: "action", action: { type: "message", label: "❌ ไม่ระบุสถานที่", text: "ไม่ระบุสถานที่" } }] } });
+    }
   } else if (step === "event_location" && msg) {
     const [eventRow] = await tx.insert(lineCalendarEvents).values({ employeeId: actor.employeeId, title: data.title, startAt: new Date(data.start), endAt: new Date(data.end), location: msg === "ไม่ระบุสถานที่" ? null : msg }).returning();
-    await enqueue(tx, `event:${eventRow.id}:create`, "calendar.upsert", { eventId: eventRow.id });
-    step = "idle"; data = {}; say("รับนัดหมายแล้ว กำลังบันทึกใน Google Calendar");
-  } else if (msg === "ดูนัดหมาย" || msg === "ลบนัดหมาย" || action.action === "list_events") {
+    let successMessage = `📅 บันทึกนัดหมายสำเร็จเรียบร้อยแล้วครับ\n\n📝 กิจกรรม: ${data.title}\n⏳ เริ่ม: ${formatDateTime(data.start, "display")} น.\n⌛ สิ้นสุด: ${formatDateTime(data.end, "display")} น.`;
+    if (msg !== "ไม่ระบุสถานที่") successMessage += `\n📍 สถานที่: ${msg}`;
+    await enqueue(tx, `event:${eventRow.id}:create`, "calendar.upsert", { eventId: eventRow.id, notifyTo: uid, employeeId: actor.employeeId, successMessage });
+    step = "idle"; data = {};
+  } else if (msg === "ดูนัดหมาย" || msg === "ลบนัดหมาย") {
     // shortcut: list only mapped events owned by this employee; expand after legacy Calendar ownership is reconciled.
-    const deleting = msg === "ลบนัดหมาย" || action.mode === "delete";
-    const offset = action.action === "list_events" && /^\d{1,5}$/.test(String(action.offset)) ? Number(action.offset) : 0;
+    const deleting = msg === "ลบนัดหมาย";
     const startTime = sql`coalesce(${lineCalendarEvents.startAt}, ${lineCalendarEvents.startOn}::timestamp at time zone 'Asia/Bangkok')`;
     const endTime = sql`coalesce(${lineCalendarEvents.endAt}, (${lineCalendarEvents.endOn} + 1)::timestamp at time zone 'Asia/Bangkok')`;
-    const rows = await tx.select().from(lineCalendarEvents).where(and(eq(lineCalendarEvents.employeeId, actor.employeeId), sql`${lineCalendarEvents.status} not in ('deleted', 'deleting')`, sql`${endTime} > now()`, ...(deleting ? [isNull(lineCalendarEvents.leaveRequestId)] : [sql`${startTime} < now() + interval '7 days'`]))).orderBy(startTime, asc(lineCalendarEvents.id)).offset(offset).limit(5);
-    if (!rows.length) say("ไม่มีนัดหมายที่บันทึกผ่าน bot ในช่วงนี้ ดูรายการทั้งหมดได้ที่ Google Calendar");
-    for (const row of rows.slice(0, 4)) messages.push(buttons(`${row.title}\n${row.startOn || row.startAt?.toLocaleString("th-TH", { timeZone: "Asia/Bangkok" })}`, row.leaveRequestId ? [choice("ดูรายการ", "help")] : [choice("ยืนยันลบนัดหมาย", "delete_event", { id: row.id })]));
-    if (rows.length > 4) messages.push({ type: "text", text: "มีรายการเพิ่มเติม", quickReply: { items: [{ type: "action", action: choice("หน้าถัดไป", "list_events", { offset: String(offset + 4), mode: deleting ? "delete" : "view" }) }] } });
+    const rows = await tx.select().from(lineCalendarEvents).where(and(eq(lineCalendarEvents.employeeId, actor.employeeId), eq(lineCalendarEvents.status, "synced"), sql`${endTime} > now()`, sql`${startTime} < now() + ${deleting ? 365 : 7} * interval '1 day'`)).orderBy(startTime, asc(lineCalendarEvents.id)).limit(deleting ? 100 : 10);
+    if (!rows.length) say(deleting ? "📭 ไม่มีนัดหมายในปีนี้" : "📭 ไม่มีนัดหมายใน 7 วันถัดไป");
+    else if (deleting) {
+      const lines = rows.map((row) => `• ${row.title} (${row.startOn || formatDateTime(row.startAt!).slice(0, 10)})`);
+      say(`📅 รายชื่อนัดหมายทั้งหมด:\n\n${lines.join('\n')}\n\n📝 พิมพ์ชื่อพร้อมวันที่ เช่น:\nประชุมงบประมาณ 2025-07-06`);
+      step = "await_delete_event"; data = {};
+    } else {
+      messages.push({ type: "flex", altText: "นัดหมาย 7 วันถัดไป", contents: { type: "carousel", contents: rows.map((row) => createEventCard({ title: row.title, start: row.startAt || new Date(`${row.startOn}T00:00:00+07:00`), end: row.endAt || new Date(new Date(`${row.endOn}T00:00:00+07:00`).getTime() + 86_400_000) })) } });
+    }
+  } else if (msg.startsWith("ลบ :") || step === "await_delete_event" && msg) {
+    const direct = msg.startsWith("ลบ :");
+    const match = direct ? null : /^(.+)\s+(\d{4}-\d{2}-\d{2})$/.exec(msg);
+    if (!direct && !match) say("❌ รูปแบบไม่ถูกต้อง: ชื่อกิจกรรม วันที่ (เช่น ประชุมงบประมาณ 2025-07-06)");
+    else {
+      const title = direct ? msg.slice("ลบ :".length).trim() : match![1].trim();
+      const startDate = sql`coalesce(to_char(${lineCalendarEvents.startAt} at time zone 'Asia/Bangkok', 'YYYY-MM-DD'), ${lineCalendarEvents.startOn}::text)`;
+      const rows = await tx.select().from(lineCalendarEvents).where(and(eq(lineCalendarEvents.employeeId, actor.employeeId), eq(lineCalendarEvents.title, title), eq(lineCalendarEvents.status, "synced"), isNull(lineCalendarEvents.leaveRequestId), ...(!direct ? [sql`${startDate} = ${match![2]}`] : []))).limit(2).for("update");
+      if (!rows.length) say(direct ? `❌ ไม่พบนัดหมาย "${title}"` : `❌ ไม่พบนัดหมาย "${title}" ในวันที่ ${match![2]}`);
+      else if (rows.length > 1) say("⚠️ พบนัดหมายชื่อซ้ำ กรุณาพิมพ์ ลบนัดหมาย แล้วระบุชื่อพร้อมวันที่ให้ชัดเจน");
+      else {
+        const row = rows[0];
+        await tx.update(lineCalendarEvents).set({ status: "deleting" }).where(eq(lineCalendarEvents.id, row.id));
+        await enqueue(tx, `event:${row.id}:delete`, "calendar.delete", { eventId: row.id, notifyTo: uid, employeeId: actor.employeeId, successMessage: `✅ ลบนัดหมาย "${row.title}" เรียบร้อยแล้ว` });
+        step = "idle"; data = {};
+      }
+    }
   } else if (action.action === "delete_event") {
     const id = z.string().uuid().safeParse(action.id);
     if (!id.success) say("รายการไม่ถูกต้อง");
@@ -165,6 +180,8 @@ async function processEvent(tx: Transaction, event: LineEvent) {
       if (!row || row.leaveRequestId || ["deleted", "deleting"].includes(row.status)) say("ไม่มีสิทธิ์ลบหรือรายการถูกลบแล้ว");
       else { await tx.update(lineCalendarEvents).set({ status: "deleting" }).where(eq(lineCalendarEvents.id, row.id)); await enqueue(tx, `event:${row.id}:delete`, "calendar.delete", { eventId: row.id }); say("รับคำขอลบนัดหมายแล้ว"); }
     }
+  } else if (msg === "วิธีใช้งาน") {
+    say("📌 วิธีใช้งาน:\n1.ลงทะเบียนก่อน\n2.กดเมนูลางาน หรือสร้างนัดหมายตามขั้นตอนบน Rich Menu ครับ");
   } else {
     say("คำสั่ง: ลงทะเบียน, ส่งคำขอลางาน, สร้างนัดหมาย, ดูนัดหมาย, ลบนัดหมาย หรือ ยกเลิก\nหากปุ่มเดิมหมดอายุ กรุณาเริ่มทำรายการใหม่");
   }

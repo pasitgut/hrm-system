@@ -24,7 +24,6 @@ import {
 } from "@remixicon/react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { LineLinkButton } from "@/components/hrm/LineLinkButton";
 import { cx } from "@/utils/cx";
 import {
   hasPermission,
@@ -174,7 +173,6 @@ function Header({ displayName, darkMode, onToggleTheme, collapsed, onToggleSideb
         <span className="truncate text-sm font-semibold">HRM</span>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <LineLinkButton />
         <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:inline" title={displayName}>{displayName}</span>
         <Button
           type="button"

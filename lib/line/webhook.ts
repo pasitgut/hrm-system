@@ -1,11 +1,11 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { db } from "@/lib/db/client";
 import { lineWebhookEvents } from "@/lib/db/schema";
 
 const eventSchema = z.object({ webhookEventId: z.string().min(1).max(128), timestamp: z.number().int().nonnegative(), type: z.string(), source: z.object({ type: z.string(), userId: z.string().max(64).optional() }).passthrough(), replyToken: z.string().optional(), message: z.object({ type: z.string(), text: z.string().max(5000).optional() }).passthrough().optional(), postback: z.object({ data: z.string().max(1000), params: z.object({ datetime: z.string().optional(), date: z.string().optional() }).optional() }).optional() });
 const webhookSchema = z.object({ events: z.array(eventSchema).max(100) });
-export type LineEvent = z.infer<typeof eventSchema> & { linkProofHash?: string };
+export type LineEvent = z.infer<typeof eventSchema>;
 export async function receiveWebhook(request: Request): Promise<Response> {
   if (process.env.LINE_BOT_ENABLED !== "true" || !process.env.LINE_CHANNEL_SECRET) return Response.json({ error: "LINE bot is not configured" }, { status: 503 });
   const reader = request.body?.getReader();
@@ -28,8 +28,6 @@ export async function receiveWebhook(request: Request): Promise<Response> {
       for (const incoming of events) {
         const supported = incoming.source.type === "user" && incoming.source.userId && ["message", "postback"].includes(incoming.type);
         const event: LineEvent = { ...incoming };
-        const proof = incoming.message?.type === "text" ? /^(?:ลงทะเบียน\s+)?([A-Za-z0-9_-]{22})$/.exec(incoming.message.text?.trim() || "") : null;
-        if (proof) { event.linkProofHash = createHash("sha256").update(proof[1]).digest("hex"); event.message = { type: "text", text: "[link-proof]" }; }
         await tx.insert(lineWebhookEvents).values({ eventId: event.webhookEventId, sourceId: supported ? event.source.userId : null, status: supported ? "processing" : "ignored", requestPayload: supported ? event : null }).onConflictDoNothing({ target: lineWebhookEvents.eventId });
       }
     });

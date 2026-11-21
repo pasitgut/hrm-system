@@ -4,3 +4,5 @@
 *.png binary
 *.jpg binary
 *.ico binary
+# Reference source bytes and original whitespace must survive a checkout unchanged.
+docs/legacy/google-apps-script/*.gs -text -whitespace

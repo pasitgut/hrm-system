@@ -125,9 +125,9 @@ LINE ส่ง webhook เข้า backend HRM จากนั้น backend �
 
 ### การเชื่อมบัญชี
 
-พนักงานเริ่มลงทะเบียนผ่าน LINE แล้วพิสูจน์ว่าเป็นเจ้าของบัญชีพนักงาน ไม่ใช้รหัสพนักงานเพียงอย่างเดียวเป็นหลักฐาน ข้อเสนอคือรหัสเชื่อมแบบใช้ครั้งเดียว อายุ 10 นาที ที่ออกผ่าน HRM หลังล็อกอิน และเก็บเฉพาะ hash ของรหัส จำกัดจำนวนครั้งที่ลองและ consume รหัสแบบ atomic
+ผู้ใช้ยืนยันให้ใช้ flow เดิม: พิมพ์ ลงทะเบียน แล้วกรอกรหัสพนักงาน ระบบค้น employees.code และบันทึก employees.line_uid ไม่ต้องขอ OTP จาก HRM เก็บรหัสเป็นข้อความเพื่อรักษาเลขศูนย์นำหน้า จำกัดการลอง 5 ครั้งต่อ 10 นาที และไม่เขียนทับ LINE binding ของผู้อื่น
 
-หาก HRM มี account-linking ที่ปลอดภัยอยู่แล้ว ให้ใช้ของเดิมแทน ข้อมูล LINE ID ที่นำเข้าต้องตรวจความซ้ำและความถูกต้องก่อนถือว่าเชื่อมสำเร็จ
+ข้อมูล LINE ID ที่นำเข้าต้องตรวจความซ้ำก่อนใช้ เมื่อเริ่มลางานโดยยังไม่ลงทะเบียน ให้ถามรหัสแล้วกลับเข้า flow ลาอัตโนมัติ รหัสพนักงานไม่ใช่ความลับ ความเสี่ยงและเงื่อนไข HRM ที่ยังต่างระบุใน docs/line-bot-differences.md
 
 ### การลาและการพิจารณา
 
@@ -236,3 +236,8 @@ Supabase Free อาจพักเมื่อกิจกรรมต่ำแ
 - [Google Calendar การสร้าง events](https://developers.google.com/workspace/calendar/api/guides/create-events)
 - [Vercel Terms ส่วน Hobby](https://vercel.com/legal/terms)
 - [Supabase Free และข้อจำกัด](https://supabase.com/pricing)
+
+
+## ข้อกำหนดล่าสุดเรื่องความเหมือนของระบบเดิม
+
+ใช้ employee-code registration และ Flex จาก Apps Script โดยตรงตามที่ผู้ใช้ยืนยัน ไม่ใช้ OTP หรือปุ่มเชื่อมใน HRM ตรวจ payload กับ source ที่เก็บใน docs/legacy/google-apps-script และทำ mapping ทุกฟังก์ชันใน docs/line-bot-function-mapping.md ความต่างที่เหลือต้องอยู่ใน docs/line-bot-differences.md ไม่ใช้คำว่าเหมือนเดิม 100% ครอบทั้งระบบจากผลทดสอบ backend เพียงอย่างเดียว

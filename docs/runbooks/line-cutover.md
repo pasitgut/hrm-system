@@ -12,7 +12,7 @@
 ## Test channel acceptance
 
 1. Enable the bot in a test deployment and verify `/api/line/webhook` in the LINE console. Invalid signatures must return 401. The proxy deliberately bypasses cookie redirects for this exact route only; the handler enforces provider authentication.
-2. Sign into HRM, click เชื่อม LINE, and send the one-use registration text in the bot's private chat. Codes expire in ten minutes; employee code alone is not proof of identity.
+2. In the bot's private chat, send ลงทะเบียน and then the employee code. Verify employees.line_uid is persisted and subsequent messages need no code. Also test starting leave while unregistered: after code entry, the original leave-type Flex must appear automatically. Employee codes are not secret identity proofs; follow the internal HR verification policy and never overwrite an existing LINE binding silently.
 3. Test leave creation, quota rejection, cancel-own, approve/reject, revoked permissions, date boundaries and duplicate delivery. Confirm that both website and LINE use the same leave rows and permissions.
 4. Test creating/viewing/deleting a mapped appointment and full-day approved leave. Simulate provider failure and verify durable retries and visible failed/unknown states.
 

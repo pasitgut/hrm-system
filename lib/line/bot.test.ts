@@ -7,7 +7,7 @@ import { createUser } from "@/tests/setup/factories";
 import { employees, users, leaveRequests, lineWebhookEvents, lineBotStates, lineIntegrationJobs, lineCalendarEvents } from "@/lib/db/schema";
 import { createLeave as createLeaveCommand } from "@/lib/leave/commands";
 import { receiveWebhook } from "@/lib/line/webhook";
-import { processPendingEvents, issueLinkCode } from "@/lib/line/bot";
+import { processPendingEvents } from "@/lib/line/bot";
 import { POST as createLeave } from "@/app/api/leave/route";
 import { PATCH as decideLeave } from "@/app/api/leave/[id]/decision/route";
 import { COOKIE_NAME, createSessionToken } from "@/lib/auth/session";
@@ -83,15 +83,31 @@ describe("LINE webhook and shared HRM workflows", () => {
     await send(postback({ action: "submit_leave" }));
     expect(await db.select().from(leaveRequests)).toHaveLength(0);
   });
-  it("links using a one-use HRM-issued code, never just an employee code", async () => {
+  it("registers with an employee code and reuses employees.line_uid on later messages", async () => {
     const account = await createUser({ role: "employee" });
-    await send(message(`ลงทะเบียน ${account.employee.code}`));
-    expect((await db.select().from(employees).where(eq(employees.id, account.employee.id)))[0].lineUid).toBeNull();
-    const { code } = await issueLinkCode(account.user.id);
-    await send(message(`ลงทะเบียน ${code}`));
-    expect((await db.select().from(employees).where(eq(employees.id, account.employee.id)))[0].lineUid).toBe(uid);
-    await send(message(`ลงทะเบียน ${code}`, "U22222222222222222222222222222222"));
-    expect((await db.select().from(employees).where(eq(employees.id, account.employee.id)))[0].lineUid).toBe(uid);
+    await db.update(employees).set({ code: "0012" }).where(eq(employees.id, account.employee.id));
+    await send(message("ลงทะเบียน"));
+    await send(message("0012"));
+    expect((await db.select().from(employees))[0].lineUid).toBe(uid);
+    await send(message("ส่งคำขอลางาน"));
+    const jobs = await db.select().from(lineIntegrationJobs);
+    expect(JSON.stringify(jobs[jobs.length - 1].payload.messages)).toContain("เลือกประเภทการลา");
+    expect(JSON.stringify(jobs)).not.toContain("ขอรหัสใหม่จาก HRM");
+  });
+  it("resumes leave submission automatically after employee-code registration", async () => {
+    const account = await createUser({ role: "employee" });
+    await send(message("ส่งคำขอลางาน"));
+    await send(message(account.employee.code));
+    expect((await db.select().from(employees))[0].lineUid).toBe(uid);
+    const messages = (await db.select().from(lineIntegrationJobs)).at(-1)!.payload.messages;
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({ type: "flex", altText: "เลือกประเภทการลา" });
+  });
+  it("never overwrites another LINE account when an employee code is already linked", async () => {
+    const account = await linked();
+    await send(message("ลงทะเบียน", "U22222222222222222222222222222222"));
+    await send(message(account.employee.code, "U22222222222222222222222222222222"));
+    expect((await db.select().from(employees))[0].lineUid).toBe(uid);
   });
   it("uses the same transactional notifications and Calendar jobs for web decisions", async () => {
     const account = await linked();
@@ -172,22 +188,19 @@ describe("LINE webhook and shared HRM workflows", () => {
     expect((await db.select().from(lineWebhookEvents))[0]).toMatchObject({ status: "ignored", errorCode: "EVENT_EXPIRED" });
     expect(await db.select().from(lineBotStates)).toHaveLength(0);
   });
-  it("stores only minimal ignored receipts and a digest of redeemable link proofs", async () => {
-    const account = await createUser({ role: "employee" }); const { code } = await issueLinkCode(account.user.id);
+  it("stores only minimal ignored receipts for unrelated group messages", async () => {
     const group = { ...message("private group details"), source: { type: "group", userId: uid } };
-    await accept(group, message(`ลงทะเบียน ${code}`));
+    await accept(group);
     const rows = await db.select().from(lineWebhookEvents);
-    expect(rows.find((r) => r.eventId === group.webhookEventId)?.requestPayload).toBeNull();
-    expect(JSON.stringify(rows)).not.toContain(code);
-    await processPendingEvents();
-    expect((await db.select().from(employees))[0].lineUid).toBe(uid);
+    expect(rows[0].requestPayload).toBeNull();
+    expect(JSON.stringify(rows)).not.toContain("private group details");
   });
   it("does not approve edited dates using an old approval card", async () => {
     const account = await linked(); const admin = await linked("hr", "U22222222222222222222222222222222");
     const result = await db.transaction((tx) => createLeaveCommand(tx, { employeeId: account.employee.id, permissions: account.user.permissions }, { leaveTypeCode: "sick", startOn: "2026-12-01", endOn: "2026-12-01", session: "full", reason: null }));
     if ("error" in result) throw new Error(result.error);
     const card = (await db.select().from(lineIntegrationJobs)).find((j) => j.payload.permission === "leave.approve")!;
-    const action = JSON.parse(card.payload.messages[0].template.actions[0].data);
+    const action = JSON.parse(card.payload.messages[0].contents.footer.contents[0].action.data);
     await db.update(leaveRequests).set({ startOn: "2026-12-02", endOn: "2026-12-02", updatedAt: new Date(Date.now() + 1000) }).where(eq(leaveRequests.id, result.id));
     const event = { ...postback(action), source: { type: "user", userId: "U22222222222222222222222222222222" } };
     await send(event);
@@ -203,13 +216,15 @@ describe("LINE webhook and shared HRM workflows", () => {
     expect((await db.select().from(leaveRequests))[0].statusCode).toBe("approved");
     expect((await db.select().from(lineIntegrationJobs)).filter((j) => j.kind === "calendar.upsert")).toHaveLength(1);
   });
-  it("paginates deletable appointments so every owned appointment is reachable", async () => {
+  it("lists the fifth owned appointment and accepts original name/date deletion input", async () => {
     const account = await linked(); const start = Date.now() + 86_400_000;
-    for (let n = 0; n < 5; n++) await db.insert(lineCalendarEvents).values({ employeeId: account.employee.id, title: `appointment-${n}`, startAt: new Date(start + n * 60_000), endAt: new Date(start + n * 60_000 + 3_600_000) });
+    for (let n = 0; n < 5; n++) await db.insert(lineCalendarEvents).values({ employeeId: account.employee.id, title: `appointment-${n}`, status: "synced", startAt: new Date(start + n * 60_000), endAt: new Date(start + n * 60_000 + 3_600_000) });
     await send(message("ลบนัดหมาย"));
-    await send(postback({ action: "list_events", offset: "4", mode: "delete" }));
     const replies = await db.select().from(lineIntegrationJobs);
     expect(JSON.stringify(replies[replies.length - 1].payload.messages)).toContain("appointment-4");
+    const { formatDateTime } = await import("@/lib/line/messages");
+    await send(message(`appointment-4 ${formatDateTime(new Date(start)).slice(0,10)}`));
+    expect((await db.select().from(lineCalendarEvents).where(eq(lineCalendarEvents.title, "appointment-4")))[0].status).toBe("deleting");
   });
   it("allows cancellation before interpreting a registration code", async () => {
     await send(message("ลงทะเบียน")); await send(message("ยกเลิก"));
