@@ -169,6 +169,13 @@
       "when": 1793836800000,
       "tag": "0023_align_salary_slip_constraint_names",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795147289082,
+      "tag": "0024_line_work_tracking_supabase",
+      "breakpoints": true
     }
   ]
 }

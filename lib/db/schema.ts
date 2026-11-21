@@ -178,6 +178,9 @@ export const overtimeRequests = pgTable(
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     reason: text("reason").notNull(),
+    source: varchar("source", { length: 30 }).notNull().default("hrm"),
+    lineDayKey: text("line_day_key"),
+    lineRequestIds: text("line_request_ids").array().notNull().default(sql`'{}'::text[]`),
     statusCode: varchar("status_code", { length: 20 })
       .notNull()
       .default("pending")
@@ -194,6 +197,8 @@ export const overtimeRequests = pgTable(
     index("overtime_requests_employee_id_start_at_idx").on(t.employeeId, t.startAt),
     index("overtime_requests_status_code_start_at_idx").on(t.statusCode, t.startAt),
     index("overtime_requests_decided_by_employee_id_idx").on(t.decidedByEmployeeId),
+    index("overtime_requests_source_line_day_status_idx").on(t.source, t.lineDayKey, t.statusCode),
+    check("overtime_requests_source_valid", sql`${t.source} IN ('hrm', 'line_bot')`),
   ],
 );
 
@@ -547,5 +552,105 @@ export const workTrackingRecords = pgTable(
     check("work_tracking_records_report_statuses_object", sql`jsonb_typeof(${t.reportStatuses}) = 'object'`),
     check("work_tracking_records_sub_statuses_array", sql`jsonb_typeof(${t.subStatuses}) = 'array'`),
     check("work_tracking_records_workers_object", sql`jsonb_typeof(${t.workers}) = 'object'`),
+  ],
+);
+
+// ---------- LINE work tracking integration ----------
+
+export const lineWebhookEvents = pgTable(
+  "line_webhook_events",
+  {
+    eventId: text("event_id").primaryKey(),
+    sourceId: text("source_id"),
+    status: text("status").notNull(),
+    attempts: integer("attempts").notNull().default(1),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    sheetCommitted: boolean("sheet_committed").notNull().default(false),
+    responsePayload: jsonb("response_payload"),
+    errorCode: text("error_code"),
+    pushRetryKey: uuid("push_retry_key").notNull().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("line_webhook_events_status_lease_idx").on(t.status, t.leaseUntil),
+    check(
+      "line_webhook_events_status_valid",
+      sql`${t.status} IN ('processing', 'committed', 'completed', 'failed_notified', 'failed_unnotified', 'ignored')`,
+    ),
+    check("line_webhook_events_attempts_positive", sql`${t.attempts} > 0`),
+  ],
+);
+
+export const workTrackingRequests = pgTable(
+  "work_tracking_requests",
+  {
+    requestId: text("request_id").primaryKey(),
+    workTrackingRecordId: uuid("work_tracking_record_id").references(() => workTrackingRecords.id, { onDelete: "set null" }),
+    eventDate: date("event_date").notNull(),
+    workDate: date("work_date").notNull(),
+    houseNo: varchar("house_no", { length: 120 }).notNull(),
+    round: varchar("round", { length: 40 }).notNull(),
+    inspectNo: varchar("inspect_no", { length: 64 }),
+    projectShortName: text("project_short_name").notNull().default(""),
+    developerNote: text("developer_note").notNull().default(""),
+    latestStatus: varchar("latest_status", { length: 20 }).$type<WorkTrackingRecordStatus>().notNull().default("in_progress"),
+    statusSource: varchar("status_source", { length: 20 }).notNull().default("default"),
+    checkerRequestStatus: varchar("checker_request_status", { length: 20 }),
+    latestEmployeeId: uuid("latest_employee_id").references(() => employees.id, { onDelete: "set null" }),
+    latestEmployeeCode: varchar("latest_employee_code", { length: 20 }).notNull(),
+    latestEmployeeName: varchar("latest_employee_name", { length: 255 }).notNull(),
+    latestStartTime: varchar("latest_start_time", { length: 10 }).notNull(),
+    latestEndTime: varchar("latest_end_time", { length: 10 }).notNull(),
+    latestAction: text("latest_action").notNull().default(""),
+    isOt: boolean("is_ot").notNull().default(false),
+    lastEventId: text("last_event_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("work_tracking_requests_house_round_date_idx").on(t.houseNo, t.round, t.eventDate),
+    index("work_tracking_requests_record_id_idx").on(t.workTrackingRecordId),
+    index("work_tracking_requests_work_date_idx").on(t.workDate),
+    check("work_tracking_requests_latest_status_valid", sql`${t.latestStatus} IN ('in_progress', 'completed', 'delivered')`),
+    check("work_tracking_requests_status_source_valid", sql`${t.statusSource} IN ('checker', 'line', 'tracking', 'default', 'hrm')`),
+  ],
+);
+
+export const workTrackingActivities = pgTable(
+  "work_tracking_activities",
+  {
+    activityId: text("activity_id").primaryKey(),
+    requestId: text("request_id")
+      .notNull()
+      .references(() => workTrackingRequests.requestId, { onDelete: "cascade" }),
+    workTrackingRecordId: uuid("work_tracking_record_id").references(() => workTrackingRecords.id, { onDelete: "set null" }),
+    overtimeRequestId: uuid("overtime_request_id").references(() => overtimeRequests.id, { onDelete: "set null" }),
+    employeeId: uuid("employee_id").references(() => employees.id, { onDelete: "set null" }),
+    employeeCode: varchar("employee_code", { length: 20 }).notNull(),
+    employeeName: varchar("employee_name", { length: 255 }).notNull(),
+    eventDate: date("event_date").notNull(),
+    workDate: date("work_date").notNull(),
+    startTime: varchar("start_time", { length: 10 }).notNull(),
+    endTime: varchar("end_time", { length: 10 }).notNull(),
+    houseNo: varchar("house_no", { length: 120 }).notNull(),
+    round: varchar("round", { length: 40 }).notNull(),
+    inspectNo: varchar("inspect_no", { length: 64 }),
+    projectShortName: text("project_short_name").notNull().default(""),
+    developerNote: text("developer_note").notNull().default(""),
+    action: text("action").notNull().default(""),
+    status: varchar("status", { length: 20 }).$type<WorkTrackingRecordStatus>().notNull(),
+    statusSource: varchar("status_source", { length: 20 }).notNull(),
+    isOt: boolean("is_ot").notNull().default(false),
+    eventId: text("event_id").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("work_tracking_activities_request_recorded_idx").on(t.requestId, t.recordedAt),
+    index("work_tracking_activities_event_id_idx").on(t.eventId),
+    index("work_tracking_activities_ot_request_id_idx").on(t.overtimeRequestId),
+    index("work_tracking_activities_record_id_idx").on(t.workTrackingRecordId),
+    check("work_tracking_activities_status_valid", sql`${t.status} IN ('in_progress', 'completed', 'delivered')`),
+    check("work_tracking_activities_status_source_valid", sql`${t.statusSource} IN ('checker', 'line', 'tracking', 'default', 'hrm')`),
   ],
 );

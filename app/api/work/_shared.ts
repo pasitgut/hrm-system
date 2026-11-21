@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { WorkTrackingApiRecord } from "@/lib/work-tracking/types";
+import type { WorkTrackingApiRecord, WorkTrackingRecordStatus, WorkTrackingSubStatus } from "@/lib/work-tracking/types";
 import type { workTrackingRecords } from "@/lib/db/schema";
 import { groupCheckerByKey, toChristian, type CheckerRow } from "@/lib/work-tracking/checker";
 
@@ -142,4 +142,76 @@ export function groupCheckerWorkTrackingRecords(rows: CheckerRow[]): WorkTrackin
   }
 
   return [...grouped.values()];
+}
+
+export function deriveWorkRecordStatus(
+  subStatuses: readonly WorkTrackingSubStatus[],
+  fallback: WorkTrackingRecordStatus = "in_progress",
+): WorkTrackingRecordStatus {
+  if (subStatuses.length === 0) return fallback;
+  if (subStatuses.every((subStatus) => subStatus.status === "delivered")) return "delivered";
+  if (subStatuses.every((subStatus) => subStatus.status === "completed" || subStatus.status === "delivered")) {
+    return "completed";
+  }
+  return "in_progress";
+}
+
+export function mergeSubStatuses(
+  checkerSubStatuses: readonly WorkTrackingSubStatus[],
+  localSubStatuses: readonly WorkTrackingSubStatus[],
+): WorkTrackingSubStatus[] {
+  const matchedLocalIndices = new Set<number>();
+  const merged: WorkTrackingSubStatus[] = checkerSubStatuses.map((checkerSub) => {
+    const checkerKey = checkerSub.detail.trim();
+    const localIndex = localSubStatuses.findIndex(
+      (localSub, index) => !matchedLocalIndices.has(index) && localSub.detail.trim() === checkerKey,
+    );
+    if (localIndex === -1) {
+      return {
+        ...checkerSub,
+        reportStatuses: { ...(checkerSub.reportStatuses ?? {}) },
+      };
+    }
+
+    matchedLocalIndices.add(localIndex);
+    const localSub = localSubStatuses[localIndex];
+    return {
+      detail: checkerSub.detail || localSub.detail,
+      status: checkerSub.status === "delivered" ? "delivered" : localSub.status,
+      reportStatuses: { ...(checkerSub.reportStatuses ?? {}), ...(localSub.reportStatuses ?? {}) },
+    };
+  });
+
+  localSubStatuses.forEach((localSub, index) => {
+    if (!matchedLocalIndices.has(index)) {
+      merged.push({
+        ...localSub,
+        reportStatuses: { ...(localSub.reportStatuses ?? {}) },
+      });
+    }
+  });
+
+  return merged;
+}
+
+export function mergeWorkTrackingRecord(
+  checkerItem: WorkTrackingApiRecord,
+  localItem: WorkTrackingApiRecord,
+): WorkTrackingApiRecord {
+  const subStatuses = mergeSubStatuses(checkerItem.subStatuses ?? [], localItem.subStatuses ?? []);
+  const status = deriveWorkRecordStatus(subStatuses, localItem.status || checkerItem.status);
+
+  return {
+    ...checkerItem,
+    ...localItem,
+    projectText: checkerItem.projectText || localItem.projectText,
+    detail: checkerItem.detail || localItem.detail,
+    status,
+    deliveredDate: localItem.deliveredDate || checkerItem.deliveredDate,
+    reportStatuses: { ...(checkerItem.reportStatuses ?? {}), ...(localItem.reportStatuses ?? {}) },
+    subStatuses,
+    workers: localItem.workers === "{}" ? checkerItem.workers : localItem.workers,
+    itemCount: Math.max(checkerItem.itemCount ?? 0, subStatuses.length, 1),
+    requestStatus: checkerItem.requestStatus,
+  };
 }

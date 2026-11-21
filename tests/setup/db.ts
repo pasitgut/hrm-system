@@ -17,6 +17,7 @@ export async function resetDb(): Promise<void> {
       users, overtime_requests, leave_requests, employee_skills,
       asset_request_events, asset_request_reads, asset_agreement_signers,
       asset_request_attachments, asset_request_items, asset_requests, asset_agreements,
+      work_tracking_activities, work_tracking_requests, work_tracking_records, line_webhook_events,
       employees, skills, leave_types, request_statuses,
       employment_types, employment_statuses, positions, departments
     RESTART IDENTITY CASCADE

@@ -26,6 +26,7 @@ async function main() {
       asset_agreement_signers, asset_agreements, asset_agreement_templates,
       asset_request_events, asset_request_reads, asset_request_attachments,
       asset_request_items, asset_requests,
+      work_tracking_activities, work_tracking_requests, work_tracking_records, line_webhook_events,
       employees, skills, leave_types, request_statuses,
       employment_types, employment_statuses, positions, departments
     RESTART IDENTITY CASCADE

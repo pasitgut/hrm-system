@@ -1,15 +1,10 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { resolvePostgresOptions } from "@/lib/db/connection";
 import * as schema from "@/lib/db/schema";
 
 function createClient(connectionString: string) {
-  const isNeon = connectionString.includes("neon.tech");
-  return postgres(connectionString, {
-    // Neon's pooled (-pooler) endpoint uses PgBouncer in transaction mode,
-    // which is incompatible with server-side prepared statements.
-    prepare: !isNeon,
-    ssl: isNeon ? "require" : false,
-  });
+  return postgres(connectionString, resolvePostgresOptions(connectionString));
 }
 
 const databaseUrl = process.env.DATABASE_URL;

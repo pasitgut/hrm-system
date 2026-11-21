@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { workTrackingRecords } from "@/lib/db/schema";
 import { requireApiAnyPermission, requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { getCheckerData } from "@/lib/work-tracking/checker";
-import { formatTrackingDate, groupCheckerWorkTrackingRecords, jsonError, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
+import { formatTrackingDate, groupCheckerWorkTrackingRecords, jsonError, mergeWorkTrackingRecord, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
 
 const VIEW_PERMISSIONS = ["work.view", "work.status.update", "work.create"] as const;
 
@@ -32,17 +32,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
     const checkerKeys = new Set(checkerItems.map(itemKey));
     const merged = checkerItems.map((item) => {
       const local = localByKey.get(itemKey(item));
-      if (!local) return item;
-      return {
-        ...item,
-        ...local,
-        deliveredDate: local.deliveredDate || item.deliveredDate,
-        reportStatuses: { ...item.reportStatuses, ...local.reportStatuses },
-        subStatuses: local.subStatuses.length ? local.subStatuses : item.subStatuses,
-        workers: local.workers === "{}" ? item.workers : local.workers,
-        itemCount: item.itemCount,
-        requestStatus: item.requestStatus,
-      };
+      return local ? mergeWorkTrackingRecord(item, local) : item;
     });
     merged.push(...localItems.filter((item) => !checkerKeys.has(itemKey(item))));
     return NextResponse.json({ success: true, data: merged });
