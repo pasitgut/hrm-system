@@ -55,7 +55,7 @@ describe("POST /api/leave-types", () => {
   });
 
   it("creates an active leave type with a database-assigned code and a quota for a supervisor", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", {
         method: "POST",
@@ -71,7 +71,7 @@ describe("POST /api/leave-types", () => {
   });
 
   it("allows a null annualQuotaDays to mean uncapped", async () => {
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { code: "unpaid", name: "ลาไม่รับค่าจ้าง" } }),
     );
@@ -81,7 +81,7 @@ describe("POST /api/leave-types", () => {
   });
 
   it("rejects a negative annualQuotaDays with 400", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { code: "bogus", name: "bogus", annualQuotaDays: -5 } }),
     );
@@ -89,7 +89,7 @@ describe("POST /api/leave-types", () => {
   });
 
   it("rejects a missing name with 400", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { annualQuotaDays: 3 } }),
     );
@@ -97,7 +97,7 @@ describe("POST /api/leave-types", () => {
   });
 
   it("returns a clean 409 on a duplicate name", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await POST(
       apiRequest("http://localhost/api/leave-types", { method: "POST", token, body: { name: "ลาป่วย" } }),
     );

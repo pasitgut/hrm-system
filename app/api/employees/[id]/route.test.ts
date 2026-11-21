@@ -84,7 +84,7 @@ describe("PATCH /api/employees/[id]", () => {
   });
 
   it("lets a supervisor partially update writable fields", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const employee = await createEmployee({ nickname: "เก่า" });
 
     const response = await PATCH(
@@ -99,7 +99,7 @@ describe("PATCH /api/employees/[id]", () => {
   });
 
   it("updates the linked login email with the employee email", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const employee = await createEmployee({ email: "old.employee@example.com" });
     const { user } = await createUser({
       employeeId: employee.id,
@@ -127,7 +127,7 @@ describe("PATCH /api/employees/[id]", () => {
   });
 
   it("returns 400 for a managerId equal to the employee's own id", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const employee = await createEmployee();
 
     const response = await PATCH(
@@ -138,7 +138,7 @@ describe("PATCH /api/employees/[id]", () => {
   });
 
   it("returns 404 for an unknown id", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const response = await PATCH(
       employeeRequest("http://localhost/api/employees/00000000-0000-0000-0000-000000000000", { method: "PATCH", token, body: { nickname: "x" } }),
       ctx("00000000-0000-0000-0000-000000000000"),
@@ -147,7 +147,7 @@ describe("PATCH /api/employees/[id]", () => {
   });
 
   it("returns 404 before parsing malformed JSON for an unknown id", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const id = "00000000-0000-0000-0000-000000000000";
     const request = new NextRequest(`http://localhost/api/employees/${id}`, {
       method: "PATCH",
@@ -173,7 +173,7 @@ describe("DELETE /api/employees/[id]", () => {
   });
 
   it("soft-deletes the employee and cascades to users.isActive = false", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const { user, employee } = await createUser({ role: "employee" });
 
     const response = await DELETE(employeeRequest(`http://localhost/api/employees/${employee.id}`, { method: "DELETE", token }), ctx(employee.id));
@@ -190,7 +190,7 @@ describe("DELETE /api/employees/[id]", () => {
   });
 
   it("returns 409 when the employee is already off-boarded", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const employee = await createEmployee();
     await db.update(employees).set({ deletedAt: new Date() }).where(eq(employees.id, employee.id));
 
@@ -199,7 +199,7 @@ describe("DELETE /api/employees/[id]", () => {
   });
 
   it("returns 404 for an unknown id", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const response = await DELETE(
       employeeRequest("http://localhost/api/employees/00000000-0000-0000-0000-000000000000", { method: "DELETE", token }),
       ctx("00000000-0000-0000-0000-000000000000"),

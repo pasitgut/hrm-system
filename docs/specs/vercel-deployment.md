@@ -44,5 +44,5 @@
 - Runtime ของ `hrm-system` บน Vercel ตั้ง `DATABASE_URL` ชี้ไปยัง Supabase Transaction Pooler (`:6543`, `?pgbouncer=true`) ซึ่ง `lib/db/connection.ts` ปิด prepared statements (`prepare: false`) และบังคับ TLS (`ssl: "require"`) ให้อัตโนมัติ
 - ทุกตารางใน schema `public` เปิด `ROW LEVEL SECURITY` โดยไม่มี policy สำหรับ `anon`/`authenticated`; `hrm-system` ใช้ direct Postgres connection ส่วน `line-work-tracking` ใช้ `SUPABASE_SECRET_KEY` (`service_role`) ผ่าน `@supabase/server` และเรียก RPC `public.save_line_work_batch` ที่จำกัดสิทธิ์เฉพาะ `service_role`
 - Environment Variables แยกตาม Vercel project:
-  - **`hrm-system`**: `DATABASE_URL`, `DIRECT_DATABASE_URL` (เฉพาะ release/migrate), `JWT_SECRET`, `SESSION_COOKIE_NAME`, `CHECKER_API_EMAIL`, `CHECKER_API_PASSWORD`, Google Drive / ImgBB secrets
+  - **`hrm-system`**: `DATABASE_URL`, `DIRECT_DATABASE_URL` (เฉพาะ release/migrate), `JWT_SECRET`, `SESSION_COOKIE_NAME`, `CHECKER_API_EMAIL`, `CHECKER_API_PASSWORD`, Google Drive / Cloudinary secrets
   - **`line-work-tracking`**: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (จาก Supabase project เดียวกัน), `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN`, `CHECKER_EMAIL` (หรือ `CHECKER_EMAIl`), `CHECKER_PASS`

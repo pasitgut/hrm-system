@@ -1,10 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { db, closeDb, resetDb } from "@/tests/setup/db";
+import { closeDb, resetDb } from "@/tests/setup/db";
 import { createUser } from "@/tests/setup/factories";
 import { fixtureWorkbook } from "@/tests/setup/salary-slips";
 import { createSessionToken, COOKIE_NAME } from "@/lib/auth/session";
-import { salarySlipImports, salarySlips } from "@/lib/db/schema";
 import { POST as EXPORT } from "./export/route";
 
 const grants = ["salary_slips.view", "salary_slips.export"];
@@ -80,10 +79,6 @@ describe("stateless salary slip export API", () => {
     const xlsxResponse = await EXPORT(exportFormRequest(xlsxForm, token));
     expect(xlsxResponse.status).toBe(200);
     expect((await xlsxResponse.arrayBuffer()).byteLength).toBeGreaterThan(1000);
-
-    // Stateless: nothing is written to salary_slip_imports or salary_slips.
-    expect(await db.select().from(salarySlipImports)).toHaveLength(0);
-    expect(await db.select().from(salarySlips)).toHaveLength(0);
   });
 
   it("warns on missing YTD months and exports after acknowledgeMissing=true", async () => {

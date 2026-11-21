@@ -51,7 +51,7 @@ describe("PATCH /api/departments/[id]", () => {
 
   it("edits the name for a supervisor", async () => {
     const department = await seedDepartment();
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await PATCH(
       apiRequest(`http://localhost/api/departments/${department.id}`, { method: "PATCH", token, body: { name: "Marketing & Growth" } }),
       { params: Promise.resolve({ id: String(department.id) }) },
@@ -62,7 +62,7 @@ describe("PATCH /api/departments/[id]", () => {
   });
 
   it("returns 404 for an id that does not exist", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await PATCH(
       apiRequest("http://localhost/api/departments/999999", { method: "PATCH", token, body: { name: "X" } }),
       { params: Promise.resolve({ id: "999999" }) },
@@ -73,7 +73,7 @@ describe("PATCH /api/departments/[id]", () => {
   it("reactivates a deactivated department via isActive: true", async () => {
     const department = await seedDepartment();
     await db.update(departments).set({ isActive: false }).where(eq(departments.id, department.id));
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
     const response = await PATCH(
       apiRequest(`http://localhost/api/departments/${department.id}`, { method: "PATCH", token, body: { isActive: true } }),
       { params: Promise.resolve({ id: String(department.id) }) },
@@ -98,7 +98,7 @@ describe("DELETE /api/departments/[id]", () => {
   it("deletes the department and clears employee department references", async () => {
     const department = await seedDepartment();
     const employee = await createEmployee({ departmentId: department.id });
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await DELETE(
       apiRequest(`http://localhost/api/departments/${department.id}`, { method: "DELETE", token }),
       { params: Promise.resolve({ id: String(department.id) }) },

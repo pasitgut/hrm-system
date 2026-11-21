@@ -14,7 +14,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env scripts/db/migrate.ts",
     "db:seed": "tsx --env-file-if-exists=.env scripts/db/seed.ts",
     "db:seed-volume": "tsx --env-file-if-exists=.env scripts/db/seed-volume-data.ts",
-    "db:migrate-employee-documents-drive": "tsx --env-file-if-exists=.env scripts/db/migrate-employee-documents-to-drive.ts",
+    "db:migrate-imgbb-cloudinary": "tsx --env-file-if-exists=.env scripts/db/migrate-imgbb-to-cloudinary.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

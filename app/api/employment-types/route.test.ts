@@ -42,7 +42,7 @@ describe("employment-types settings CRUD", () => {
     );
     expect(forbidden.status).toBe(403);
 
-    const supervisorToken = await tokenFor("supervisor");
+    const supervisorToken = await tokenFor("hr");
     const created = await POST(
       apiRequest("http://localhost/api/employment-types", { method: "POST", token: supervisorToken, body: { code: " intern ", name: " ฝึกงาน " } }),
     );
@@ -58,7 +58,7 @@ describe("employment-types settings CRUD", () => {
   });
 
   it("rejects a missing code with 400", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await POST(apiRequest("http://localhost/api/employment-types", { method: "POST", token, body: { name: "ไม่มีรหัส" } }));
     expect(response.status).toBe(400);
   });
@@ -66,7 +66,7 @@ describe("employment-types settings CRUD", () => {
   it("PATCH edits the name, then DELETE removes the type and clears employee references", async () => {
     const [type] = await db.insert(employmentTypes).values({ code: "part_time", name: "พาร์ทไทม์" }).returning();
     const employee = await createEmployee({ employmentTypeId: type.id });
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
 
     const edited = await PATCH(
       apiRequest(`http://localhost/api/employment-types/${type.id}`, { method: "PATCH", token, body: { name: "พาร์ทไทม์ (แก้ไข)" } }),

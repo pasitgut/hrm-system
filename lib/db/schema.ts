@@ -4,7 +4,6 @@ import {
   check,
   date,
   bigint,
-  customType,
   index,
   integer,
   jsonb,
@@ -23,10 +22,7 @@ import {
 import { sql } from "drizzle-orm";
 import type { WorkTrackingRecordStatus, WorkTrackingSession, WorkTrackingSubStatus } from "@/lib/work-tracking/types";
 import type { EmployeePayrollData } from "@/lib/employees/payroll-data";
-
-const bytea = customType<{ data: Buffer; driverData: Buffer }>({
-  dataType: () => "bytea",
-});
+import type { Role } from "@/lib/auth/roles";
 
 // ---------- lookup tables ----------
 
@@ -89,12 +85,6 @@ export const leaveTypes = pgTable("leave_types", {
   isActive: boolean("is_active").notNull().default(true),
 }, (t) => [check("leave_types_quota_basis_valid", sql`${t.quotaBasis} IN ('fixed', 'tenure')`)]);
 
-export const skills = pgTable("skills", {
-  id: integer("id").generatedByDefaultAsIdentity().primaryKey(),
-  name: varchar("name", { length: 100 }).notNull().unique(),
-  isActive: boolean("is_active").notNull().default(true),
-});
-
 // ---------- employees ----------
 
 export const employees = pgTable(
@@ -126,8 +116,8 @@ export const employees = pgTable(
     positionId: integer("position_id").references(() => positions.id, { onDelete: "set null" }),
     employmentStatusId: smallint("employment_status_id").references(() => employmentStatuses.id, { onDelete: "set null" }),
     employmentTypeId: smallint("employment_type_id").references(() => employmentTypes.id, { onDelete: "set null" }),
-    // Display/org-chart only — approval routing stays flat (any supervisor/ceo
-    // can decide any request), this is not wired into any permission check.
+    // Display/org-chart only — approval routing stays flat (any account with
+    // approval permissions can decide any request), not wired into permission checks.
     managerId: uuid("manager_id").references((): AnyPgColumn => employees.id),
     // Soft delete (off-boarding): set instead of a hard DELETE so OT/leave
     // request history referencing this employee stays intact. Cascades to users.isActive.
@@ -142,26 +132,6 @@ export const employees = pgTable(
     index("employees_employment_status_id_idx").on(t.employmentStatusId),
     index("employees_employment_type_id_idx").on(t.employmentTypeId),
     index("employees_manager_id_idx").on(t.managerId),
-  ],
-);
-
-export const employeeSkills = pgTable(
-  "employee_skills",
-  {
-    employeeId: uuid("employee_id")
-      .notNull()
-      .references(() => employees.id),
-    skillId: integer("skill_id")
-      .notNull()
-      .references(() => skills.id),
-    // Allowed values: 1-5, enforced in application validation (no DB CHECK).
-    skillLevel: smallint("skill_level").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.employeeId, t.skillId] }),
-    index("employee_skills_skill_id_idx").on(t.skillId),
   ],
 );
 
@@ -241,61 +211,26 @@ export const leaveRequests = pgTable(
 
 // ---------- auth ----------
 
-export const userRoleEnum = pgEnum("user_role", ["employee", "supervisor", "ceo"]);
-
-export const users = pgTable("users", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  employeeId: uuid("employee_id")
-    .notNull()
-    .unique()
-    .references(() => employees.id),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  mustChangePassword: boolean("must_change_password").notNull().default(false),
-  role: userRoleEnum("role").notNull().default("employee"),
-  permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
-  isActive: boolean("is_active").notNull().default(true),
-  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-// Salary slips are independent of the payroll mockup and employee compensation.
-export const salarySlipImports = pgTable("salary_slip_imports", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  createdBy: uuid("created_by").notNull().references(() => users.id),
-  files: jsonb("files").$type<import("@/lib/salary-slips/model").ImportFile[]>().notNull(),
-  rows: jsonb("rows").$type<import("@/lib/salary-slips/model").ImportRow[]>().notNull(),
-  committedAt: timestamp("committed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-export const salarySlips = pgTable("salary_slips", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  employeeId: uuid("employee_id").notNull().references(() => employees.id),
-  year: integer("year").notNull(),
-  month: smallint("month").notNull(),
-  revision: integer("revision").notNull().default(1),
-  data: jsonb("data").$type<import("@/lib/salary-slips/model").SlipData>().notNull(),
-  incomeTotal: numeric("income_total", { precision: 12, scale: 2 }).notNull(),
-  deductionTotal: numeric("deduction_total", { precision: 12, scale: 2 }).notNull(),
-  netPay: numeric("net_pay", { precision: 12, scale: 2 }).notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex("salary_slips_employee_period_unique").on(t.employeeId, t.year, t.month),
-  check("salary_slips_month_valid", sql`${t.month} BETWEEN 1 AND 12`),
-  check("salary_slips_year_valid", sql`${t.year} BETWEEN 1900 AND 2200`),
-  check("salary_slips_revision_valid", sql`${t.revision} > 0`),
-]);
-export const salarySlipVersions = pgTable("salary_slip_versions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  slipId: uuid("slip_id").notNull().references(() => salarySlips.id),
-  importId: uuid("import_id").notNull().references(() => salarySlipImports.id),
-  revision: integer("revision").notNull(),
-  data: jsonb("data").$type<import("@/lib/salary-slips/model").SlipData>().notNull(),
-  createdBy: uuid("created_by").notNull().references(() => users.id),
-  reason: text("reason").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("salary_slip_versions_revision_unique").on(t.slipId, t.revision)]);
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    employeeId: uuid("employee_id")
+      .notNull()
+      .unique()
+      .references(() => employees.id),
+    email: varchar("email", { length: 255 }).notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    mustChangePassword: boolean("must_change_password").notNull().default(false),
+    role: varchar("role", { length: 20 }).$type<Role>().notNull().default("employee"),
+    permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+    isActive: boolean("is_active").notNull().default(true),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("users_role_valid", sql`${t.role} IN ('employee', 'hr', 'executive')`)],
+);
 
 export const employeeDocuments = pgTable(
   "employee_documents",
@@ -305,10 +240,7 @@ export const employeeDocuments = pgTable(
     fileName: text("file_name").notNull(),
     mimeType: varchar("mime_type", { length: 127 }).notNull(),
     fileSize: integer("file_size").notNull(),
-    // Existing records may still have a legacy database copy until the
-    // Google Drive migration script moves them. New uploads only set driveFileId.
-    fileData: bytea("file_data"),
-    driveFileId: text("drive_file_id"),
+    driveFileId: text("drive_file_id").notNull(),
     sharedWithUserIds: uuid("shared_with_user_ids").array().notNull().default(sql`'{}'::uuid[]`),
     uploadedByUserId: uuid("uploaded_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -316,11 +248,7 @@ export const employeeDocuments = pgTable(
   (t) => [
     index("employee_documents_employee_created_idx").on(t.employeeId, t.createdAt),
     uniqueIndex("employee_documents_drive_file_id_unique").on(t.driveFileId),
-    check("employee_documents_file_size_valid", sql`${t.fileSize} > 0 and ${t.fileSize} <= 15728640`),
-    check(
-      "employee_documents_storage_location_valid",
-      sql`(${t.driveFileId} is not null and ${t.fileData} is null) or (${t.driveFileId} is null and ${t.fileData} is not null)`,
-    ),
+    check("employee_documents_file_size_valid", sql`${t.fileSize} > 0 and ${t.fileSize} <= 52428800`),
   ],
 );
 

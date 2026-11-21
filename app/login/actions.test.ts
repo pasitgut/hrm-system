@@ -16,7 +16,7 @@ describe("authenticate", () => {
   });
 
   it("is case-insensitive on the email", async () => {
-    const { user, plainPassword } = await createUser({ email: "mixedcase@example.com", role: "supervisor" });
+    const { user, plainPassword } = await createUser({ email: "mixedcase@example.com", role: "hr" });
 
     const result = await authenticate("MixedCase@example.com", plainPassword);
 

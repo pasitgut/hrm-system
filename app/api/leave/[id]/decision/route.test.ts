@@ -47,10 +47,10 @@ describe("PATCH /api/leave/[id]/decision", () => {
   });
 
   it("lets a supervisor approve a pending request and sets decision fields", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee } = await createUser({ role: "employee" });
     const request = await createLeaveRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
 
     const response = await decisionRequest(request.id, token, { decision: "approved", note: "ok" });
     const payload = await response.json();
@@ -63,10 +63,10 @@ describe("PATCH /api/leave/[id]/decision", () => {
   });
 
   it("lets a ceo reject a pending request", async () => {
-    const { user: ceoUser, employee: ceo } = await createUser({ role: "ceo" });
+    const { user: ceoUser, employee: ceo } = await createUser({ role: "executive" });
     const { employee } = await createUser({ role: "employee" });
     const request = await createLeaveRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "ceo" }));
+    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "executive" }));
 
     const response = await decisionRequest(request.id, token, { decision: "rejected" });
     const payload = await response.json();
@@ -77,28 +77,28 @@ describe("PATCH /api/leave/[id]/decision", () => {
   });
 
   it("returns 404 for an unknown request id", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const { user, employee } = await createUser({ role: "hr" });
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
 
     const response = await decisionRequest("00000000-0000-0000-0000-000000000000", token, { decision: "approved" });
     expect(response.status).toBe(404);
   });
 
   it("returns 409 when re-deciding an already-decided request", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
+    const { user, employee } = await createUser({ role: "hr" });
     const { employee: target } = await createUser({ role: "employee" });
     const request = await createLeaveRequest({ employeeId: target.id, statusCode: "approved" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
 
     const response = await decisionRequest(request.id, token, { decision: "rejected" });
     expect(response.status).toBe(409);
   });
 
   it("returns 400 for an invalid decision value", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
+    const { user, employee } = await createUser({ role: "hr" });
     const { employee: target } = await createUser({ role: "employee" });
     const request = await createLeaveRequest({ employeeId: target.id });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
 
     const response = await decisionRequest(request.id, token, { decision: "maybe" });
     expect(response.status).toBe(400);

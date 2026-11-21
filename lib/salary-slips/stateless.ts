@@ -4,6 +4,8 @@ import { parseWorkbook } from "./parser";
 export const MAX_UPLOAD_FILES = 12;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
+export const VERCEL_SAFE_UPLOAD_BYTES = 3.5 * 1024 * 1024;
+export const MAX_SINGLE_WORKBOOK_BYTES = 4 * 1024 * 1024;
 
 export class SlipError extends Error {
   constructor(message: string, public status = 400) {
@@ -32,7 +34,7 @@ export function duplicateSourceRows(rows: ImportRow[]) {
   }
 }
 
-export async function parseUploadedSalaryWorkbooks(files: UploadedWorkbook[]): Promise<ImportRow[]> {
+export async function parseSalaryWorkbookBatch(files: UploadedWorkbook[]): Promise<ImportRow[]> {
   if (!files.length || files.length > MAX_UPLOAD_FILES) {
     throw new SlipError(`เลือกไฟล์ Excel 1–${MAX_UPLOAD_FILES} ไฟล์`);
   }
@@ -52,8 +54,6 @@ export async function parseUploadedSalaryWorkbooks(files: UploadedWorkbook[]): P
     }
   }
 
-  duplicateSourceRows(rows);
-
   const invalidRows = rows.filter((row) => !row.data || row.errors.length > 0);
   if (invalidRows.length > 0) {
     const details = invalidRows
@@ -65,6 +65,27 @@ export async function parseUploadedSalaryWorkbooks(files: UploadedWorkbook[]): P
   }
 
   return rows;
+}
+
+export function validateCombinedSalaryRows(rows: ImportRow[]): ImportRow[] {
+  const cloned = rows.map((row) => ({ ...row, errors: [...row.errors], warnings: [...row.warnings] }));
+  duplicateSourceRows(cloned);
+
+  const invalidRows = cloned.filter((row) => !row.data || row.errors.length > 0);
+  if (invalidRows.length > 0) {
+    const details = invalidRows
+      .slice(0, 5)
+      .map((row) => `${row.file} แถว ${row.row}: ${row.errors.join(", ") || "ข้อมูลไม่ถูกต้อง"}`)
+      .join(" | ");
+    const extra = invalidRows.length > 5 ? ` และอีก ${invalidRows.length - 5} รายการ` : "";
+    throw new SlipError(`พบข้อมูลผิดพลาดในไฟล์ Excel (${details}${extra})`);
+  }
+
+  return cloned;
+}
+
+export async function parseUploadedSalaryWorkbooks(files: UploadedWorkbook[]): Promise<ImportRow[]> {
+  return validateCombinedSalaryRows(await parseSalaryWorkbookBatch(files));
 }
 
 export function buildStatelessExportSlips(

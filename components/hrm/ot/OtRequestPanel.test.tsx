@@ -27,7 +27,7 @@ describe("OtRequestPanel", () => {
     vi.stubGlobal("fetch", fetchMock);
     const onUpdated = vi.fn();
 
-    render(<OtRequestPanel role="supervisor" permissions={["ot.approve"]} onUpdated={onUpdated} />);
+    render(<OtRequestPanel role="hr" permissions={["ot.approve"]} onUpdated={onUpdated} />);
 
     expect(await screen.findByText("ปิดงานระบบ")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "ไม่อนุมัติ" }));

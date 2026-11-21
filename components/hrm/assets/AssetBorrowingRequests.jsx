@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cx } from "@/utils/cx";
 import { canExportAgreementDocument, isAssetFormOnly, matchesAssetAgreementFilter } from "@/asset-borrowing/domain/asset";
 import { agreementBodyPreviewText, agreementDocumentHtml, downloadAgreementDocument } from "@/components/hrm/assets/agreementPrint";
+import { uploadImage } from "@/lib/client/upload-image";
 
 const statusLabels = {
   pending: "รออนุมัติ",
@@ -35,13 +36,12 @@ function dateText(value) {
   return new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric" }).format(new Date(year, month - 1, day));
 }
 
-async function uploadAssetImage(file) {
-  const formData = new FormData();
-  formData.append("file", file, file.name || "asset-image");
-  const response = await fetch("/api/asset-requests/uploads", { method: "POST", body: formData });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.url) throw new Error(payload.error || "อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่");
-  return payload.url;
+async function uploadAssetImage(file, scope = "asset") {
+  return uploadImage(file, {
+    scope,
+    maxBytes: 8 * 1024 * 1024,
+    maxDimension: 2400,
+  });
 }
 
 function SignaturePad({ onChange, label = "ลงลายมือชื่อ", large = false }) {
@@ -101,7 +101,7 @@ function SignaturePad({ onChange, label = "ลงลายมือชื่อ"
     setUploading(true);
     setUploadError("");
     try {
-      const url = await uploadAssetImage(new File([blob], fileName, { type: blob.type || "image/png" }));
+      const url = await uploadAssetImage(new File([blob], fileName, { type: blob.type || "image/png" }), "signature");
       onChange(url);
     } catch (error) {
       onChange("");
@@ -169,7 +169,7 @@ function SignaturePad({ onChange, label = "ลงลายมือชื่อ"
     setUploading(true);
     setUploadError("");
     try {
-      onChange(await uploadAssetImage(file));
+      onChange(await uploadAssetImage(file, "signature"));
     } catch (error) {
       onChange("");
       setUploadError(error instanceof Error ? error.message : "อัปโหลดลายเซ็นไม่สำเร็จ");

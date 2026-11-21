@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { bufferToReadableStream } from "@/lib/api/stream";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { assertLeaveReportExportAccess, getLeaveReportAccess, LeaveReportAccessError } from "@/lib/reports/leave/access";
 import { renderLeaveReportPdf } from "@/lib/reports/pdf";
@@ -44,11 +45,12 @@ export const POST = withApiAuth(async (request: NextRequest) => {
     const pdf = await renderLeaveReportPdf({ variant: parsed.data.variant, model, sortRules: parsed.data.sortRules });
     const monthPart = parsed.data.month === undefined ? "" : `-${String(parsed.data.month).padStart(2, "0")}`;
     const filename = `leave-report-${parsed.data.variant}-${parsed.data.year}${monthPart}.pdf`;
-    return new NextResponse(new Uint8Array(pdf), {
+    return new Response(bufferToReadableStream(pdf), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": String(pdf.byteLength),
         "Cache-Control": "no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
       },

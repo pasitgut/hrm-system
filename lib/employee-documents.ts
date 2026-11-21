@@ -1,4 +1,5 @@
-export const MAX_EMPLOYEE_DOCUMENT_BYTES = 15 * 1024 * 1024;
+export const MAX_EMPLOYEE_DOCUMENT_MB = 50;
+export const MAX_EMPLOYEE_DOCUMENT_BYTES = MAX_EMPLOYEE_DOCUMENT_MB * 1024 * 1024;
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   pdf: "application/pdf",
@@ -20,10 +21,9 @@ export function sanitizeDocumentName(value: string): string {
   return Array.from(basename || "document").slice(0, 255).join("");
 }
 
-export function validateEmployeeDocument(
+export function resolveEmployeeDocumentMimeType(
   fileName: string,
   declaredMimeType: string,
-  data: Buffer,
 ): { ok: true; mimeType: string } | { ok: false; message: string } {
   const extension = fileName.split(".").at(-1)?.toLocaleLowerCase("en-US") ?? "";
   const mimeType = Object.prototype.hasOwnProperty.call(MIME_BY_EXTENSION, extension) ? MIME_BY_EXTENSION[extension] : undefined;
@@ -33,9 +33,27 @@ export function validateEmployeeDocument(
     return { ok: false, message: "ชนิดไฟล์ไม่ตรงกับนามสกุลไฟล์" };
   }
 
-  const startsWith = (signature: number[]) => signature.every((byte, index) => data[index] === byte);
+  return { ok: true, mimeType };
+}
+
+export function validateEmployeeDocumentHeader(
+  fileName: string,
+  declaredMimeType: string,
+  headerBytes: Buffer,
+): { ok: true; mimeType: string } | { ok: false; message: string } {
+  const resolved = resolveEmployeeDocumentMimeType(fileName, declaredMimeType);
+  if (!resolved.ok) return resolved;
+
+  if (headerBytes.byteLength < 4) {
+    return { ok: false, message: "เนื้อหาไฟล์ไม่ตรงกับชนิดเอกสารที่เลือก" };
+  }
+
+  const extension = fileName.split(".").at(-1)?.toLocaleLowerCase("en-US") ?? "";
+  const startsWith = (signature: number[]) =>
+    headerBytes.byteLength >= signature.length && signature.every((byte, index) => headerBytes[index] === byte);
+
   const validSignature = extension === "pdf"
-    ? data.subarray(0, 5).toString("ascii") === "%PDF-"
+    ? headerBytes.subarray(0, 5).toString("ascii") === "%PDF-"
     : extension === "png"
       ? startsWith([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
       : extension === "jpg" || extension === "jpeg"
@@ -45,7 +63,15 @@ export function validateEmployeeDocument(
           : startsWith([0x50, 0x4b, 0x03, 0x04]) || startsWith([0x50, 0x4b, 0x05, 0x06]);
 
   if (!validSignature) return { ok: false, message: "เนื้อหาไฟล์ไม่ตรงกับชนิดเอกสารที่เลือก" };
-  return { ok: true, mimeType };
+  return resolved;
+}
+
+export function validateEmployeeDocument(
+  fileName: string,
+  declaredMimeType: string,
+  data: Buffer,
+): { ok: true; mimeType: string } | { ok: false; message: string } {
+  return validateEmployeeDocumentHeader(fileName, declaredMimeType, data);
 }
 
 export function contentDisposition(fileName: string): string {

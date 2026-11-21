@@ -8,6 +8,9 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { hasPermission } from "@/lib/auth/permissions";
 
+const SAFE_BATCH_BYTES = 3.5 * 1024 * 1024;
+const MAX_SINGLE_WORKBOOK_BYTES = 4 * 1024 * 1024;
+
 const MONTHS = Array.from({ length: 12 }, (_, index) => ({
   value: String(index + 1),
   label: new Intl.DateTimeFormat("th-TH", { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, index, 1))),
@@ -28,6 +31,7 @@ export default function PayrollModule({ permissions = [] }) {
   const [slipFiles, setSlipFiles] = useState([]);
   const [slipScope, setSlipScope] = useState("selected");
   const [slipExporting, setSlipExporting] = useState("");
+  const [slipProgress, setSlipProgress] = useState("");
   const [slipError, setSlipError] = useState("");
   const [slipNotice, setSlipNotice] = useState("");
   const [slipMissing, setSlipMissing] = useState(null);
@@ -41,22 +45,76 @@ export default function PayrollModule({ permissions = [] }) {
       return;
     }
     setSlipExporting(format);
+    setSlipProgress("");
     setSlipError("");
     setSlipNotice("");
     if (!acknowledgeMissing) setSlipMissing(null);
 
     try {
-      const form = new FormData();
-      for (const file of slipFiles) form.append("files", file);
-      form.append("format", format);
-      form.append("year", year);
-      if (slipScope === "selected") form.append("month", month);
-      if (acknowledgeMissing) form.append("acknowledgeMissing", "true");
+      const totalBytes = slipFiles.reduce((sum, file) => sum + file.size, 0);
+      let response;
 
-      const response = await fetch("/api/salary-slips/export", {
-        method: "POST",
-        body: form,
-      });
+      if (totalBytes <= SAFE_BATCH_BYTES) {
+        const form = new FormData();
+        for (const file of slipFiles) form.append("files", file);
+        form.append("format", format);
+        form.append("year", year);
+        if (slipScope === "selected") form.append("month", month);
+        if (acknowledgeMissing) form.append("acknowledgeMissing", "true");
+
+        response = await fetch("/api/salary-slips/export", {
+          method: "POST",
+          body: form,
+        });
+      } else {
+        const oversized = slipFiles.find((file) => file.size > MAX_SINGLE_WORKBOOK_BYTES);
+        if (oversized) {
+          throw new Error(`ไฟล์ ${oversized.name} มีขนาดเกิน 4 MB กรุณาแบ่งแยกไฟล์รายเดือนก่อนอัปโหลด`);
+        }
+
+        const batches = [];
+        let currentBatch = [];
+        let currentBatchBytes = 0;
+        for (const file of slipFiles) {
+          if (currentBatch.length > 0 && currentBatchBytes + file.size > SAFE_BATCH_BYTES) {
+            batches.push(currentBatch);
+            currentBatch = [];
+            currentBatchBytes = 0;
+          }
+          currentBatch.push(file);
+          currentBatchBytes += file.size;
+        }
+        if (currentBatch.length > 0) batches.push(currentBatch);
+
+        const combinedRows = [];
+        for (let index = 0; index < batches.length; index += 1) {
+          setSlipProgress(`กำลังอ่านไฟล์ชุดที่ ${index + 1}/${batches.length}…`);
+          const batchForm = new FormData();
+          for (const file of batches[index]) batchForm.append("files", file);
+          const parseResponse = await fetch("/api/salary-slips/parse", {
+            method: "POST",
+            body: batchForm,
+          });
+          const parsePayload = await parseResponse.json().catch(() => ({}));
+          if (!parseResponse.ok) {
+            throw new Error(parsePayload.error || "อ่านไฟล์ Excel ไม่สำเร็จ");
+          }
+          combinedRows.push(...(parsePayload.rows ?? []));
+        }
+
+        setSlipProgress("กำลังสร้างไฟล์สลิป…");
+        response = await fetch("/api/salary-slips/export", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            format,
+            year: Number(year),
+            ...(slipScope === "selected" ? { month: Number(month) } : {}),
+            acknowledgeMissing,
+            rows: combinedRows,
+          }),
+        });
+      }
 
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
@@ -82,6 +140,7 @@ export default function PayrollModule({ permissions = [] }) {
       setSlipError(exportError.message);
     } finally {
       setSlipExporting("");
+      setSlipProgress("");
     }
   }
 
@@ -298,6 +357,7 @@ export default function PayrollModule({ permissions = [] }) {
           </p>
         ) : null}
 
+        {slipProgress ? <p role="status" className="text-xs text-muted-foreground">{slipProgress}</p> : null}
         {slipError ? <p role="alert" className="text-sm text-status-danger">{slipError}</p> : null}
         {slipNotice ? <p role="status" className="text-sm text-status-success">{slipNotice}</p> : null}
         {slipMissing ? (

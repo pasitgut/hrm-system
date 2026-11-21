@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { permissionsForRole } from "@/tests/setup/permissions";
 
-let mockRole = "supervisor";
+let mockRole = "hr";
 
 vi.mock("@/components/hrm/HrmShell", () => ({
   useHrmRole: () => ({ permissions: permissionsForRole(mockRole), employeeId: "emp-1", email: "user@example.com" }),
@@ -68,7 +68,7 @@ function stubFetch(mutationResponse?: (url: string, options: RequestInit) => { o
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  mockRole = "supervisor";
+  mockRole = "hr";
 });
 
 describe("EmployeeModule", () => {

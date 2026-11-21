@@ -1,7 +1,7 @@
 import "@/styles/globals.css";
 import { eq } from "drizzle-orm";
 import HrmShell from "@/components/hrm/HrmShell";
-import { getCurrentUser, getUserPermissions } from "@/lib/auth/dal";
+import { getCurrentUser, getUserAccess } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
 
@@ -15,8 +15,10 @@ export default async function RootLayout({ children }) {
   // requireUser() here would redirect-loop for unauthenticated visitors.
   // proxy.ts already redirects every other unauthenticated route to /login
   // before this layout renders.
-  const user = await getCurrentUser();
-  const permissions = user ? await getUserPermissions(user.sub) : [];
+  const sessionUser = await getCurrentUser();
+  const access = sessionUser ? await getUserAccess(sessionUser.sub) : null;
+  const user = sessionUser ? { ...sessionUser, role: access?.role ?? sessionUser.role } : null;
+  const permissions = access?.permissions ?? [];
 
   let employeeName = null;
   let employeeCode = null;

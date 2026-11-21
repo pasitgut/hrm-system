@@ -81,7 +81,7 @@ describe("OtListView status tabs", () => {
     expect(screen.queryAllByText("พนักงาน")).toHaveLength(0);
     unmount();
 
-    mockRole = "supervisor";
+    mockRole = "hr";
     render(<OtListView items={fixtureItems} />);
     expect(screen.getAllByText("พนักงาน").length).toBeGreaterThan(0);
     mockRole = "employee";

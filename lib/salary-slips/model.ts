@@ -21,7 +21,6 @@ export type ImportRow = {
   key: string; file: string; sheet: string; row: number;
   data: SlipData | null; errors: string[]; warnings: string[];
 };
-export type ImportFile = { name: string; path: string; sha256: string; size: number };
 export type ExportSlip = {
   id: string; employeeId: string; revision: number; data: SlipData;
   cumulative: { income: number; tax: number; social: number; provident: number };
@@ -29,12 +28,6 @@ export type ExportSlip = {
 };
 export const formatMoney = (satang: number) => (satang / 100).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 export const periodLabel = (year: number, month: number) => new Intl.DateTimeFormat("th-TH", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
-export function sameData(a: SlipData, b: SlipData): boolean {
-  // PostgreSQL jsonb reorders object keys; compare canonical values, not insertion order.
-  const canonical = (value: unknown): unknown => value && typeof value === "object" && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, entry]) => [key, canonical(entry)])) : value;
-  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
-}
 export function withCumulative(items: { id: string; employeeId: string; revision: number; data: SlipData }[]): ExportSlip[] {
   const ordered = [...items].sort((a, b) => a.data.year - b.data.year || a.data.month - b.data.month);
   return ordered.map((item) => {

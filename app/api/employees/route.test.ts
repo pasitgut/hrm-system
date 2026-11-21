@@ -70,7 +70,7 @@ describe("GET /api/employees", () => {
   });
 
   it("lets a supervisor see soft-deleted employees via includeDeleted=true", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const offboarded = await createEmployee({ firstName: "พ้นสภาพ" });
     await db.update(employees).set({ deletedAt: new Date() }).where(eq(employees.id, offboarded.id));
 
@@ -125,7 +125,7 @@ describe("POST /api/employees", () => {
   });
 
   it("creates a login using the employee code as the initial password", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const response = await POST(
       employeesRequest("http://localhost/api/employees", {
         method: "POST",
@@ -161,7 +161,7 @@ describe("POST /api/employees", () => {
   });
 
   it("rejects a missing required field with 400", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const response = await POST(
       employeesRequest("http://localhost/api/employees", {
         method: "POST",
@@ -173,7 +173,7 @@ describe("POST /api/employees", () => {
   });
 
   it("rejects a departmentId that does not exist", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     const response = await POST(
       employeesRequest("http://localhost/api/employees", {
         method: "POST",
@@ -185,7 +185,7 @@ describe("POST /api/employees", () => {
   });
 
   it("returns 409 on a duplicate email instead of a raw DB error", async () => {
-    const { token } = await tokenFor("supervisor");
+    const { token } = await tokenFor("hr");
     await createEmployee({ email: "dup@example.com" });
 
     const response = await POST(

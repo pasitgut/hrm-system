@@ -40,7 +40,7 @@ describe("employment-statuses settings CRUD", () => {
     const forbidden = await POST(apiRequest("http://localhost/api/employment-statuses", { method: "POST", token: employeeToken, body: { name: "พักงาน" } }));
     expect(forbidden.status).toBe(403);
 
-    const supervisorToken = await tokenFor("supervisor");
+    const supervisorToken = await tokenFor("hr");
     const created = await POST(apiRequest("http://localhost/api/employment-statuses", { method: "POST", token: supervisorToken, body: { name: "พักงาน" } }));
     const payload = await created.json();
     expect(created.status).toBe(201);
@@ -50,7 +50,7 @@ describe("employment-statuses settings CRUD", () => {
   it("PATCH edits the name, then DELETE removes the status and clears employee references", async () => {
     const [status] = await db.insert(employmentStatuses).values({ name: "ทดลองงาน" }).returning();
     const employee = await createEmployee({ employmentStatusId: status.id });
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
 
     const edited = await PATCH(
       apiRequest(`http://localhost/api/employment-statuses/${status.id}`, { method: "PATCH", token, body: { name: "ทดลองงาน (แก้ไข)" } }),

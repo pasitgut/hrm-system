@@ -24,7 +24,7 @@ vi.mock("@/lib/reports/ot/service", async (importOriginal) => {
 
 import { GET } from "./route";
 
-const companyUser = { sub: "user", employeeId: "edb5ec5c-1b19-47ca-8598-ff2716f58750", email: "user@example.test", role: "ceo", permissions: ["reports.view", "ot.view_company"] };
+const companyUser = { sub: "user", employeeId: "edb5ec5c-1b19-47ca-8598-ff2716f58750", email: "user@example.test", role: "executive", permissions: ["reports.view", "ot.view_company"] };
 
 function get() {
   return new NextRequest("http://localhost/api/reports/ot/options");

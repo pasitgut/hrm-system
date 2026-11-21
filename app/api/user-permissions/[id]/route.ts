@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { encodePermissionsForStorage, normalizePermissions, PERMISSIONS, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { isRole, normalizeRole, type Role } from "@/lib/auth/roles";
 import { db } from "@/lib/db/client";
 import { jsonError } from "@/lib/api/response";
 import { users } from "@/lib/db/schema";
@@ -23,9 +24,16 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(400, "Invalid request body");
 
-  const value = (body as Record<string, unknown>).permissions;
+  const payload = body as Record<string, unknown>;
+  const value = payload.permissions;
   if (!Array.isArray(value) || value.some((permission) => typeof permission !== "string" || !permissionKeys.has(permission))) {
     return jsonError(400, "permissions contains an unknown permission");
+  }
+  const hasRoleField = Object.prototype.hasOwnProperty.call(payload, "role");
+  let nextRole: Role | undefined;
+  if (hasRoleField) {
+    if (!isRole(payload.role)) return jsonError(400, "role must be employee, hr, or executive");
+    nextRole = payload.role;
   }
   const permissions = [...new Set(value)] as PermissionKey[];
   const storedPermissions = encodePermissionsForStorage(permissions);
@@ -48,13 +56,23 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
 
     const [updated] = await tx
       .update(users)
-      .set({ permissions: storedPermissions, updatedAt: new Date() })
+      .set({
+        permissions: storedPermissions,
+        ...(nextRole ? { role: nextRole } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, id))
-      .returning({ id: users.id, permissions: users.permissions });
+      .returning({ id: users.id, role: users.role, permissions: users.permissions });
     return updated ? { kind: "updated" as const, item: updated } : { kind: "not-found" as const };
   });
 
   if (result.kind === "not-found") return jsonError(404, "User account not found");
   if (result.kind === "last-manager") return jsonError(409, "At least one active user must keep permission management access");
-  return NextResponse.json({ item: { ...result.item, permissions: normalizePermissions(result.item.permissions) } });
+  return NextResponse.json({
+    item: {
+      ...result.item,
+      role: normalizeRole(result.item.role),
+      permissions: normalizePermissions(result.item.permissions),
+    },
+  });
 });

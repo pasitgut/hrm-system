@@ -2,9 +2,7 @@ export const PERMISSIONS = [
   { key: "work.view", group: "ติดตามงาน", label: "ดูภาพรวมติดตามงาน", description: "ดูรายการงาน สถานะ และกำหนดส่ง" },
   { key: "work.status.update", group: "ติดตามงาน", label: "ปรับสถานะงานย่อย", description: "เปลี่ยนสถานะการดำเนินงานของแต่ละงานย่อย" },
   { key: "work.create", group: "ติดตามงาน", label: "สร้างรายการติดตามงาน", description: "เพิ่มรายการใหม่ในระบบติดตามงาน" },
-  { key: "salary_slips.view", group: "สลิปเงินเดือน", label: "ดูสลิปเงินเดือน", description: "ดูสลิปและประวัติการแก้ไขของพนักงานทุกคน" },
-  { key: "salary_slips.import", group: "สลิปเงินเดือน", label: "นำเข้าสลิปเงินเดือน", description: "นำเข้า Excel จับคู่พนักงาน และบันทึกสลิป" },
-  { key: "salary_slips.replace", group: "สลิปเงินเดือน", label: "แทนที่สลิปเงินเดือน", description: "ยืนยันแทนที่ยอดเดิมโดยเก็บประวัติรุ่น" },
+  { key: "salary_slips.view", group: "สลิปเงินเดือน", label: "ดูเงินเดือนและสลิปเงินเดือน", description: "ดูข้อมูลคำนวณเงินเดือนและเข้าใช้งานหน้าเงินเดือน" },
   { key: "salary_slips.export", group: "สลิปเงินเดือน", label: "ส่งออกสลิปเงินเดือน", description: "ดาวน์โหลด PDF และ Excel" },
   { key: "employees.profile.view", group: "พนักงาน", label: "ดูรายชื่อและประวัติพนักงาน", description: "เปิดดูข้อมูลทั่วไปของพนักงาน โดยข้อมูลค่าตอบแทนแยกสิทธิ์ต่างหาก" },
   { key: "employees.profile.create", group: "พนักงาน", label: "เพิ่มพนักงาน", description: "สร้างประวัติพนักงานและบัญชีเข้าใช้งาน" },
@@ -42,34 +40,6 @@ export const PERMISSIONS = [
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];
 
-// Expand older, broad grants when reading existing accounts. Permission edits
-// are saved using the more specific keys above, so old accounts keep access
-// until an administrator chooses to narrow their grants.
-const LEGACY_PERMISSION_EXPANSIONS: Record<string, readonly PermissionKey[]> = {
-  "employees.manage": [
-    "employees.profile.view",
-    "employees.profile.create",
-    "employees.profile.update",
-    "employees.profile.offboard",
-    "employees.compensation.view",
-    "employees.compensation.manage",
-  ],
-  "employees.documents.manage": [
-    "employees.documents.view_all",
-    "employees.documents.upload",
-    "employees.documents.share",
-    "employees.documents.delete",
-  ],
-  "settings.manage": [
-    "settings.departments.manage",
-    "settings.positions.manage",
-    "settings.employment.manage",
-    "settings.ot_rates.manage",
-    "leave.quotas.manage",
-  ],
-  "assets.manage": ["assets.requests.manage", "assets.templates.manage"],
-};
-
 // Preserve current read and self-service access for existing accounts until
 // an administrator explicitly disables a grant in the permissions screen.
 const DEFAULT_GRANTS = [
@@ -85,7 +55,7 @@ const DEFAULT_GRANTS = [
   { permission: "assets.request.self", disabledMarker: "permissions.assets_request_self.disabled" },
 ] as const satisfies readonly { permission: PermissionKey; disabledMarker: string }[];
 
-// Default grants for a manager account (the former supervisor / ceo roles):
+// Default grants for a privileged HR/admin account:
 // approvals, company-wide views, and administration. Used when seeding the
 // first admin account and when tests need a privileged user.
 export const MANAGER_PERMISSIONS = [
@@ -117,7 +87,6 @@ export function normalizePermissions(permissions: unknown): PermissionKey[] {
   for (const permission of permissions) {
     if (typeof permission !== "string") continue;
     granted.add(permission);
-    for (const expanded of LEGACY_PERMISSION_EXPANSIONS[permission] ?? []) granted.add(expanded);
   }
   for (const { permission, disabledMarker } of DEFAULT_GRANTS) {
     if (granted.has(permission) || !permissions.includes(disabledMarker)) granted.add(permission);
@@ -136,10 +105,6 @@ export function encodePermissionsForStorage(permissions: readonly PermissionKey[
 export function hasPermission(permissions: unknown, permission: PermissionKey): boolean {
   if (!Array.isArray(permissions)) return false;
   if (permissions.includes(permission)) return true;
-  const legacyGrant = permissions.some((assigned) =>
-    typeof assigned === "string" && LEGACY_PERMISSION_EXPANSIONS[assigned]?.includes(permission),
-  );
-  if (legacyGrant) return true;
   const defaultGrant = DEFAULT_GRANTS.find((item) => item.permission === permission);
   return Boolean(defaultGrant && !permissions.includes(defaultGrant.disabledMarker));
 }

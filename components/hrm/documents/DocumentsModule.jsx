@@ -22,7 +22,8 @@ import {
   canShareEmployeeDocuments,
   canUploadEmployeeDocuments,
 } from "@/lib/auth/permissions";
-import { MAX_EMPLOYEE_DOCUMENT_BYTES } from "@/lib/employee-documents";
+import { MAX_EMPLOYEE_DOCUMENT_BYTES, MAX_EMPLOYEE_DOCUMENT_MB } from "@/lib/employee-documents";
+import { uploadEmployeeDocument } from "@/lib/client/upload-employee-document";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png";
@@ -125,6 +126,7 @@ export default function DocumentsModule() {
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadError, setUploadError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
 
   const [shareTarget, setShareTarget] = useState(null);
   const [accounts, setAccounts] = useState([]);
@@ -249,7 +251,7 @@ export default function DocumentsModule() {
     setUploadError("");
     setUploadFile(file);
     if (file && file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) {
-      setUploadError("ไฟล์เอกสารต้องมีขนาดไม่เกิน 15 MB");
+      setUploadError(`ไฟล์เอกสารต้องมีขนาดไม่เกิน ${MAX_EMPLOYEE_DOCUMENT_MB} MB`);
     } else if (file && file.size <= 0) {
       setUploadError("ไฟล์เอกสารว่างเปล่า");
     }
@@ -272,28 +274,25 @@ export default function DocumentsModule() {
       return;
     }
     if (uploadFile.size > MAX_EMPLOYEE_DOCUMENT_BYTES) {
-      setUploadError("ไฟล์เอกสารต้องมีขนาดไม่เกิน 15 MB");
+      setUploadError(`ไฟล์เอกสารต้องมีขนาดไม่เกิน ${MAX_EMPLOYEE_DOCUMENT_MB} MB`);
       return;
     }
 
     setUploading(true);
+    setUploadProgress(0);
     try {
-      const formData = new FormData();
-      formData.append("file", uploadFile);
-      const response = await fetch(`/api/employees/${uploadEmployeeId}/documents`, {
-        method: "POST",
-        body: formData,
+      const item = await uploadEmployeeDocument(uploadEmployeeId, uploadFile, {
+        onProgress: ({ percent }) => setUploadProgress(percent),
       });
-      const payload = await readPayload(response);
-      if (!response.ok) throw new Error(payload.error || "อัปโหลดเอกสารไม่สำเร็จ");
       setUploadOpen(false);
       setUploadFile(null);
-      setNotice(`อัปโหลด ${payload.item.fileName} แล้ว`);
+      setNotice(`อัปโหลด ${item.fileName} แล้ว`);
       await loadDocuments({ quiet: true });
     } catch (error) {
       setUploadError(error.message || "อัปโหลดเอกสารไม่สำเร็จ");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -531,13 +530,13 @@ export default function DocumentsModule() {
       <HrmDialog
         open={uploadOpen}
         title="อัปโหลดเอกสารพนักงาน"
-        description="เลือกพนักงานและไฟล์ที่ต้องการจัดเก็บ ขนาดไฟล์ไม่เกิน 15 MB"
+        description={`เลือกพนักงานและไฟล์ที่ต้องการจัดเก็บ ขนาดไฟล์ไม่เกิน ${MAX_EMPLOYEE_DOCUMENT_MB} MB`}
         onClose={() => { if (!uploading) setUploadOpen(false); }}
         footer={(
           <>
             <Button type="button" variant="outline" disabled={uploading} onClick={() => setUploadOpen(false)}>ยกเลิก</Button>
             <Button type="submit" form="document-upload-form" disabled={uploading || employeesLoading || !employees.length}>
-              {uploading ? "กำลังอัปโหลด…" : "อัปโหลด"}
+              {uploading ? `กำลังอัปโหลด… ${uploadProgress ?? 0}%` : "อัปโหลด"}
             </Button>
           </>
         )}
@@ -581,7 +580,7 @@ export default function DocumentsModule() {
               disabled={uploading}
             />
             <p id={`${uploadFileId}-help`} className="text-xs leading-5 text-muted-foreground">
-              PDF, Word, Excel, JPG หรือ PNG · ไม่เกิน 15 MB
+              PDF, Word, Excel, JPG หรือ PNG · ไม่เกิน {MAX_EMPLOYEE_DOCUMENT_MB} MB
             </p>
             {uploadError ? <Feedback danger>{uploadError}</Feedback> : null}
           </div>

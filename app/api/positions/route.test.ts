@@ -40,7 +40,7 @@ describe("positions settings CRUD", () => {
     const forbidden = await POST(apiRequest("http://localhost/api/positions", { method: "POST", token: employeeToken, body: { name: "Data Analyst" } }));
     expect(forbidden.status).toBe(403);
 
-    const supervisorToken = await tokenFor("supervisor");
+    const supervisorToken = await tokenFor("hr");
     const created = await POST(apiRequest("http://localhost/api/positions", { method: "POST", token: supervisorToken, body: { name: "Data Analyst" } }));
     const payload = await created.json();
     expect(created.status).toBe(201);
@@ -51,7 +51,7 @@ describe("positions settings CRUD", () => {
   it("PATCH edits the name, then DELETE removes the position and clears employee references", async () => {
     const [position] = await db.insert(positions).values({ name: "Recruiter" }).returning();
     const employee = await createEmployee({ positionId: position.id });
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
 
     const edited = await PATCH(
       apiRequest(`http://localhost/api/positions/${position.id}`, { method: "PATCH", token, body: { name: "Senior Recruiter" } }),

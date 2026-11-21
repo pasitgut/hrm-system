@@ -34,9 +34,9 @@ There is no lint script and no ESLint config in the repo.
 app/ot/page.jsx  →  <OTModule />  (components/hrm/ot/OTModule.jsx)
 ```
 
-All real logic, state, and markup lives in the `components/hrm/<feature>/` module, not the page file. Routes: `/` (overview), `/employees`, `/work-tracking`, `/ot`, `/leave`, `/assets`, `/approvals`, `/payroll`, `/reports`, `/documents`, `/settings`. `/salary-slips*` only redirects to `/payroll` (the API and `lib/salary-slips` remain for the stored history).
+All real logic, state, and markup lives in the `components/hrm/<feature>/` module, not the page file. Routes: `/` (overview), `/employees`, `/work-tracking`, `/ot`, `/leave`, `/assets`, `/approvals`, `/payroll`, `/reports`, `/documents`, `/settings`. `/payroll` handles both internal payroll calculation and stateless salary-slip PDF/Excel export (`lib/salary-slips/` and `/api/salary-slips/export`).
 
-**Auth and permissions.** Access is controlled by per-account permission keys stored in `users.permissions` (catalogue and helpers in `lib/auth/permissions.ts`), **not** by the legacy `users.role` column. The JWT session (`lib/auth/session.ts`) carries identity only; `lib/auth/dal.ts` re-reads permissions from the database on every request.
+**Auth and permissions.** Access is controlled by per-account permission keys stored in `users.permissions` (catalogue and helpers in `lib/auth/permissions.ts`), paired with the 3 system roles (`employee`, `hr`, `executive` in `lib/auth/roles.ts`). The JWT session (`lib/auth/session.ts`) carries identity only; `lib/auth/dal.ts` re-reads role and permissions from the database on every request.
 - Route Handlers: wrap the handler in `withApiAuth` and call `requireApiUser` / `requireApiPermission` / `requireApiAnyPermission`.
 - Server Components: `requireUser` / `requirePermission` / `requireAnyPermission` (they redirect).
 - Add a new permission by extending `PERMISSIONS` in `lib/auth/permissions.ts`; use `MANAGER_PERMISSIONS` for default admin grants.
@@ -69,10 +69,10 @@ All real logic, state, and markup lives in the `components/hrm/<feature>/` modul
 
 ## Scripts
 
-- `scripts/db/` — migrate, seed, volume seed, and the one-off Drive document migration (wired to `npm run db:*`).
+- `scripts/db/` — migrate, seed, volume seed, and ImgBB → Cloudinary migration (`db:migrate-imgbb-cloudinary`) (wired to `npm run db:*`).
 - `scripts/verify/` — report / PDF / salary-slip verification runs (`npx tsx --env-file-if-exists=.env scripts/verify/<name>.ts`).
 - `scripts/migration/` — AppSheet → HRM import (Python, see its README) and archived one-off SQL imports.
 
 ## Testing
 
-Vitest (`npm test`). DB-backed tests need `TEST_DATABASE_URL` (and `JWT_SECRET`) pointing at a migrated, throwaway PostgreSQL database — `docker-compose.yml` provisions `hrm_test`. Test files run serially because they share and truncate that database. Tests describe accounts as `employee` / `supervisor` / `ceo` for readability; `tests/setup/permissions.ts` maps those to real permission grants.
+Vitest (`npm test`). DB-backed tests need `TEST_DATABASE_URL` (and `JWT_SECRET`) pointing at a migrated, throwaway PostgreSQL database — `docker-compose.yml` provisions `hrm_test`. Test files run serially because they share and truncate that database. Tests describe accounts as `employee` / `hr` / `executive` for readability; `tests/setup/permissions.ts` maps those to real permission grants.

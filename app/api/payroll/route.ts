@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { bufferToReadableStream } from "@/lib/api/stream";
 import { requireApiPermission } from "@/lib/auth/dal";
 import { createPayroll } from "@/lib/payroll/service";
 import { describeIncompleteRows } from "@/lib/payroll/readiness";
@@ -36,9 +37,10 @@ export const GET = salaryRoute(async (request: NextRequest) => {
   if (incompleteMessage) return badRequest(incompleteMessage, 409);
 
   const buffer = Buffer.from(await createPayrollWorkbook(payroll).xlsx.writeBuffer());
-  return new Response(new Uint8Array(buffer), { headers: {
+  return new Response(bufferToReadableStream(buffer), { headers: {
     "Content-Type": XLSX_CONTENT_TYPE,
     "Content-Disposition": `attachment; filename="payroll-${year}-${String(month).padStart(2, "0")}.xlsx"`,
+    "Content-Length": String(buffer.byteLength),
     "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
   } });
 });

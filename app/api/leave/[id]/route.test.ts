@@ -58,10 +58,10 @@ describe("GET /api/leave/[id]", () => {
   });
 
   it("lets a supervisor view any employee's request", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee } = await createUser({ role: "employee" });
     const request = await createLeaveRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
 
     const response = await GET(idRequest(request.id, "GET", token), context(request.id));
     expect(response.status).toBe(200);

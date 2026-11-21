@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import { SignJWT, jwtVerify } from "jose";
+import { normalizeRole, type Role } from "@/lib/auth/roles";
 
-export type Role = "employee" | "supervisor" | "ceo";
+export type { Role };
 
 export type SessionPayload = {
   sub: string; // users.id
@@ -47,7 +48,7 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
       sub: payload.sub,
       employeeId: payload.employeeId as string,
       email: payload.email as string,
-      role: payload.role as Role,
+      role: normalizeRole(payload.role),
       ...(payload.mustChangePassword === true ? { mustChangePassword: true } : {}),
     };
   } catch {

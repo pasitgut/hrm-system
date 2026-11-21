@@ -92,11 +92,11 @@ describe("GET /api/leave/summary", () => {
   });
 
   it("returns individual scope for supervisor/ceo with employeeId set", async () => {
-    const { user: ceoUser, employee: ceo } = await createUser({ role: "ceo" });
+    const { user: ceoUser, employee: ceo } = await createUser({ role: "executive" });
     const { employee } = await createUser({ role: "employee" });
     await createLeaveRequest({ employeeId: employee.id, leaveTypeCode: "annual", startOn: d("07", "01"), endOn: d("07", "03"), statusCode: "approved" });
 
-    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "ceo" }));
+    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "executive" }));
     const response = await summaryRequest(`?employeeId=${employee.id}`, token);
     const payload = await response.json();
 
@@ -108,14 +108,14 @@ describe("GET /api/leave/summary", () => {
   });
 
   it("returns company scope with correct per-employee aggregates for supervisor/ceo with no employeeId", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createLeaveRequest({ employeeId: employeeA.id, leaveTypeCode: "sick", startOn: d("03", "10"), endOn: d("03", "12"), statusCode: "approved" });
     await createLeaveRequest({ employeeId: employeeA.id, leaveTypeCode: "annual", startOn: d("04", "01"), endOn: d("04", "01"), statusCode: "pending" });
     await createLeaveRequest({ employeeId: employeeB.id, leaveTypeCode: "sick", startOn: d("05", "01"), endOn: d("05", "02"), statusCode: "rejected" });
 
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await summaryRequest("", token);
     const payload = await response.json();
 

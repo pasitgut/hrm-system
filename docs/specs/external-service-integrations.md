@@ -1,6 +1,6 @@
-# Spec: Google Drive และ ImgBB integrations
+# Spec: Google Drive และ Cloudinary integrations
 
-สถานะที่สำรวจ: employee documents อาศัย Google Drive; image upload ของ asset requests ตอบ unavailable เมื่อไม่มี `IMGBB_API_KEY`
+สถานะที่สำรวจ: employee documents อาศัย Google Drive (chunked upload สูงสุด 50 MB); รูปภาพทั้งหมด (ทรัพย์สิน, ลายเซ็น, รูปโปรไฟล์พนักงาน, รูปในสัญญา) ย้ายจาก ImgBB มาใช้ Cloudinary แล้ว พร้อมระบบ auto-migrate ลิงก์ `ibb.co` เดิมอัตโนมัติ
 
 ## เป้าหมาย
 
@@ -15,12 +15,13 @@
 - Apply migrations ก่อนเปิด upload. ก่อนย้าย binary เก่าจาก PostgreSQL ให้ backup, รัน `npm run db:migrate-employee-documents-drive`, ตรวจจำนวน, checksum/metadata และการดาวน์โหลด; migration ต้องรันซ้ำได้หากถูกขัดจังหวะ.
 - Google OAuth consent ต้องออกจาก Testing mode สำหรับ token production ตามนโยบาย Google.
 
-## ImgBB: รูปคำขอทรัพย์สิน
+## Cloudinary: รูปภาพทั้งหมดและระบบย้ายข้อมูลจาก ImgBB
 
-- กำหนด `IMGBB_API_KEY` ฝั่ง server เมื่อเปิดใช้งาน.
-- ตรวจ upload success, ไฟล์ชนิด/ขนาดไม่รองรับ, provider error, timeout, key หาย และการจำกัด rate.
-- API key ต้องไม่ส่งไป browser, response หรือ log.
-- UI แสดงผลสำเร็จ/ล้มเหลวและช่วยให้ผู้ใช้ลองใหม่ได้; config ขาดต้องไม่ทำให้ workflow ส่วนอื่นล้ม.
+- กำหนด `CLOUDINARY_URL` หรือ (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`) ฝั่ง server
+- อัปโหลดแบบ Direct Signed Upload ผ่าน `/api/media/signature` และ server fallback ผ่าน `/api/media/upload` / `/api/asset-requests/uploads`
+- `API Secret` ต้องไม่ส่งไป browser, response หรือ log
+- ลิงก์ ImgBB (`ibb.co`) ที่เหลืออยู่จะถูกย้ายมา Cloudinary อัตโนมัติเมื่อเปิดอ่าน/บันทึก และสามารถย้ายทั้งฐานข้อมูลได้ด้วย `npm run db:migrate-imgbb-cloudinary` หรือ `POST /api/media/migrate-imgbb`
+- UI แสดงผลสำเร็จ/ล้มเหลวและช่วยให้ผู้ใช้ลองใหม่ได้; config ขาดต้องไม่ทำให้ workflow ส่วนอื่นล้ม
 
 ## เกณฑ์ตรวจรับร่วม
 

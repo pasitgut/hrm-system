@@ -77,13 +77,13 @@ describe("GET /api/ot", () => {
   });
 
   it("lets a supervisor see all employees' requests for the month", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employeeA.id, startAt: new Date("2026-09-10T11:00:00Z"), endAt: new Date("2026-09-10T13:00:00Z") });
     await createOvertimeRequest({ employeeId: employeeB.id, startAt: new Date("2026-09-11T11:00:00Z"), endAt: new Date("2026-09-11T13:00:00Z") });
 
-    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(otRequest("http://localhost/api/ot?month=2026-09", { token }));
     const payload = await response.json();
 
@@ -92,13 +92,13 @@ describe("GET /api/ot", () => {
   });
 
   it("lets a supervisor scope to a single employee via employeeId", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employeeA.id, startAt: new Date("2026-09-10T11:00:00Z"), endAt: new Date("2026-09-10T13:00:00Z") });
     await createOvertimeRequest({ employeeId: employeeB.id, startAt: new Date("2026-09-11T11:00:00Z"), endAt: new Date("2026-09-11T13:00:00Z") });
 
-    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(otRequest(`http://localhost/api/ot?month=2026-09&employeeId=${employeeA.id}`, { token }));
     const payload = await response.json();
 

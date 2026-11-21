@@ -25,7 +25,7 @@ import { POST } from "./route";
 
 const ownId = "edb5ec5c-1b19-47ca-8598-ff2716f58750";
 const otherId = "8591f318-500e-4f78-8d27-0e9f0a9f976d";
-const companyUser = { sub: "user", employeeId: ownId, email: "user@example.test", role: "ceo", permissions: ["reports.view", "leave.view_company"] };
+const companyUser = { sub: "user", employeeId: ownId, email: "user@example.test", role: "executive", permissions: ["reports.view", "leave.view_company"] };
 const selfUser = { sub: "user", employeeId: ownId, email: "user@example.test", role: "employee", permissions: ["reports.view", "leave.view_self"] };
 
 function post(body: unknown) {

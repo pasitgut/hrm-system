@@ -42,8 +42,8 @@ describe("ApprovalModule role gating", () => {
     expect(screen.queryByText("ไม่อนุมัติ")).not.toBeInTheDocument();
   });
 
-  it("renders approve/reject buttons for a supervisor", async () => {
-    mockRole = "supervisor";
+  it("renders approve/reject buttons for hr", async () => {
+    mockRole = "hr";
     mockFetchOnce(sampleItems);
     render(<ApprovalModule />);
 
@@ -51,8 +51,8 @@ describe("ApprovalModule role gating", () => {
     expect(screen.getAllByText("ไม่อนุมัติ").length).toBeGreaterThan(0);
   });
 
-  it("renders approve/reject buttons for a ceo", async () => {
-    mockRole = "ceo";
+  it("renders approve/reject buttons for executive", async () => {
+    mockRole = "executive";
     mockFetchOnce(sampleItems);
     render(<ApprovalModule />);
 

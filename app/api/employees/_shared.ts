@@ -9,6 +9,8 @@ import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, type Em
 import { employeePayrollDataSchema } from "@/lib/employees/payroll-data-schema";
 import { jsonError } from "@/lib/api/response";
 import { isForeignKeyViolation, isUniqueViolation, postgresConstraintName } from "@/lib/db/errors";
+import { isCloudinaryConfigured, migrateDataImageUrlToCloudinary, migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
+import { healEmployeeAvatarImgbbUrl } from "@/lib/cloudinary-migration";
 
 // Shared helpers for the app/api/employees/** Route Handlers: the joined
 // select used by every read, the GET response DTO, employee-code conflicts,
@@ -184,7 +186,9 @@ export function employeeBaseSelect() {
 
 export async function fetchEmployeeItemById(id: string, includeCompensation = false): Promise<EmployeeItemDto | null> {
   const [row] = await employeeBaseSelect().where(eq(employees.id, id));
-  return row ? toEmployeeItemDto(row, includeCompensation) : null;
+  if (!row) return null;
+  const healed = isCloudinaryConfigured() ? await healEmployeeAvatarImgbbUrl(row) : row;
+  return toEmployeeItemDto(healed, includeCompensation);
 }
 
 export async function employeeExists(id: string): Promise<boolean> {
@@ -194,12 +198,14 @@ export async function employeeExists(id: string): Promise<boolean> {
 
 export async function fetchActiveEmployeeItems(includeCompensation = false): Promise<EmployeeItemDto[]> {
   const rows = await employeeBaseSelect().where(isNull(employees.deletedAt)).orderBy(asc(employees.firstName), asc(employees.lastName));
-  return rows.map((row) => toEmployeeItemDto(row, includeCompensation));
+  const healed = isCloudinaryConfigured() ? await Promise.all(rows.map((row) => healEmployeeAvatarImgbbUrl(row))) : rows;
+  return healed.map((row) => toEmployeeItemDto(row, includeCompensation));
 }
 
 export async function fetchAllEmployeeItems(includeCompensation = false): Promise<EmployeeItemDto[]> {
   const rows = await employeeBaseSelect().orderBy(asc(employees.firstName), asc(employees.lastName));
-  return rows.map((row) => toEmployeeItemDto(row, includeCompensation));
+  const healed = isCloudinaryConfigured() ? await Promise.all(rows.map((row) => healEmployeeAvatarImgbbUrl(row))) : rows;
+  return healed.map((row) => toEmployeeItemDto(row, includeCompensation));
 }
 
 // Employee codes are entered by the person creating the employee. Include
@@ -391,6 +397,14 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
   if (codeConflict) return lifecycleFailure("conflict", codeConflict);
   if (missingLookup) return lifecycleFailure("invalid", `${missingLookup} does not exist`);
 
+  const rawAvatarUrl = typeof avatarUrl === "string" ? avatarUrl.trim() : "";
+  const normalizedAvatarUrl = rawAvatarUrl
+    ? await migrateDataImageUrlToCloudinary(
+        await migrateImgbbUrlToCloudinary(rawAvatarUrl, "avatar"),
+        "avatar",
+      )
+    : null;
+
   const values = {
     code: employeeCode,
     prefix: (prefix as string) || null,
@@ -409,7 +423,7 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
     birthDate: (birthDate as string) || null,
     email: employeeEmail,
     phone: (phone as string) || null,
-    avatarUrl: (avatarUrl as string) || null,
+    avatarUrl: normalizedAvatarUrl,
     startDate,
     endDate: (endDate as string) || null,
     departmentId: departmentIdValue,
@@ -542,6 +556,12 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
       const raw = body[field];
       values[field] = raw == null || raw === "" ? null : raw;
     }
+  }
+  if (typeof values.avatarUrl === "string") {
+    values.avatarUrl = await migrateDataImageUrlToCloudinary(
+      await migrateImgbbUrlToCloudinary(values.avatarUrl, "avatar"),
+      "avatar",
+    );
   }
 
   const lookupIds: EmployeeLookupIds = {};

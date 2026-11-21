@@ -84,9 +84,9 @@ describe("PATCH /api/ot/[id]", () => {
 
   it("returns 403 when a supervisor tries to edit someone else's request", async () => {
     const { employee } = await createUser({ role: "employee" });
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const otRequest = await createOvertimeRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
 
     const { request, context } = otItemRequest(otRequest.id, "PATCH", token, {
       date: "2026-09-12",
@@ -183,9 +183,9 @@ describe("DELETE /api/ot/[id]", () => {
 
   it("returns 403 when a supervisor tries to cancel someone else's request", async () => {
     const { employee } = await createUser({ role: "employee" });
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const otRequest = await createOvertimeRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
 
     const { request, context } = otItemRequest(otRequest.id, "DELETE", token);
     const response = await DELETE(request, context);

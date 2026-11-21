@@ -19,6 +19,8 @@ import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/Drizz
 import { assetAgreementTemplates, assetRequests, employees } from "@/lib/db/schema";
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
+import { migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
+import { healAssetRequestImgbbUrls, migrateAgreementImgbbUrls } from "@/lib/cloudinary-migration";
 
 type RouteContext = { params: Promise<{ id: string }> };
 const agreementTemplates = {
@@ -73,7 +75,8 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
   try {
     const item = await auth.repository.getById(id);
     if (!item) return jsonError(404, "Not found");
-    return NextResponse.json({ item: assetRequestDto(item) });
+    const healed = await healAssetRequestImgbbUrls(item);
+    return NextResponse.json({ item: assetRequestDto(healed) });
   } catch (error) {
     if (error instanceof AssetRepositoryError) return jsonError(409, error.message);
     throw error;
@@ -97,10 +100,12 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
   const manager = canManageAssets(auth.user.permissions);
   const actorName = `${auth.employee.name} ${auth.employee.lastName}`.trim();
   const service = new AssetApplicationService(auth.repository, agreementTemplates);
-  const signatureData = typeof input.signatureData === "string" ? input.signatureData.trim() : "";
-  const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl.trim() : "";
-  if (signatureData && (signatureData.length > 2048 || !isHttpUrl(signatureData))) return jsonError(400, "Invalid signature image URL");
-  if (imageUrl && (imageUrl.length > 2048 || !isHttpUrl(imageUrl))) return jsonError(400, "Invalid attachment URL");
+  const rawSignatureData = typeof input.signatureData === "string" ? input.signatureData.trim() : "";
+  const rawImageUrl = typeof input.imageUrl === "string" ? input.imageUrl.trim() : "";
+  if (rawSignatureData && (rawSignatureData.length > 2048 || !isHttpUrl(rawSignatureData))) return jsonError(400, "Invalid signature image URL");
+  if (rawImageUrl && (rawImageUrl.length > 2048 || !isHttpUrl(rawImageUrl))) return jsonError(400, "Invalid attachment URL");
+  const signatureData = rawSignatureData ? await migrateImgbbUrlToCloudinary(rawSignatureData, "signature") : "";
+  const imageUrl = rawImageUrl ? await migrateImgbbUrlToCloudinary(rawImageUrl, "asset") : "";
 
   try {
     if (input.action === "transition") {
@@ -192,7 +197,8 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       if (typeof input.returnInspection !== "string" || !input.returnInspection.trim()) return jsonError(400, "Return inspection is required");
       if (!entry.agreement) return jsonError(409, "Agreement not found");
       if (!isAssetFormOnly(entry.agreement) && !hasBothReturnSignatures(entry.agreement)) return jsonError(409, "Borrower and receiver return signatures are required before confirming return");
-      const agreement = deserializeAgreement(input.agreement) ?? entry.agreement;
+      const rawAgreement = deserializeAgreement(input.agreement) ?? entry.agreement;
+      const { agreement } = await migrateAgreementImgbbUrls(rawAgreement);
       await service.confirmReturn({
         entry,
         agreement,
@@ -204,18 +210,20 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
     } else if (input.action === "updateDetails") {
       if (!manager) return jsonError(403, "Asset management permission required");
       if (typeof input.items !== "string") return jsonError(400, "Asset items are required");
-      const agreement = deserializeAgreement(input.agreement);
-      if (!agreement || !canEditAgreement(manager, true, agreement.status, agreement.signatureBoxes.some((box) => box.status === "signed"))) {
+      const rawAgreement = deserializeAgreement(input.agreement);
+      if (!rawAgreement || !canEditAgreement(manager, true, rawAgreement.status, rawAgreement.signatureBoxes.some((box) => box.status === "signed"))) {
         return jsonError(409, "This agreement can no longer be edited");
       }
+      const { agreement } = await migrateAgreementImgbbUrls(rawAgreement);
       await service.updateRequestDetails(id, input.items, agreement);
     } else if (input.action === "saveAgreement") {
       if (!manager) return jsonError(403, "Asset management permission required");
-      const agreement = deserializeAgreement(input.agreement);
-      if (!agreement) return jsonError(400, "Invalid agreement");
-      if (!canEditAgreement(manager, true, agreement.status, agreement.signatureBoxes.some((box) => box.status === "signed"))) {
+      const rawAgreement = deserializeAgreement(input.agreement);
+      if (!rawAgreement) return jsonError(400, "Invalid agreement");
+      if (!canEditAgreement(manager, true, rawAgreement.status, rawAgreement.signatureBoxes.some((box) => box.status === "signed"))) {
         return jsonError(409, "This agreement can no longer be edited");
       }
+      const { agreement } = await migrateAgreementImgbbUrls(rawAgreement);
       await service.saveAgreement(id, agreement);
     } else {
       return jsonError(400, "Unsupported asset request action");

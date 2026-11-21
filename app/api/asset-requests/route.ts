@@ -11,6 +11,8 @@ import { assetAgreementTemplates as agreementTemplateTable, departments, employe
 import { requireApiUser, withApiAuth } from "@/lib/auth/dal";
 import { canCreateOwnAssetRequests, canManageAssets, canViewCompanyAssetRequests, canViewOwnAssetRequests } from "@/lib/auth/permissions";
 import { AssetRepositoryError, DrizzleAssetRepository } from "@/lib/assets/DrizzleAssetRepository";
+import { migrateImgbbUrlToCloudinary } from "@/lib/cloudinary";
+import { healAssetRequestImgbbUrls } from "@/lib/cloudinary-migration";
 
 const agreementTemplates = { borrow: COMPANY_BORROW_AGREEMENT, assetForm: COMPANY_ASSET_FORM_AGREEMENT };
 
@@ -23,7 +25,8 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   const [employee] = await db.select({ code: employees.code }).from(employees).where(eq(employees.id, user.employeeId));
   if (!employee) return jsonError(404, "Employee not found");
   const items = canViewCompanyAssetRequests(user.permissions) ? await repository.listAll() : await repository.listForEmployee(employee.code);
-  return NextResponse.json({ items: assetRequestDtos(items) });
+  const healedItems = await Promise.all(items.map((item) => healAssetRequestImgbbUrls(item)));
+  return NextResponse.json({ items: assetRequestDtos(healedItems) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {
@@ -111,6 +114,12 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   const borrowerSignature = typeof input.borrowerSignature === "string" ? input.borrowerSignature.trim() : "";
   if (flow === "self-service" && (!borrowerSignature || borrowerSignature.length > 2048 || !isHttpUrl(borrowerSignature))) return jsonError(400, "A borrower signature is required");
 
+  const [migratedImageUrl, migratedAdditionalImages, migratedBorrowerSignature] = await Promise.all([
+    imageUrl ? migrateImgbbUrlToCloudinary(imageUrl, "asset") : Promise.resolve(""),
+    Promise.all(additionalImages.map((url) => migrateImgbbUrlToCloudinary(url, "asset"))),
+    borrowerSignature ? migrateImgbbUrlToCloudinary(borrowerSignature, "signature") : Promise.resolve(""),
+  ]);
+
   try {
     const repository = new DrizzleAssetRepository(user.employeeId);
     const service = new AssetApplicationService(repository, agreementTemplates);
@@ -127,11 +136,11 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       items: parseAssetItems(items),
       reason,
       remarks,
-      imageUrl,
-      additionalImages,
+      imageUrl: migratedImageUrl,
+      additionalImages: migratedAdditionalImages,
       ...(flow === "admin-managed"
         ? { flow, agreementTemplate: selectedAgreementTemplate }
-        : { flow, borrowerSignature }),
+        : { flow, borrowerSignature: migratedBorrowerSignature }),
     });
     return NextResponse.json({ items: assetRequestDtos(created) }, { status: 201 });
   } catch (error) {

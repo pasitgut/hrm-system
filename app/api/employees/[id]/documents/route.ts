@@ -10,7 +10,7 @@ import {
   canViewAllEmployeeDocuments,
   canViewEmployeeDocuments,
 } from "@/lib/auth/permissions";
-import { isUuid, MAX_EMPLOYEE_DOCUMENT_BYTES, sanitizeDocumentName, validateEmployeeDocument } from "@/lib/employee-documents";
+import { isUuid, MAX_EMPLOYEE_DOCUMENT_BYTES, MAX_EMPLOYEE_DOCUMENT_MB, sanitizeDocumentName, validateEmployeeDocument } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import {
   deleteEmployeeDocumentFromDrive,
@@ -18,6 +18,8 @@ import {
   isGoogleDriveConfigured,
   uploadEmployeeDocumentToDrive,
 } from "@/lib/google-drive";
+
+export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -76,7 +78,7 @@ export const POST = withApiAuth(async (request: NextRequest, context: RouteConte
   const file = formData.get("file");
   if (!(file instanceof File)) return jsonError(400, "กรุณาเลือกเอกสารที่ต้องการอัปโหลด");
   if (file.size <= 0) return jsonError(400, "ไฟล์เอกสารว่างเปล่า");
-  if (file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) return jsonError(400, "ไฟล์เอกสารต้องมีขนาดไม่เกิน 15 MB");
+  if (file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) return jsonError(400, `ไฟล์เอกสารต้องมีขนาดไม่เกิน ${MAX_EMPLOYEE_DOCUMENT_MB} MB`);
 
   const fileName = sanitizeDocumentName(file.name);
   const fileData = Buffer.from(await file.arrayBuffer());
@@ -108,7 +110,6 @@ export const POST = withApiAuth(async (request: NextRequest, context: RouteConte
         fileName,
         mimeType: validation.mimeType,
         fileSize: fileData.byteLength,
-        fileData: null,
         driveFileId,
         sharedWithUserIds: [user.sub],
         uploadedByUserId: user.sub,

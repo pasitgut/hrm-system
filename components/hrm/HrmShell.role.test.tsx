@@ -29,7 +29,7 @@ import HrmShell from "@/components/hrm/HrmShell";
 import { permissionsForRole } from "@/tests/setup/permissions";
 
 const employeeUser = { role: "employee", employeeId: "emp-1", email: "employee@example.com" };
-const managerUser = { role: "supervisor", employeeId: "sup-1", email: "supervisor@example.com" };
+const hrUser = { role: "hr", employeeId: "hr-1", email: "hr@example.com" };
 
 describe("HrmShell", () => {
   it("renders only children, with no chrome, when there is no user (i.e. on /login)", () => {
@@ -56,7 +56,7 @@ describe("HrmShell", () => {
 
   it("shows the approvals nav item for an account with approval permissions", () => {
     render(
-      <HrmShell user={managerUser} permissions={permissionsForRole("supervisor")}>
+      <HrmShell user={hrUser} permissions={permissionsForRole("hr")}>
         <div>content</div>
       </HrmShell>,
     );
@@ -66,7 +66,7 @@ describe("HrmShell", () => {
 
   it("no longer renders the fake role-toggle button", () => {
     render(
-      <HrmShell user={managerUser} permissions={permissionsForRole("supervisor")}>
+      <HrmShell user={hrUser} permissions={permissionsForRole("hr")}>
         <div>content</div>
       </HrmShell>,
     );

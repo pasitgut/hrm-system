@@ -5,14 +5,14 @@ type AccessContext = {
   permissions?: unknown;
 };
 
-const LEGACY_MANAGER_ROLES = ["supervisor", "ceo"];
+const PRIVILEGED_ROLES = ["hr", "executive"];
 
 function hasAccess(context: AccessContext, ...permissionKeys: PermissionKey[]): boolean {
   if (Array.isArray(context.permissions)) {
     return hasAnyPermission(context.permissions, ...permissionKeys);
   }
 
-  return typeof context.role === "string" && LEGACY_MANAGER_ROLES.includes(context.role);
+  return typeof context.role === "string" && PRIVILEGED_ROLES.includes(context.role);
 }
 
 export function canManageEmployeeCompensation(context: AccessContext): boolean {

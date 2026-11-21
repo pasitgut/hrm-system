@@ -43,6 +43,7 @@ import {
   canViewWorkTracking,
 } from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
+import { getRoleShortLabel, normalizeRole } from "@/lib/auth/roles";
 
 const RoleContext = createContext(null);
 
@@ -191,7 +192,6 @@ export default function HrmShell({ children, user = null, permissions = [], empl
   const [darkMode, setDarkMode] = useState(false);
   const active = pathname === "/ot" ? "ot"
     : pathname.startsWith("/work-tracking") ? "work"
-    : pathname.startsWith("/salary-slips") ? "payroll"
     : pathname === "/payroll" ? "payroll"
       : pathname === "/leave" ? "leave"
         : pathname === "/assets" ? "assets"
@@ -231,9 +231,10 @@ export default function HrmShell({ children, user = null, permissions = [], empl
     }
     return visibleGroups;
   }, [permissions]);
+  const userRole = normalizeRole(user?.role);
   const roleContextValue = useMemo(
-    () => (user ? { permissions, employeeId: user.employeeId, employeeCode, email: user.email } : null),
-    [user, permissions, employeeCode],
+    () => (user ? { role: userRole, permissions, employeeId: user.employeeId, employeeCode, email: user.email } : null),
+    [user, userRole, permissions, employeeCode],
   );
   const displayName = employeeName || user?.email || "";
   const initials = getInitials(employeeName, user?.email);
@@ -288,7 +289,7 @@ export default function HrmShell({ children, user = null, permissions = [], empl
             <div className={cx("min-w-0", collapsed && "lg:sr-only")}>
               <strong className="block truncate text-xs font-medium">{displayName}</strong>
               <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-                {employeeCode || "บัญชีผู้ใช้"}
+                {getRoleShortLabel(userRole)}{employeeCode ? ` · ${employeeCode}` : ""}
               </span>
             </div>
           </div>

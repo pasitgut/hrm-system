@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { fixtureWorkbook } from "@/tests/setup/salary-slips";
-import { buildStatelessExportSlips, parseUploadedSalaryWorkbooks } from "./stateless";
+import {
+  buildStatelessExportSlips,
+  parseSalaryWorkbookBatch,
+  parseUploadedSalaryWorkbooks,
+  validateCombinedSalaryRows,
+} from "./stateless";
 import { createExcel, createPdf } from "./documents";
 
 describe("stateless salary slip export", () => {
@@ -64,5 +69,20 @@ describe("stateless salary slip export", () => {
     const jan = await fixtureWorkbook((sheet) => { sheet.getCell("E10").value = "31/01/2569"; });
     const rows = await parseUploadedSalaryWorkbooks([{ name: "jan.xlsx", buffer: jan }]);
     expect(() => buildStatelessExportSlips(rows, { year: 2026, month: 5 })).toThrow("ไม่พบข้อมูลสลิปของเดือน 5/2569");
+  });
+
+  it("combines multiple parse batches and catches cross-batch duplicates", async () => {
+    const jan = await fixtureWorkbook((sheet) => { sheet.getCell("E10").value = "31/01/2569"; });
+    const feb = await fixtureWorkbook((sheet) => { sheet.getCell("E10").value = "28/02/2569"; });
+
+    const batch1 = await parseSalaryWorkbookBatch([{ name: "jan.xlsx", buffer: jan }]);
+    const batch2 = await parseSalaryWorkbookBatch([{ name: "feb.xlsx", buffer: feb }]);
+    const combined = validateCombinedSalaryRows([...batch1, ...batch2]);
+    const { items } = buildStatelessExportSlips(combined, { year: 2026, month: 2 });
+    expect(items).toHaveLength(1);
+    expect(items[0].cumulative.income).toBe(2000000);
+
+    const dupBatch = await parseSalaryWorkbookBatch([{ name: "jan-dup.xlsx", buffer: jan }]);
+    expect(() => validateCombinedSalaryRows([...batch1, ...dupBatch])).toThrow("รหัสพนักงานและงวดซ้ำ");
   });
 });

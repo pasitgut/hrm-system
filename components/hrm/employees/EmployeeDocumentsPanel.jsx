@@ -10,7 +10,8 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MAX_EMPLOYEE_DOCUMENT_BYTES } from "@/lib/employee-documents";
+import { MAX_EMPLOYEE_DOCUMENT_BYTES, MAX_EMPLOYEE_DOCUMENT_MB } from "@/lib/employee-documents";
+import { uploadEmployeeDocument } from "@/lib/client/upload-employee-document";
 import { cn } from "@/lib/utils";
 
 const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png";
@@ -41,6 +42,7 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadError, setUploadError] = useState("");
   const [notice, setNotice] = useState("");
   const [shareTarget, setShareTarget] = useState(null);
@@ -90,23 +92,23 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
       return;
     }
     if (file.size > MAX_EMPLOYEE_DOCUMENT_BYTES) {
-      setUploadError("ไฟล์เอกสารต้องมีขนาดไม่เกิน 15 MB");
+      setUploadError(`ไฟล์เอกสารต้องมีขนาดไม่เกิน ${MAX_EMPLOYEE_DOCUMENT_MB} MB`);
       return;
     }
 
     setUploading(true);
+    setUploadProgress(0);
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const response = await fetch(`/api/employees/${employeeId}/documents`, { method: "POST", body });
-      const payload = await readPayload(response);
-      if (!response.ok) throw new Error(payload.error || "อัปโหลดเอกสารไม่สำเร็จ");
-      setNotice(`อัปโหลด ${payload.item.fileName} แล้ว`);
+      const item = await uploadEmployeeDocument(employeeId, file, {
+        onProgress: ({ percent }) => setUploadProgress(percent),
+      });
+      setNotice(`อัปโหลด ${item.fileName} แล้ว`);
       await loadDocuments({ quiet: true });
     } catch (error) {
       setUploadError(error.message || "อัปโหลดเอกสารไม่สำเร็จ");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -194,7 +196,7 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 id="employee-documents-heading" className="text-sm font-semibold text-foreground">เอกสารพนักงาน</h3>
-          <p className="mt-1 text-xs text-muted-foreground">ไฟล์ PDF, Word, Excel, JPG หรือ PNG ขนาดไม่เกิน 15 MB</p>
+          <p className="mt-1 text-xs text-muted-foreground">ไฟล์ PDF, Word, Excel, JPG หรือ PNG ขนาดไม่เกิน {MAX_EMPLOYEE_DOCUMENT_MB} MB</p>
         </div>
         {canUpload ? (
           <div className="shrink-0">
@@ -206,7 +208,7 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
               )}
             >
               <RiUpload2Line className="size-4" aria-hidden="true" />
-              {uploading ? "กำลังอัปโหลด…" : "อัปโหลดเอกสาร"}
+              {uploading ? `กำลังอัปโหลด… ${uploadProgress ?? 0}%` : "อัปโหลดเอกสาร"}
               <input
                 id={fileInputId}
                 type="file"

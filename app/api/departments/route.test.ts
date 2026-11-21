@@ -55,8 +55,8 @@ describe("POST /api/departments", () => {
   });
 
   it("returns 201 and creates an active department for a supervisor", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const { user, employee } = await createUser({ role: "hr" });
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
     const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Legal" } }));
     const payload = await response.json();
     expect(response.status).toBe(201);
@@ -65,22 +65,22 @@ describe("POST /api/departments", () => {
   });
 
   it("returns 201 for a ceo", async () => {
-    const { user, employee } = await createUser({ role: "ceo" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "ceo" }));
+    const { user, employee } = await createUser({ role: "executive" });
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "executive" }));
     const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Finance" } }));
     expect(response.status).toBe(201);
   });
 
   it("rejects an empty name with 400", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const { user, employee } = await createUser({ role: "hr" });
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
     const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "   " } }));
     expect(response.status).toBe(400);
   });
 
   it("returns a clean 409 (not a raw DB error) on a duplicate name", async () => {
-    const { user, employee } = await createUser({ role: "supervisor" });
-    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "supervisor" }));
+    const { user, employee } = await createUser({ role: "hr" });
+    const token = await createSessionToken(sessionFor({ id: user.id, employeeId: employee.id, email: user.email, role: "hr" }));
     await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: " Legal " } }));
     const response = await POST(apiRequest("http://localhost/api/departments", { method: "POST", token, body: { name: "Legal" } }));
     const payload = await response.json();

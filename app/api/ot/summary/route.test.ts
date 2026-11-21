@@ -56,14 +56,14 @@ describe("GET /api/ot/summary", () => {
   });
 
   it("returns company scope with correct per-employee sums for supervisor/ceo with no employeeId", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employeeA.id, statusCode: "approved", startAt: new Date("2026-09-10T11:00:00Z"), endAt: new Date("2026-09-10T13:00:00Z") });
     await createOvertimeRequest({ employeeId: employeeA.id, statusCode: "pending", startAt: new Date("2026-09-11T11:00:00Z"), endAt: new Date("2026-09-11T12:30:00Z") });
     await createOvertimeRequest({ employeeId: employeeB.id, statusCode: "rejected", startAt: new Date("2026-09-12T11:00:00Z"), endAt: new Date("2026-09-12T14:00:00Z") });
 
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await summaryRequest("?month=2026-09", token);
     const payload = await response.json();
 
@@ -87,11 +87,11 @@ describe("GET /api/ot/summary", () => {
   });
 
   it("returns individual scope for supervisor/ceo with employeeId set", async () => {
-    const { user: ceoUser, employee: ceo } = await createUser({ role: "ceo" });
+    const { user: ceoUser, employee: ceo } = await createUser({ role: "executive" });
     const { employee } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employee.id, statusCode: "approved", startAt: new Date("2026-09-10T11:00:00Z"), endAt: new Date("2026-09-10T13:00:00Z") });
 
-    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "ceo" }));
+    const token = await createSessionToken(sessionFor({ id: ceoUser.id, employeeId: ceo.id, email: ceoUser.email, role: "executive" }));
     const response = await summaryRequest(`?month=2026-09&employeeId=${employee.id}`, token);
     const payload = await response.json();
 

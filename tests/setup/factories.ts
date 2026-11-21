@@ -7,13 +7,11 @@ import {
   overtimeRequests,
   positions,
   users,
-  type userRoleEnum,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/auth/password";
+import { normalizeRole, type Role } from "@/lib/auth/roles";
 import { permissionsForRole } from "@/tests/setup/permissions";
 import { eq } from "drizzle-orm";
-
-type Role = (typeof userRoleEnum.enumValues)[number];
 
 let employeeCodeCounter = 0;
 async function firstDepartmentId(): Promise<number> {
@@ -69,7 +67,7 @@ export async function createUser(overrides: Partial<typeof users.$inferInsert> &
       employeeId: employeeId ?? employee!.id,
       email: email ?? employee?.email ?? `test.user.${Date.now()}@example.com`,
       passwordHash,
-      role: role ?? "employee",
+      role: normalizeRole(role),
       // Permissions, not roles, gate the API: managers get the manager grants unless a test overrides them.
       permissions: permissionsForRole(role),
       ...rest,

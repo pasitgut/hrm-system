@@ -8,6 +8,9 @@ import { contentDisposition, isUuid } from "@/lib/employee-documents";
 import { employeeDocumentError as jsonError } from "@/lib/employee-documents-api";
 import { downloadEmployeeDocumentFromDrive, GoogleDriveError } from "@/lib/google-drive";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export const GET = withApiAuth(async (request: NextRequest, context: RouteContext) => {
@@ -21,7 +24,6 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
     .select({
       fileName: employeeDocuments.fileName,
       mimeType: employeeDocuments.mimeType,
-      fileData: employeeDocuments.fileData,
       fileSize: employeeDocuments.fileSize,
       driveFileId: employeeDocuments.driveFileId,
       sharedWithUserIds: employeeDocuments.sharedWithUserIds,
@@ -34,23 +36,16 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
     return jsonError(403, "บัญชีนี้ไม่มีสิทธิ์เข้าถึงเอกสาร");
   }
 
-  let body: BodyInit;
-  if (item.driveFileId) {
-    let response: Response;
-    try {
-      response = await downloadEmployeeDocumentFromDrive(item.driveFileId);
-    } catch (error) {
-      if (error instanceof GoogleDriveError && error.status === 404) return jsonError(404, "ไม่พบไฟล์ใน Google Drive");
-      const status = error instanceof GoogleDriveError && error.status === 503 ? 503 : 502;
-      return jsonError(status, "ดาวน์โหลดไฟล์จาก Google Drive ไม่สำเร็จ กรุณาลองอีกครั้ง");
-    }
-    if (!response.body) return jsonError(502, "Google Drive ไม่ส่งเนื้อหาไฟล์กลับมา");
-    body = response.body;
-  } else if (item.fileData) {
-    body = new Uint8Array(item.fileData);
-  } else {
-    return jsonError(404, "ไม่พบเนื้อหาเอกสาร");
+  let response: Response;
+  try {
+    response = await downloadEmployeeDocumentFromDrive(item.driveFileId);
+  } catch (error) {
+    if (error instanceof GoogleDriveError && error.status === 404) return jsonError(404, "ไม่พบไฟล์ใน Google Drive");
+    const status = error instanceof GoogleDriveError && error.status === 503 ? 503 : 502;
+    return jsonError(status, "ดาวน์โหลดไฟล์จาก Google Drive ไม่สำเร็จ กรุณาลองอีกครั้ง");
   }
+  if (!response.body) return jsonError(502, "Google Drive ไม่ส่งเนื้อหาไฟล์กลับมา");
+  const body: BodyInit = response.body;
 
   return new Response(body, {
     headers: {

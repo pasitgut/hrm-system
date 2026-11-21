@@ -1,0 +1,2 @@
+ALTER TABLE "employee_documents" DROP CONSTRAINT "employee_documents_file_size_valid";--> statement-breakpoint
+ALTER TABLE "employee_documents" ADD CONSTRAINT "employee_documents_file_size_valid" CHECK ("employee_documents"."file_size" > 0 and "employee_documents"."file_size" <= 52428800);

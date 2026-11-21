@@ -48,7 +48,7 @@ describe("LeaveListView status tabs", () => {
     expect(screen.queryAllByText("พนักงาน")).toHaveLength(0);
     unmount();
 
-    mockRole = "supervisor";
+    mockRole = "hr";
     render(<LeaveListView items={fixtureItems} />);
     expect(screen.getAllByText("พนักงาน").length).toBeGreaterThan(0);
     mockRole = "employee";

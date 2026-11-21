@@ -50,12 +50,6 @@ describe("hasPermission", () => {
     expect(hasPermission([], "ot.approve")).toBe(false);
     expect(hasPermission("not-an-array", "ot.request.self")).toBe(false);
   });
-
-  it("expands legacy broad grants into the specific permissions", () => {
-    expect(hasPermission(["employees.manage"], "employees.compensation.manage")).toBe(true);
-    expect(hasPermission(["settings.manage"], "leave.quotas.manage")).toBe(true);
-    expect(hasPermission(["assets.manage"], "assets.templates.manage")).toBe(true);
-  });
 });
 
 describe("normalizePermissions / encodePermissionsForStorage", () => {

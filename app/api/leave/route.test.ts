@@ -66,13 +66,13 @@ describe("GET /api/leave", () => {
   });
 
   it("lets a supervisor see all employees' requests", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createLeaveRequest({ employeeId: employeeA.id });
     await createLeaveRequest({ employeeId: employeeB.id });
 
-    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(leaveRequestHttp("http://localhost/api/leave", { token }));
     const payload = await response.json();
 
@@ -81,13 +81,13 @@ describe("GET /api/leave", () => {
   });
 
   it("lets a supervisor scope to a single employee via employeeId", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createLeaveRequest({ employeeId: employeeA.id });
     await createLeaveRequest({ employeeId: employeeB.id });
 
-    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await cookieFor(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(leaveRequestHttp(`http://localhost/api/leave?employeeId=${employeeA.id}`, { token }));
     const payload = await response.json();
 

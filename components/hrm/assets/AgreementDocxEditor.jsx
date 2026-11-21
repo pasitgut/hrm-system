@@ -33,6 +33,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Select, SelectItem } from "@/components/ui/select";
 import { agreementDocumentHtml, sanitizeAgreementHtml } from "@/components/hrm/assets/agreementPrint";
+import { uploadImage } from "@/lib/client/upload-image";
 
 const fieldTokens = [
   ["ชื่อพนักงาน", "{{employeeName}}"],
@@ -670,28 +671,38 @@ export function AgreementDocxEditor({
     }
   }
 
-  function insertImage(event) {
+  async function insertImage(event) {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
     if (!file) return;
-    if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type) || file.size > 3 * 1024 * 1024) {
-      setToolbarError("เลือกรูป PNG, JPG, GIF หรือ WebP ขนาดไม่เกิน 3 MB");
+    const allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    const maxInputBytes = file.type === "image/gif" ? 1 * 1024 * 1024 : 15 * 1024 * 1024;
+    if (!allowedTypes.includes(file.type) || file.size > maxInputBytes) {
+      setToolbarError(
+        file.type === "image/gif"
+          ? "รูป GIF ต้องมีขนาดไม่เกิน 1 MB"
+          : "เลือกรูป PNG, JPG, GIF หรือ WebP ขนาดไม่เกิน 15 MB",
+      );
       return;
     }
-    const reader = new FileReader();
-    reader.onerror = () => setToolbarError("อ่านไฟล์รูปภาพไม่สำเร็จ");
-    reader.onload = () => {
+    try {
+      const imageUrl = await uploadImage(file, {
+        scope: "agreement",
+        maxBytes: 2 * 1024 * 1024,
+        maxDimension: 1400,
+      });
       const editor = getActiveEditor();
-      if (!editor || typeof reader.result !== "string") return;
+      if (!editor) return;
       const pageId = Number(editor.dataset.pageId);
       setToolbarError("");
       restoreEditorSelection(editor, pageId);
-      document.execCommand("insertImage", false, reader.result);
-      const image = Array.from(editor.querySelectorAll("img")).find((candidate) => candidate.getAttribute("src") === reader.result);
+      document.execCommand("insertImage", false, imageUrl);
+      const image = Array.from(editor.querySelectorAll("img")).find((candidate) => candidate.getAttribute("src") === imageUrl);
       if (image) image.alt = file.name.replace(/\.[^.]+$/, "");
       persistPage(pageId, editor);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      setToolbarError(error instanceof Error ? error.message : "อัปโหลดรูปภาพไม่สำเร็จ");
+    }
   }
 
   function openPreview() {

@@ -5,6 +5,8 @@ import { jsonError } from "@/app/api/asset-requests/_shared";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates, employees } from "@/lib/db/schema";
+import { migrateHtmlImgbbUrlsToCloudinary } from "@/lib/cloudinary";
+import { healAgreementTemplateImgbbUrls } from "@/lib/cloudinary-migration";
 
 function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
   return {
@@ -24,7 +26,8 @@ function templateDto(row: typeof assetAgreementTemplates.$inferSelect) {
 export const GET = withApiAuth(async (request: NextRequest) => {
   await requireApiPermission(request, "assets.templates.manage");
   const rows = await db.select().from(assetAgreementTemplates).orderBy(desc(assetAgreementTemplates.updatedAt));
-  return NextResponse.json({ items: rows.map(templateDto) });
+  const healed = await Promise.all(rows.map((row) => healAgreementTemplateImgbbUrls(row)));
+  return NextResponse.json({ items: healed.map(templateDto) });
 });
 
 export const POST = withApiAuth(async (request: NextRequest) => {
@@ -36,14 +39,20 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   if (!parsed.success) return jsonError(400, "ตรวจสอบชื่อและเนื้อหา Agreement อีกครั้ง");
   if (parsed.data.type !== "borrow") return jsonError(400, "Agreement template type is invalid");
 
+  const [headerRes, bodyRes, footerRes] = await Promise.all([
+    migrateHtmlImgbbUrlsToCloudinary(parsed.data.header, "agreement"),
+    migrateHtmlImgbbUrlsToCloudinary(parsed.data.body, "agreement"),
+    migrateHtmlImgbbUrlsToCloudinary(parsed.data.footer, "agreement"),
+  ]);
+
   const [actor] = await db.select({ name: employees.firstName, lastName: employees.lastName })
     .from(employees).where(eq(employees.id, user.employeeId));
   const [created] = await db.insert(assetAgreementTemplates).values({
     type: "borrow",
     title: parsed.data.title,
-    headerHtml: parsed.data.header,
-    bodyHtml: parsed.data.body,
-    footerHtml: parsed.data.footer,
+    headerHtml: headerRes.html,
+    bodyHtml: bodyRes.html,
+    footerHtml: footerRes.html,
     isActive: parsed.data.isActive,
     createdByEmployeeId: user.employeeId,
     createdByName: `${actor?.name ?? ""} ${actor?.lastName ?? ""}`.trim(),

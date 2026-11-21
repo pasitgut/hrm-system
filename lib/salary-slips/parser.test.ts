@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { parseMoney, parsePeriod, parseWorkbook } from "./parser";
-import { sameData, withCumulative, type SlipData } from "./model";
+import { withCumulative } from "./model";
 import { fixtureData, fixtureWorkbook } from "@/tests/setup/salary-slips";
 describe("salary slip parser", () => {
   it("preserves formatted employee codes, bank zeros, and department sections", async () => {
@@ -36,10 +36,6 @@ describe("salary slip parser", () => {
   });
 });
 describe("salary history", () => {
-  it("compares jsonb data without relying on key insertion order", () => {
-    const data = fixtureData(); const reordered = Object.fromEntries(Object.entries(data).reverse()) as SlipData;
-    expect(sameData(data, reordered)).toBe(true); expect(sameData(data, fixtureData({ netPay: 1 }))).toBe(false);
-  });
   it("resets at year boundaries, excludes future months and separates employees", () => {
     const make = (id: string, year: number, month: number, employeeId = "a") => ({ id, employeeId, revision: 1, data: fixtureData({ year, month }) });
     const items = withCumulative([make("old", 2025, 12), make("jan", 2026, 1), make("mar", 2026, 3), make("apr", 2026, 4), make("b", 2026, 1, "b")]);

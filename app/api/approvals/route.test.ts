@@ -37,7 +37,7 @@ describe("GET /api/approvals", () => {
   });
 
   it("returns correctly-normalized OT and leave items for a supervisor, newest first", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee } = await createUser({ role: "employee" });
 
     const ot = await createOvertimeRequest({
@@ -55,7 +55,7 @@ describe("GET /api/approvals", () => {
       reason: "ไม่สบาย",
       createdAt: new Date("2026-09-09T11:00:00Z"),
     });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(approvalsRequest("http://localhost/api/approvals?type=all", token));
     const payload = await response.json();
 
@@ -83,11 +83,11 @@ describe("GET /api/approvals", () => {
   });
 
   it("filters by type", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employee.id });
     await createLeaveRequest({ employeeId: employee.id });
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
 
     const otOnly = await GET(approvalsRequest("http://localhost/api/approvals?type=ot", token));
     const otPayload = await otOnly.json();
@@ -120,13 +120,13 @@ describe("GET /api/approvals", () => {
   });
 
   it("lets a supervisor see everyone's requests unscoped", async () => {
-    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "supervisor" });
+    const { user: supervisorUser, employee: supervisor } = await createUser({ role: "hr" });
     const { employee: employeeA } = await createUser({ role: "employee" });
     const { employee: employeeB } = await createUser({ role: "employee" });
     await createOvertimeRequest({ employeeId: employeeA.id });
     await createOvertimeRequest({ employeeId: employeeB.id });
 
-    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "supervisor" }));
+    const token = await createSessionToken(sessionFor({ id: supervisorUser.id, employeeId: supervisor.id, email: supervisorUser.email, role: "hr" }));
     const response = await GET(approvalsRequest("http://localhost/api/approvals?type=ot", token));
     const payload = await response.json();
 

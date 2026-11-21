@@ -5,6 +5,9 @@ const APP_FOLDER_NAME = "HRM Employee Documents";
 const APP_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const REQUEST_TIMEOUT_MS = 120_000;
 
+export const DRIVE_CHUNK_ALIGNMENT_BYTES = 256 * 1024;
+export const DRIVE_UPLOAD_CHUNK_BYTES = 3 * 1024 * 1024;
+
 type TokenResponse = { access_token?: string; expires_in?: number };
 type DriveFileResponse = { id?: string };
 
@@ -26,6 +29,19 @@ export function isGoogleDriveConfigured(): boolean {
       && process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET?.trim()
       && process.env.GOOGLE_DRIVE_REFRESH_TOKEN?.trim(),
   );
+}
+
+function assertValidDriveUploadUrl(uploadUrl: string): URL {
+  let uploadEndpoint: URL;
+  try {
+    uploadEndpoint = new URL(uploadUrl);
+  } catch {
+    throw new GoogleDriveError("Google Drive returned an invalid upload URL", 502);
+  }
+  if (uploadEndpoint.protocol !== "https:" || uploadEndpoint.origin !== "https://www.googleapis.com") {
+    throw new GoogleDriveError("Google Drive returned an invalid upload URL", 502);
+  }
+  return uploadEndpoint;
 }
 
 async function getAccessToken(): Promise<string> {
@@ -122,45 +138,148 @@ async function getAppFolderId(accessToken: string): Promise<string> {
   return folderRequest;
 }
 
-export async function uploadEmployeeDocumentToDrive(
-  fileName: string,
-  mimeType: string,
-  fileData: Buffer,
-  employeeDocumentId: string,
-): Promise<string> {
+export async function startEmployeeDocumentResumableUpload(params: {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  employeeDocumentId: string;
+}): Promise<string> {
   const token = await getAccessToken();
   const parentId = await getAppFolderId(token);
   const startResponse = await driveRequest(`${DRIVE_UPLOAD_ROOT}/files?uploadType=resumable&fields=id`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json; charset=UTF-8",
-      "X-Upload-Content-Type": mimeType,
-      "X-Upload-Content-Length": String(fileData.byteLength),
+      "X-Upload-Content-Type": params.mimeType,
+      "X-Upload-Content-Length": String(params.fileSize),
     },
     body: JSON.stringify({
-      name: fileName,
-      mimeType,
+      name: params.fileName,
+      mimeType: params.mimeType,
       parents: [parentId],
-      appProperties: { employeeDocumentId },
+      appProperties: { employeeDocumentId: params.employeeDocumentId },
     }),
   }, token);
   const uploadUrl = startResponse.headers.get("Location");
   if (!uploadUrl) throw new GoogleDriveError("Google Drive did not return an upload URL", 502);
-  const uploadEndpoint = new URL(uploadUrl);
-  if (uploadEndpoint.protocol !== "https:" || uploadEndpoint.origin !== "https://www.googleapis.com") {
-    throw new GoogleDriveError("Google Drive returned an invalid upload URL", 502);
+  assertValidDriveUploadUrl(uploadUrl);
+  return uploadUrl;
+}
+
+export async function uploadEmployeeDocumentChunkToDrive(params: {
+  uploadUrl: string;
+  mimeType: string;
+  chunk: Uint8Array | Buffer;
+  start: number;
+  end: number;
+  totalSize: number;
+}): Promise<{ done: false; nextByte: number } | { done: true; driveFileId: string }> {
+  assertValidDriveUploadUrl(params.uploadUrl);
+  if (
+    !Number.isInteger(params.start) ||
+    !Number.isInteger(params.end) ||
+    !Number.isInteger(params.totalSize) ||
+    params.start < 0 ||
+    params.end < params.start ||
+    params.end >= params.totalSize ||
+    params.chunk.byteLength !== params.end - params.start + 1
+  ) {
+    throw new GoogleDriveError("Invalid chunk range", 400);
+  }
+  if (params.end + 1 < params.totalSize && params.chunk.byteLength % DRIVE_CHUNK_ALIGNMENT_BYTES !== 0) {
+    throw new GoogleDriveError("Intermediate upload chunks must align to 256 KiB", 400);
   }
 
-  const bytes = new Uint8Array(fileData.byteLength);
-  bytes.set(fileData);
-  const uploadResponse = await driveRequest(uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": mimeType },
-    body: bytes,
-  }, token);
-  const uploaded = await uploadResponse.json() as DriveFileResponse;
-  if (!uploaded.id) throw new GoogleDriveError("Google Drive did not return a file ID", 502);
-  return uploaded.id;
+  const token = await getAccessToken();
+  const bytes = new Uint8Array(params.chunk.byteLength);
+  bytes.set(params.chunk);
+
+  let response: Response;
+  try {
+    response = await fetch(params.uploadUrl, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": params.mimeType,
+        "Content-Length": String(bytes.byteLength),
+        "Content-Range": `bytes ${params.start}-${params.end}/${params.totalSize}`,
+      },
+      body: bytes,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new GoogleDriveError("Could not connect to Google Drive", 502);
+  }
+
+  if (response.status === 308) {
+    const range = response.headers.get("Range") ?? "";
+    const match = /^bytes=0-(\d+)$/.exec(range);
+    return {
+      done: false,
+      nextByte: match ? Number(match[1]) + 1 : params.end + 1,
+    };
+  }
+
+  if (response.status === 200 || response.status === 201) {
+    const uploaded = await response.json() as DriveFileResponse;
+    if (!uploaded.id) throw new GoogleDriveError("Google Drive did not return a file ID", 502);
+    return { done: true, driveFileId: uploaded.id };
+  }
+
+  if (response.status === 404 || response.status === 410) {
+    throw new GoogleDriveError("Google Drive upload session expired", 410);
+  }
+
+  throw new GoogleDriveError("Google Drive chunk upload failed", response.status);
+}
+
+export async function cancelEmployeeDocumentResumableUpload(uploadUrl: string): Promise<void> {
+  try {
+    assertValidDriveUploadUrl(uploadUrl);
+    const token = await getAccessToken();
+    await fetch(uploadUrl, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // Best-effort cleanup; ignore errors if session already expired or network fails.
+  }
+}
+
+export async function uploadEmployeeDocumentToDrive(
+  fileName: string,
+  mimeType: string,
+  fileData: Buffer,
+  employeeDocumentId: string,
+): Promise<string> {
+  const uploadUrl = await startEmployeeDocumentResumableUpload({
+    fileName,
+    mimeType,
+    fileSize: fileData.byteLength,
+    employeeDocumentId,
+  });
+
+  let offset = 0;
+  while (offset < fileData.byteLength) {
+    const sliceEnd = Math.min(offset + DRIVE_UPLOAD_CHUNK_BYTES, fileData.byteLength);
+    const chunk = fileData.subarray(offset, sliceEnd);
+    const result = await uploadEmployeeDocumentChunkToDrive({
+      uploadUrl,
+      mimeType,
+      chunk,
+      start: offset,
+      end: sliceEnd - 1,
+      totalSize: fileData.byteLength,
+    });
+    if ("driveFileId" in result) return result.driveFileId;
+    if (result.nextByte <= offset) {
+      throw new GoogleDriveError("Google Drive resumable upload did not advance", 502);
+    }
+    offset = result.nextByte;
+  }
+
+  throw new GoogleDriveError("Google Drive upload completed without returning a file ID", 502);
 }
 
 export async function findEmployeeDocumentInDrive(employeeDocumentId: string): Promise<string | null> {

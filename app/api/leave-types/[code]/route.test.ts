@@ -43,7 +43,7 @@ describe("PATCH /api/leave-types/[code]", () => {
   });
 
   it("edits the quota and description for a supervisor, code (PK) unaffected", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await PATCH(
       apiRequest("http://localhost/api/leave-types/sick", {
         method: "PATCH",
@@ -60,7 +60,7 @@ describe("PATCH /api/leave-types/[code]", () => {
   });
 
   it("clears the quota back to uncapped when annualQuotaDays is set to null", async () => {
-    const token = await tokenFor("ceo");
+    const token = await tokenFor("executive");
     const response = await PATCH(
       apiRequest("http://localhost/api/leave-types/annual", { method: "PATCH", token, body: { annualQuotaDays: null } }),
       { params: Promise.resolve({ code: "annual" }) },
@@ -71,7 +71,7 @@ describe("PATCH /api/leave-types/[code]", () => {
   });
 
   it("returns 404 for a code that does not exist", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await PATCH(
       apiRequest("http://localhost/api/leave-types/nonexistent", { method: "PATCH", token, body: { name: "x" } }),
       { params: Promise.resolve({ code: "nonexistent" }) },
@@ -90,7 +90,7 @@ describe("DELETE /api/leave-types/[code]", () => {
   });
 
   it("soft-deactivates (isActive: false) instead of removing the row", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     const response = await DELETE(apiRequest("http://localhost/api/leave-types/sick", { method: "DELETE", token }), {
       params: Promise.resolve({ code: "sick" }),
     });
@@ -104,7 +104,7 @@ describe("DELETE /api/leave-types/[code]", () => {
   });
 
   it("can be reactivated afterwards via PATCH isActive: true", async () => {
-    const token = await tokenFor("supervisor");
+    const token = await tokenFor("hr");
     await DELETE(apiRequest("http://localhost/api/leave-types/sick", { method: "DELETE", token }), {
       params: Promise.resolve({ code: "sick" }),
     });

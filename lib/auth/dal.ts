@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { hasAnyPermission, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { normalizeRole, type Role } from "@/lib/auth/roles";
 import {
   readSessionCookie,
   readSessionCookieFromRequest,
@@ -18,17 +19,20 @@ export const getCurrentUser = cache(async (): Promise<SessionPayload | null> => 
   return verifySessionToken(token);
 });
 
-// Permissions are always read from the database, never trusted from the JWT, so
-// revoking a grant or deactivating an account takes effect on the next request.
-// Returns null when the account is missing or inactive.
-async function findActivePermissions(userId: string): Promise<string[] | null> {
+// Role and permissions are always read from the database, never trusted from the
+// JWT, so role changes, revoking a grant, or deactivating an account take effect
+// on the next request. Returns null when the account is missing or inactive.
+async function findActiveAccount(userId: string): Promise<{ role: Role; permissions: string[] } | null> {
   const [account] = await db
-    .select({ permissions: users.permissions, isActive: users.isActive })
+    .select({ role: users.role, permissions: users.permissions, isActive: users.isActive })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
   if (!account?.isActive) return null;
-  return Array.isArray(account.permissions) ? account.permissions : [];
+  return {
+    role: normalizeRole(account.role),
+    permissions: Array.isArray(account.permissions) ? account.permissions : [],
+  };
 }
 
 // --- Server Components / Server Actions: redirect on failure ---
@@ -37,13 +41,17 @@ export async function requireUser(): Promise<SessionPayload> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.mustChangePassword) redirect("/change-password");
-  const permissions = await findActivePermissions(user.sub);
-  if (!permissions) redirect("/login");
-  return { ...user, permissions };
+  const account = await findActiveAccount(user.sub);
+  if (!account) redirect("/login");
+  return { ...user, role: account.role, permissions: account.permissions };
+}
+
+export async function getUserAccess(userId: string): Promise<{ role: Role; permissions: string[] } | null> {
+  return findActiveAccount(userId);
 }
 
 export async function getUserPermissions(userId: string): Promise<string[]> {
-  return (await findActivePermissions(userId)) ?? [];
+  return (await findActiveAccount(userId))?.permissions ?? [];
 }
 
 export async function requirePermission(permission: PermissionKey): Promise<SessionPayload> {
@@ -74,9 +82,9 @@ export async function requireApiUser(request: NextRequest): Promise<SessionPaylo
   const user = token ? await verifySessionToken(token) : null;
   if (!user) throw new ApiAuthError(401, "Unauthorized");
   if (user.mustChangePassword) throw new ApiAuthError(403, "Password change required");
-  const permissions = await findActivePermissions(user.sub);
-  if (!permissions) throw new ApiAuthError(401, "Account is inactive");
-  return { ...user, permissions };
+  const account = await findActiveAccount(user.sub);
+  if (!account) throw new ApiAuthError(401, "Account is inactive");
+  return { ...user, role: account.role, permissions: account.permissions };
 }
 
 export async function requireApiPermission(request: NextRequest, permission: PermissionKey): Promise<SessionPayload> {

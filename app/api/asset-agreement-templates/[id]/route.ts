@@ -5,6 +5,8 @@ import { jsonError, requestId } from "@/app/api/asset-requests/_shared";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { assetAgreementTemplates } from "@/lib/db/schema";
+import { migrateHtmlImgbbUrlsToCloudinary } from "@/lib/cloudinary";
+import { healAgreementTemplateImgbbUrls } from "@/lib/cloudinary-migration";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -35,7 +37,8 @@ export const GET = withApiAuth(async (request: NextRequest, context: RouteContex
   const { id } = await context.params;
   const auth = await authorized(request, id);
   if ("response" in auth) return auth.response;
-  return NextResponse.json({ item: templateDto(auth.template) });
+  const healed = await healAgreementTemplateImgbbUrls(auth.template);
+  return NextResponse.json({ item: templateDto(healed) });
 });
 
 export const PATCH = withApiAuth(async (request: NextRequest, context: RouteContext) => {
@@ -49,11 +52,16 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
   const parsed = assetAgreementTemplateInputSchema.partial().safeParse(body);
   if (!parsed.success) return jsonError(400, "ตรวจสอบข้อมูล Agreement อีกครั้ง");
   if (parsed.data.type && parsed.data.type !== "borrow") return jsonError(400, "Agreement template type is invalid");
+  const [headerHtml, bodyHtml, footerHtml] = await Promise.all([
+    parsed.data.header !== undefined ? migrateHtmlImgbbUrlsToCloudinary(parsed.data.header, "agreement").then((res) => res.html) : Promise.resolve(undefined),
+    parsed.data.body !== undefined ? migrateHtmlImgbbUrlsToCloudinary(parsed.data.body, "agreement").then((res) => res.html) : Promise.resolve(undefined),
+    parsed.data.footer !== undefined ? migrateHtmlImgbbUrlsToCloudinary(parsed.data.footer, "agreement").then((res) => res.html) : Promise.resolve(undefined),
+  ]);
   const [updated] = await db.update(assetAgreementTemplates).set({
+    ...(headerHtml !== undefined ? { headerHtml } : {}),
+    ...(bodyHtml !== undefined ? { bodyHtml } : {}),
+    ...(footerHtml !== undefined ? { footerHtml } : {}),
     ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
-    ...(parsed.data.header !== undefined ? { headerHtml: parsed.data.header } : {}),
-    ...(parsed.data.body !== undefined ? { bodyHtml: parsed.data.body } : {}),
-    ...(parsed.data.footer !== undefined ? { footerHtml: parsed.data.footer } : {}),
     ...(parsed.data.isActive !== undefined ? { isActive: parsed.data.isActive } : {}),
     updatedAt: new Date(),
     version: sql`${assetAgreementTemplates.version} + 1`,

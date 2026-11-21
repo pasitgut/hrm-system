@@ -40,6 +40,7 @@ import { explainFailure, readJsonSafe } from "@/components/hrm/api-response";
 import { formatThaiDate, useEmployeeWorkflow } from "@/components/hrm/employees/employee-workflow";
 import { useMasterDataWorkflow } from "@/components/hrm/employees/master-data-workflow";
 import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, PAYROLL_VALUE_UNITS } from "@/lib/employees/payroll-data";
+import { uploadImage } from "@/lib/client/upload-image";
 
 const MASTER_ITEMS = [
   { key: "employmentTypes", label: "ประเภทการจ้าง", endpoint: "/api/employment-types", hasCode: true },
@@ -387,6 +388,7 @@ export default function EmployeeModule() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [employeeFormTab, setEmployeeFormTab] = useState("profile");
   const canEditProfileForm = editing ? canUpdateProfile : canCreate;
   const [form, setForm] = useState(blankForm);
@@ -826,7 +828,7 @@ export default function EmployeeModule() {
         description={editing ? `${editing.code} · ${editing.firstName} ${editing.lastName}` : "กำหนดรหัสพนักงานเองเป็นตัวเลข 4 หลัก เช่น 2603"}
         size={canViewDocuments || canViewCompensation ? "lg" : "md"}
         className="border-t-4 border-t-primary"
-        footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving}>{saving ? "กำลังบันทึก..." : "บันทึกข้อมูล"}</Button></>}
+        footer={<><Button type="button" variant="secondary" onClick={closeForm} disabled={saving || uploadingAvatar}>ยกเลิก</Button><Button type="submit" form="employee-form" disabled={saving || uploadingAvatar}>{saving ? "กำลังบันทึก..." : uploadingAvatar ? "กำลังอัปโหลดรูป..." : "บันทึกข้อมูล"}</Button></>}
       >
         <form id="employee-form" className="min-w-0" onSubmit={saveEmployee} noValidate>
           <Tabs selectedKey={employeeFormTab} onSelectionChange={(key) => setEmployeeFormTab(String(key))}>
@@ -913,19 +915,33 @@ export default function EmployeeModule() {
                     label="รูปโปรไฟล์"
                     type="file"
                     accept="image/png,image/jpeg"
-                    onChange={(event) => {
+                    isDisabled={uploadingAvatar}
+                    onChange={async (event) => {
                       const file = event.target.files?.[0];
                       event.target.value = "";
                       if (!file) return;
                       if (!file.type.startsWith("image/")) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์ไม่ใช่รูปภาพ"); return; }
-                      if (file.size > 5 * 1024 * 1024) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์มีขนาดเกิน 5 MB"); return; }
-                      const reader = new FileReader();
-                      reader.onload = () => { if (typeof reader.result === "string") updateForm("avatarUrl", reader.result); };
-                      reader.onerror = () => setFormError("อ่านไฟล์รูปไม่สำเร็จ กรุณาเลือกรูปอื่น");
-                      reader.readAsDataURL(file);
+                      if (file.size > 15 * 1024 * 1024) { setFormError("เลือกรูปไม่สำเร็จ เพราะไฟล์มีขนาดเกิน 15 MB"); return; }
+                      setUploadingAvatar(true);
+                      setFormError("");
+                      try {
+                        const url = await uploadImage(file, {
+                          scope: "avatar",
+                          maxBytes: 500 * 1024,
+                          maxDimension: 512,
+                          outputType: "image/jpeg",
+                          quality: 0.85,
+                          alwaysResize: true,
+                        });
+                        updateForm("avatarUrl", url);
+                      } catch (error) {
+                        setFormError(error instanceof Error ? error.message : "อัปโหลดรูปไม่สำเร็จ กรุณาเลือกรูปอื่น");
+                      } finally {
+                        setUploadingAvatar(false);
+                      }
                     }}
                   />
-                  {form.avatarUrl ? <div className="flex items-center gap-3 text-xs text-muted-foreground"><Avatar src={form.avatarUrl} alt="รูปพนักงาน" initials={initialsFor(form)} /><span>เลือกรูปแล้ว</span></div> : <p className="pb-2 text-xs text-muted-foreground">JPG หรือ PNG ขนาดไม่เกิน 5 MB</p>}
+                  {uploadingAvatar ? <p role="status" className="pb-2 text-xs text-muted-foreground">กำลังอัปโหลดรูป…</p> : form.avatarUrl ? <div className="flex items-center gap-3 text-xs text-muted-foreground"><Avatar src={form.avatarUrl} alt="รูปพนักงาน" initials={initialsFor(form)} /><span>อัปโหลดรูปแล้ว</span></div> : <p className="pb-2 text-xs text-muted-foreground">JPG หรือ PNG ขนาดไม่เกิน 15 MB (อัปโหลดไปยัง Cloudinary)</p>}
                 </div>
               </TabPanel>
             ) : null}
