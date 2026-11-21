@@ -47,20 +47,40 @@ export async function loginAction(_prevState: LoginState, formData: FormData): P
   const password = String(formData.get("password") ?? "");
   const nextParam = String(formData.get("next") ?? "");
 
-  const user = await authenticate(identifier, password);
+  let user: Awaited<ReturnType<typeof authenticate>>;
+  try {
+    user = await authenticate(identifier, password);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    console.error("Login authentication failed", message);
+    if (message.includes("DATABASE_URL")) {
+      return { error: "ระบบยังไม่ได้ตั้งค่าการเชื่อมต่อฐานข้อมูล (DATABASE_URL)" };
+    }
+    return { error: "ไม่สามารถเชื่อมต่อฐานข้อมูลได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง" };
+  }
+
   if (!user) {
     return { error: GENERIC_ERROR };
   }
 
-  const token = await createSessionToken({
-    sub: user.id,
-    employeeId: user.employeeId,
-    email: user.email,
-    role: user.role,
-    ...(user.mustChangePassword ? { mustChangePassword: true } : {}),
-  });
-  await setSessionCookie(token);
-  await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
+  try {
+    const token = await createSessionToken({
+      sub: user.id,
+      employeeId: user.employeeId,
+      email: user.email,
+      role: user.role,
+      ...(user.mustChangePassword ? { mustChangePassword: true } : {}),
+    });
+    await setSessionCookie(token);
+    await db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    console.error("Login session setup failed", message);
+    if (message.includes("JWT_SECRET")) {
+      return { error: "ระบบยังไม่ได้ตั้งค่าความปลอดภัยของเซสชัน (JWT_SECRET)" };
+    }
+    return { error: "ไม่สามารถสร้างเซสชันเข้าสู่ระบบได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง" };
+  }
 
   if (user.mustChangePassword) {
     redirect("/change-password");

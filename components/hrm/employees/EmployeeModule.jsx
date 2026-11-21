@@ -23,6 +23,7 @@ import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
+import { IntegrationFeatureNotice } from "@/components/hrm/IntegrationNotice";
 import { EmployeeDocumentsPanel } from "@/components/hrm/employees/EmployeeDocumentsPanel";
 import {
   canCreateEmployees,
@@ -696,6 +697,8 @@ export default function EmployeeModule() {
           </>
         ) : null}
       />
+
+      <IntegrationFeatureNotice service="cloudinary" />
 
       {notice ? (
         <div role="status" aria-live="polite" className={cn("flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm", notice.type === "success" ? "border-status-success/30 bg-status-success/5 text-foreground" : "border-status-danger/30 bg-status-danger/5 text-status-danger")}>

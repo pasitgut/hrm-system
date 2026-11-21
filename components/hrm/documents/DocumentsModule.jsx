@@ -16,7 +16,8 @@ import { Select, SelectItem } from "@/components/ui/select";
 import { Table } from "@/components/ui/table";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader } from "@/components/hrm/PageHeader";
-import { useHrmRole } from "@/components/hrm/HrmShell";
+import { IntegrationFeatureNotice } from "@/components/hrm/IntegrationNotice";
+import { useHrmIntegrations, useHrmRole } from "@/components/hrm/HrmShell";
 import {
   canDeleteEmployeeDocuments,
   canShareEmployeeDocuments,
@@ -101,6 +102,7 @@ function DocumentActions({ item, canShare, canDelete, onShare, onDelete }) {
 
 export default function DocumentsModule() {
   const { permissions = [] } = useHrmRole() || {};
+  const { googleDrive: googleDriveReady } = useHrmIntegrations();
   const canUpload = canUploadEmployeeDocuments(permissions);
   const canShare = canShareEmployeeDocuments(permissions);
   const canDelete = canDeleteEmployeeDocuments(permissions);
@@ -348,7 +350,13 @@ export default function DocumentsModule() {
   }
 
   const pageActions = canUpload ? (
-    <Button type="button" leadingIcon={RiUpload2Line} onClick={openUpload} disabled={employeesLoading}>
+    <Button
+      type="button"
+      leadingIcon={RiUpload2Line}
+      onClick={openUpload}
+      disabled={employeesLoading || !googleDriveReady}
+      title={!googleDriveReady ? "ยังไม่ได้ตั้งค่า Google Drive" : undefined}
+    >
       อัปโหลดเอกสาร
     </Button>
   ) : null;
@@ -361,6 +369,8 @@ export default function DocumentsModule() {
         description="ค้นหาและจัดการเอกสารพนักงานจากที่เดียว"
         actions={pageActions}
       />
+
+      <IntegrationFeatureNotice service="googleDrive" />
 
       {notice ? <Feedback>{notice}</Feedback> : null}
 

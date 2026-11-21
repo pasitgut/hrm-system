@@ -84,4 +84,27 @@ describe("HrmShell", () => {
 
     expect(screen.getByLabelText("ออกจากระบบ")).toBeInTheDocument();
   });
+
+  it("shows a warning banner when optional external integrations are not configured", () => {
+    render(
+      <HrmShell
+        user={hrUser}
+        permissions={permissionsForRole("hr")}
+        integrations={{
+          googleDrive: false,
+          cloudinary: false,
+          checker: true,
+          unconfigured: [
+            { key: "googleDrive", name: "Google Drive", feature: "อัปโหลดและดาวน์โหลดเอกสารพนักงาน", configured: false },
+            { key: "cloudinary", name: "Cloudinary", feature: "อัปโหลดรูปโปรไฟล์ รูปทรัพย์สิน และรูปในสัญญา", configured: false },
+          ],
+        }}
+      >
+        <div>content</div>
+      </HrmShell>,
+    );
+
+    expect(screen.getByText(/บางบริการภายนอกยังไม่พร้อมใช้งาน/)).toBeInTheDocument();
+    expect(screen.getByText(/Google Drive, Cloudinary/)).toBeInTheDocument();
+  });
 });

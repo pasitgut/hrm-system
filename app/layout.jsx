@@ -4,6 +4,7 @@ import HrmShell from "@/components/hrm/HrmShell";
 import { getCurrentUser, getUserAccess } from "@/lib/auth/dal";
 import { db } from "@/lib/db/client";
 import { employees } from "@/lib/db/schema";
+import { getIntegrationStatus } from "@/lib/integrations/status";
 
 export const metadata = {
   title: "HRM",
@@ -15,6 +16,7 @@ export default async function RootLayout({ children }) {
   // requireUser() here would redirect-loop for unauthenticated visitors.
   // proxy.ts already redirects every other unauthenticated route to /login
   // before this layout renders.
+  const integrations = getIntegrationStatus();
   const sessionUser = await getCurrentUser();
   const access = sessionUser ? await getUserAccess(sessionUser.sub) : null;
   const user = sessionUser ? { ...sessionUser, role: access?.role ?? sessionUser.role } : null;
@@ -37,7 +39,13 @@ export default async function RootLayout({ children }) {
   return (
     <html lang="th" data-scroll-behavior="smooth">
       <body>
-        <HrmShell user={user} permissions={permissions} employeeName={employeeName} employeeCode={employeeCode}>
+        <HrmShell
+          user={user}
+          permissions={permissions}
+          employeeName={employeeName}
+          employeeCode={employeeCode}
+          integrations={integrations}
+        >
           {children}
         </HrmShell>
       </body>

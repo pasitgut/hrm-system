@@ -25,6 +25,10 @@ interface CheckerCacheEntry {
 const checkerCache = new Map<string, CheckerCacheEntry>();
 let ciSession: string | null = null;
 
+export function isCheckerConfigured(): boolean {
+  return Boolean(process.env.CHECKER_API_EMAIL?.trim() && process.env.CHECKER_API_PASSWORD);
+}
+
 function requireCheckerCredentials() {
   const email = process.env.CHECKER_API_EMAIL?.trim();
   const password = process.env.CHECKER_API_PASSWORD;

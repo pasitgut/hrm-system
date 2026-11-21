@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectItem } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
+import { IntegrationFeatureNotice } from "@/components/hrm/IntegrationNotice";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { cn } from "@/lib/utils";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -345,6 +346,8 @@ export default function WorkOverviewPage() {
         description="ตรวจสอบกำหนดส่ง สถานะงานย่อย และรายละเอียดผู้ปฏิบัติงาน"
         actions={<Button type="button" variant="outline" disabled={loading || statusUpdate.updating} onClick={() => { setFeedback(null); refresh(); }}>รีเฟรชรายการ</Button>}
       />
+
+      <IntegrationFeatureNotice service="checker" />
 
       <section aria-label="ช่วงวันที่ค้นหา" className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
         <DatePickerField

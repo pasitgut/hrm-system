@@ -143,9 +143,10 @@ docker build -f Dockerfile.vercel -t hrm-system:latest .
 docker run -d --name hrm-system -p 3000:3000 --env-file .env.production hrm-system:latest
 ```
 
-> [!WARNING]
-> ข้อควรระวังสำหรับโหมด Container:
-> - `Dockerfile.vercel` คัดลอกเฉพาะ `package.json`, `node_modules`, `.next`, `public`, และ `next.config.mjs` เข้าไปใน Stage `runner` — หากมีการอ่านไฟล์ Font/Assets เพิ่มเติมจาก `lib/salary-slips/assets/` ใน Runtime ที่ไม่ได้ถูก Trace เข้า `.next` ให้ตรวจสอบการสร้าง PDF สลิปเงินเดือนบน Container จริง หรือคัดลอกโฟลเดอร์ `lib/salary-slips/assets` เพิ่มใน `Dockerfile.vercel`
+> [!NOTE]
+> ข้อควรระวังสำหรับโหมด Container (รวมถึง Vercel Container Build ที่ใช้ `Dockerfile.vercel`):
+> - Environment Variables ที่ตั้งไว้ใน Vercel Dashboard จะถูกฉีดเข้าตอน **Runtime** เท่านั้น (ไม่ได้ส่งเข้าขั้นตอน `RUN npm run build` ระหว่าง Build Image) ซึ่ง `lib/db/client.ts` ออกแบบให้สร้างการเชื่อมต่อแบบ Lazy แล้วเพื่อให้ `next build` ผ่านได้โดยไม่ต้องฝัง `DATABASE_URL` ลงใน Image
+> - `Dockerfile.vercel` คัดลอก `package.json`, `node_modules`, `.next`, `public`, `lib/salary-slips/assets` และ `next.config.mjs` เข้าไปใน Stage `runner`
 > - ให้รัน `npm run db:migrate` จากภายนอก Container (CI/Local) ก่อนสตาร์ท Container ใหม่
 
 ---

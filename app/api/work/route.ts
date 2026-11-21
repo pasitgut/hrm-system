@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db/client";
 import { workTrackingRecords } from "@/lib/db/schema";
 import { requireApiAnyPermission, requireApiPermission, withApiAuth } from "@/lib/auth/dal";
-import { getCheckerData } from "@/lib/work-tracking/checker";
+import { getCheckerData, isCheckerConfigured } from "@/lib/work-tracking/checker";
 import { formatTrackingDate, groupCheckerWorkTrackingRecords, jsonError, mergeWorkTrackingRecord, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
 
 const VIEW_PERMISSIONS = ["work.view", "work.status.update", "work.create"] as const;
@@ -17,15 +17,25 @@ export const GET = withApiAuth(async (request: NextRequest) => {
   if (!start || !end) return jsonError(400, "Invalid date range");
   if (start > end) return jsonError(400, "start must not be after end");
 
+  const localRows = await db
+    .select()
+    .from(workTrackingRecords)
+    .where(and(gte(workTrackingRecords.eventDate, start), lte(workTrackingRecords.eventDate, end)))
+    .orderBy(asc(workTrackingRecords.eventDate), asc(workTrackingRecords.createdAt));
+  const localItems = localRows.map(toWorkTrackingApiRecord);
+
+  if (!isCheckerConfigured()) {
+    return NextResponse.json({
+      success: true,
+      data: localItems,
+      checkerConfigured: false,
+      warning: "ยังไม่ได้ตั้งค่าการเชื่อมต่อ API Checker จึงแสดงเฉพาะข้อมูลในฐานข้อมูล HRM",
+    });
+  }
+
   try {
     const checkerRows = await getCheckerData(formatTrackingDate(start), formatTrackingDate(end));
     const checkerItems = groupCheckerWorkTrackingRecords(checkerRows);
-    const localRows = await db
-      .select()
-      .from(workTrackingRecords)
-      .where(and(gte(workTrackingRecords.eventDate, start), lte(workTrackingRecords.eventDate, end)))
-      .orderBy(asc(workTrackingRecords.eventDate), asc(workTrackingRecords.createdAt));
-    const localItems = localRows.map(toWorkTrackingApiRecord);
     const itemKey = (item: { houseNo: string; round: string; date: string }) =>
       `${item.houseNo}::${item.round}::${parseTrackingDate(item.date) ?? item.date}`;
     const localByKey = new Map(localItems.map((item) => [itemKey(item), item]));
@@ -35,7 +45,7 @@ export const GET = withApiAuth(async (request: NextRequest) => {
       return local ? mergeWorkTrackingRecord(item, local) : item;
     });
     merged.push(...localItems.filter((item) => !checkerKeys.has(itemKey(item))));
-    return NextResponse.json({ success: true, data: merged });
+    return NextResponse.json({ success: true, data: merged, checkerConfigured: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "API Checker request failed";
     console.error("Work tracking API Checker request failed", message);

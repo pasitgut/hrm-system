@@ -4,7 +4,7 @@ import { db } from "@/lib/db/client";
 import { workTrackingRecords, workTrackingRequests } from "@/lib/db/schema";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
 import type { WorkTrackingRecordStatus, WorkTrackingSession } from "@/lib/work-tracking/types";
-import { getCheckerData } from "@/lib/work-tracking/checker";
+import { getCheckerData, isCheckerConfigured } from "@/lib/work-tracking/checker";
 import { deriveWorkRecordStatus, formatTrackingDate, groupCheckerWorkTrackingRecords, isWorkTrackingStatus, jsonError, parseTrackingDate, toWorkTrackingApiRecord } from "@/app/api/work/_shared";
 
 function parseWorkers(value: string): Record<string, WorkTrackingSession[]> {
@@ -52,6 +52,9 @@ export const PATCH = withApiAuth(async (request: NextRequest) => {
     .limit(1);
 
   if (!record || !record.subStatuses.some((subStatus) => subStatus.detail === input.detail)) {
+    if (!isCheckerConfigured()) {
+      return jsonError(503, "ยังไม่ได้ตั้งค่าการเชื่อมต่อ API Checker จึงไม่สามารถดึงรายการงานย่อยจากระบบภายนอกได้");
+    }
     let checkerItem;
     try {
       const date = formatTrackingDate(eventDate);

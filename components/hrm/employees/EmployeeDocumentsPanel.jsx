@@ -10,6 +10,8 @@ import {
 } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IntegrationFeatureNotice } from "@/components/hrm/IntegrationNotice";
+import { useHrmIntegrations } from "@/components/hrm/HrmShell";
 import { MAX_EMPLOYEE_DOCUMENT_BYTES, MAX_EMPLOYEE_DOCUMENT_MB } from "@/lib/employee-documents";
 import { uploadEmployeeDocument } from "@/lib/client/upload-employee-document";
 import { cn } from "@/lib/utils";
@@ -37,6 +39,7 @@ async function readPayload(response) {
 }
 
 export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare = false, canDelete = false }) {
+  const { googleDrive: googleDriveReady } = useHrmIntegrations();
   const fileInputId = useId();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,8 +207,9 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
               htmlFor={fileInputId}
               className={cn(
                 "inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
-                uploading && "pointer-events-none opacity-60",
+                (uploading || !googleDriveReady) && "pointer-events-none opacity-60",
               )}
+              title={!googleDriveReady ? "ยังไม่ได้ตั้งค่า Google Drive" : undefined}
             >
               <RiUpload2Line className="size-4" aria-hidden="true" />
               {uploading ? `กำลังอัปโหลด… ${uploadProgress ?? 0}%` : "อัปโหลดเอกสาร"}
@@ -214,7 +218,7 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
                 type="file"
                 accept={ACCEPTED_FILE_TYPES}
                 className="sr-only"
-                disabled={uploading}
+                disabled={uploading || !googleDriveReady}
                 onChange={uploadFile}
                 aria-label="เลือกเอกสารพนักงานเพื่ออัปโหลด"
               />
@@ -222,6 +226,8 @@ export function EmployeeDocumentsPanel({ employeeId, canUpload = false, canShare
           </div>
         ) : null}
       </div>
+
+      <IntegrationFeatureNotice service="googleDrive" className="mt-3" />
 
       {uploadError ? <p role="alert" className="mt-3 rounded-md border border-status-danger/30 bg-status-danger/5 px-3 py-2 text-sm text-status-danger">{uploadError}</p> : null}
       {listError ? (

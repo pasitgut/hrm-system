@@ -44,12 +44,20 @@ import {
 } from "@/lib/auth/permissions";
 import { logoutAction } from "@/app/login/actions";
 import { getRoleShortLabel, normalizeRole } from "@/lib/auth/roles";
+import { DEFAULT_INTEGRATION_STATUS } from "@/lib/integrations/constants";
+import {
+  GlobalIntegrationBanner,
+  IntegrationProvider,
+  useHrmIntegrations,
+} from "@/components/hrm/IntegrationNotice";
 
 const RoleContext = createContext(null);
 
 export function useHrmRole() {
   return useContext(RoleContext);
 }
+
+export { useHrmIntegrations };
 
 const baseGroups = [
   {
@@ -185,7 +193,14 @@ function Header({ displayName, darkMode, onToggleTheme, collapsed, onToggleSideb
   );
 }
 
-export default function HrmShell({ children, user = null, permissions = [], employeeName = null, employeeCode = null }) {
+export default function HrmShell({
+  children,
+  user = null,
+  permissions = [],
+  employeeName = null,
+  employeeCode = null,
+  integrations = DEFAULT_INTEGRATION_STATUS,
+}) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -260,63 +275,70 @@ export default function HrmShell({ children, user = null, permissions = [], empl
 
   // Agreement editing uses its own full-screen document workspace.
   if (pathname.startsWith("/assets/agreements/") || pathname.startsWith("/assets/requests/")) {
-    return <RoleContext.Provider value={roleContextValue}>{children}</RoleContext.Provider>;
+    return (
+      <IntegrationProvider value={integrations}>
+        <RoleContext.Provider value={roleContextValue}>{children}</RoleContext.Provider>
+      </IntegrationProvider>
+    );
   }
 
   return (
-    <RoleContext.Provider value={roleContextValue}>
-      <div className="min-h-dvh bg-background">
-        <aside
-          className={cx(
-            "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-2 py-4 transition-[width] duration-150 lg:flex",
-            collapsed ? "w-16" : "w-60",
-          )}
-        >
-          <Link href="/" className={cx("mb-6 flex min-h-10 items-center gap-3 rounded-md px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", collapsed && "justify-center px-0")}>
-            <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-primary" aria-hidden="true">
-              <RiUserLine className="size-4" />
-            </span>
-            <span className={cx("min-w-0", collapsed && "lg:sr-only")}>
-              <strong className="block truncate text-sm font-semibold">HRM</strong>
-              <span className="block truncate text-[11px] leading-4 text-muted-foreground">จัดการงานบุคคล</span>
-            </span>
-          </Link>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <NavigationGroups groups={groups} active={active} collapsed={collapsed} />
-          </div>
-          <div className={cx("mt-4 flex min-w-0 items-center gap-2 border-t border-border px-2 pt-3", collapsed && "justify-center px-0")}>
-            <Avatar initials={initials} color="neutral" size="sm" />
-            <div className={cx("min-w-0", collapsed && "lg:sr-only")}>
-              <strong className="block truncate text-xs font-medium">{displayName}</strong>
-              <span className="block truncate text-[11px] leading-4 text-muted-foreground">
-                {getRoleShortLabel(userRole)}{employeeCode ? ` · ${employeeCode}` : ""}
+    <IntegrationProvider value={integrations}>
+      <RoleContext.Provider value={roleContextValue}>
+        <div className="min-h-dvh bg-background">
+          <aside
+            className={cx(
+              "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card px-2 py-4 transition-[width] duration-150 lg:flex",
+              collapsed ? "w-16" : "w-60",
+            )}
+          >
+            <Link href="/" className={cx("mb-6 flex min-h-10 items-center gap-3 rounded-md px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", collapsed && "justify-center px-0")}>
+              <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-primary" aria-hidden="true">
+                <RiUserLine className="size-4" />
               </span>
+              <span className={cx("min-w-0", collapsed && "lg:sr-only")}>
+                <strong className="block truncate text-sm font-semibold">HRM</strong>
+                <span className="block truncate text-[11px] leading-4 text-muted-foreground">จัดการงานบุคคล</span>
+              </span>
+            </Link>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <NavigationGroups groups={groups} active={active} collapsed={collapsed} />
             </div>
+            <div className={cx("mt-4 flex min-w-0 items-center gap-2 border-t border-border px-2 pt-3", collapsed && "justify-center px-0")}>
+              <Avatar initials={initials} color="neutral" size="sm" />
+              <div className={cx("min-w-0", collapsed && "lg:sr-only")}>
+                <strong className="block truncate text-xs font-medium">{displayName}</strong>
+                <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+                  {getRoleShortLabel(userRole)}{employeeCode ? ` · ${employeeCode}` : ""}
+                </span>
+              </div>
+            </div>
+          </aside>
+          <div className={cx("min-h-dvh transition-[padding] duration-150", collapsed ? "lg:pl-16" : "lg:pl-60")}>
+            <a href="#main-content" className="sr-only z-50 rounded-md bg-background px-4 py-2 text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-2">
+              ข้ามไปยังเนื้อหาหลัก
+            </a>
+            <Header
+              displayName={displayName}
+              darkMode={darkMode}
+              onToggleTheme={toggleTheme}
+              collapsed={collapsed}
+              onToggleSidebar={() => setCollapsed((value) => !value)}
+              mobileMenuOpen={mobileMenuOpen}
+              onToggleMobileMenu={() => setMobileMenuOpen((value) => !value)}
+            />
+            {mobileMenuOpen ? (
+              <div id="mobile-navigation" className="border-b border-border bg-card px-4 py-3 lg:hidden sm:px-6">
+                <NavigationGroups groups={groups} active={active} mobile onNavigate={() => setMobileMenuOpen(false)} />
+              </div>
+            ) : null}
+            <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl min-w-0 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
+              <GlobalIntegrationBanner integrations={integrations} />
+              {children}
+            </main>
           </div>
-        </aside>
-        <div className={cx("min-h-dvh transition-[padding] duration-150", collapsed ? "lg:pl-16" : "lg:pl-60")}>
-          <a href="#main-content" className="sr-only z-50 rounded-md bg-background px-4 py-2 text-foreground focus:not-sr-only focus:fixed focus:left-4 focus:top-2">
-            ข้ามไปยังเนื้อหาหลัก
-          </a>
-          <Header
-            displayName={displayName}
-            darkMode={darkMode}
-            onToggleTheme={toggleTheme}
-            collapsed={collapsed}
-            onToggleSidebar={() => setCollapsed((value) => !value)}
-            mobileMenuOpen={mobileMenuOpen}
-            onToggleMobileMenu={() => setMobileMenuOpen((value) => !value)}
-          />
-          {mobileMenuOpen ? (
-            <div id="mobile-navigation" className="border-b border-border bg-card px-4 py-3 lg:hidden sm:px-6">
-              <NavigationGroups groups={groups} active={active} mobile onNavigate={() => setMobileMenuOpen(false)} />
-            </div>
-          ) : null}
-          <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl min-w-0 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
-            {children}
-          </main>
         </div>
-      </div>
-    </RoleContext.Provider>
+      </RoleContext.Provider>
+    </IntegrationProvider>
   );
 }

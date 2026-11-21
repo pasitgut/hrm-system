@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { RiAddLine } from "@remixicon/react";
 import { PageHeader } from "@/components/hrm/PageHeader";
+import { IntegrationFeatureNotice } from "@/components/hrm/IntegrationNotice";
 import { AssetBorrowingRequests } from "@/components/hrm/assets/AssetBorrowingRequests";
 import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
@@ -29,6 +30,7 @@ export default function AssetModule() {
           {canCreateRequest ? <Button leadingIcon={RiAddLine} onClick={() => setCreateOpen(true)}>สร้างคำขอยืม</Button> : null}
         </>}
       />
+      <IntegrationFeatureNotice service="cloudinary" />
       {canViewRequests ? (
         <AssetBorrowingRequests
           isManager={manager}
