@@ -71,9 +71,11 @@ describe("GET /api/payroll", () => {
       pendingOtRequests: 1,
       approvedLeaveRequests: 1,
       otAmount: 750,
+      socialSecurityAmount: 875,
+      employerSocialSecurity: 875,
       incomeTotal: 31250,
-      deductionTotal: 100,
-      netPay: 31150,
+      deductionTotal: 975,
+      netPay: 30275,
     });
 
     const exported = await request("?year=2026&month=9&format=xlsx", token);
@@ -87,9 +89,18 @@ describe("GET /api/payroll", () => {
     const summarySheet = workbook.getWorksheet("สรุปเงินเดือน")!;
     const netPayColumn = (summarySheet.getRow(2).values as unknown[]).indexOf("รับสุทธิ"); // looked up by header, not position
     expect(netPayColumn).toBeGreaterThan(0);
-    expect(summarySheet.getCell(3, netPayColumn).value).toBe(31150);
+    expect(summarySheet.getCell(3, netPayColumn).value).toBe(30275);
     expect(workbook.getWorksheet("รายการรายรับรายหัก")!.getCell("D3").value).toBe("เงินเดือน");
     expect(workbook.getWorksheet("วันลาที่อนุมัติ")!.getCell("C3").value).toBe("ลาป่วย");
+
+    const summaryPdf = await request("?year=2026&month=9&format=summary-pdf", token);
+    expect(summaryPdf.status).toBe(200);
+    expect(summaryPdf.headers.get("content-type")).toContain("application/pdf");
+    expect(summaryPdf.headers.get("content-disposition")).toContain("TJARUSCH_PAYROLL_2026-09-01.pdf");
+
+    const summaryXlsx = await request("?year=2026&month=9&format=summary-xlsx", token);
+    expect(summaryXlsx.status).toBe(200);
+    expect(summaryXlsx.headers.get("content-disposition")).toContain("TJARUSCH_PAYROLL_2026-09-01.xlsx");
   });
 
   it("blocks export when configured pay items need an unavailable quantity", async () => {

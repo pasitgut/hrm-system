@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
-import type { Payroll } from "./types";
+import { money } from "./calculate";
+import { STANDARD_DEDUCTION_COLUMNS, STANDARD_INCOME_COLUMNS, type Payroll } from "./types";
 
 const SESSION_LABELS: Record<string, string> = { full: "เต็มวัน", am: "ครึ่งวันเช้า", pm: "ครึ่งวันบ่าย" };
 const MONEY_FORMAT = "#,##0.00";
@@ -39,7 +40,6 @@ const SUMMARY_COLUMNS: Column[] = [
 const SUMMARY_MONEY_KEYS = ["baseSalary", "otAmount", "incomeTotal", "deductionTotal", "netPay"];
 const SUMMARY_HOURS_KEYS = ["weekdayOtHours", "holidayOtHours", "pendingOtHours"];
 
-// Formats are applied by column key (not position) so adding or removing a column cannot misalign them.
 function formatColumns(sheet: ExcelJS.Worksheet, keys: string[], numFmt: string) {
   for (const key of keys) sheet.getColumn(key).numFmt = numFmt;
 }
@@ -87,6 +87,85 @@ function addLeaveSheet(workbook: ExcelJS.Workbook, payroll: Payroll) {
   finishSheet(sheet, periodTitle(payroll), LEAVE_COLUMNS.length);
 }
 
+function addMatrixSheet(workbook: ExcelJS.Workbook, payroll: Payroll) {
+  const sheet = workbook.addWorksheet("ตารางคำนวณรายงวด (16 คอลัมน์)");
+  const columns: Column[] = [
+    { header: "รหัส", key: "code", width: 12 },
+    { header: "ชื่อ-นามสกุล", key: "name", width: 26 },
+    { header: "แผนก", key: "department", width: 18 },
+    { header: "ชม.OT", key: "otHours", width: 12 },
+    { header: "วันทำงาน", key: "workingDays", width: 12 },
+    { header: "สรุปรายรับ (สุทธิ)", key: "netPay", width: 18 },
+    ...STANDARD_INCOME_COLUMNS.map((col) => ({ header: col.label, key: `inc_${col.code}`, width: 16 })),
+    { header: "รวมรายได้", key: "incomeTotal", width: 16 },
+    ...STANDARD_DEDUCTION_COLUMNS.map((col) => ({ header: col.label, key: `ded_${col.code}`, width: 16 })),
+    { header: "รวมรายหัก", key: "deductionTotal", width: 16 },
+  ];
+  sheet.columns = columns;
+
+  const totals: Record<string, number> = {
+    otHours: 0,
+    netPay: 0,
+    incomeTotal: 0,
+    deductionTotal: 0,
+  };
+  for (const col of STANDARD_INCOME_COLUMNS) totals[`inc_${col.code}`] = 0;
+  for (const col of STANDARD_DEDUCTION_COLUMNS) totals[`ded_${col.code}`] = 0;
+
+  for (const row of payroll.rows) {
+    const otHours = money(row.weekdayOtHours + row.holidayOtHours);
+    const entry: Record<string, unknown> = {
+      code: row.code,
+      name: row.name,
+      department: row.department,
+      otHours,
+      workingDays: row.workingDays ?? "",
+      netPay: row.netPay ?? 0,
+      incomeTotal: row.incomeTotal ?? 0,
+      deductionTotal: row.deductionTotal ?? 0,
+    };
+    totals.otHours = money(totals.otHours + otHours);
+    totals.netPay = money(totals.netPay + (row.netPay ?? 0));
+    totals.incomeTotal = money(totals.incomeTotal + (row.incomeTotal ?? 0));
+    totals.deductionTotal = money(totals.deductionTotal + (row.deductionTotal ?? 0));
+
+    for (const col of STANDARD_INCOME_COLUMNS) {
+      const val = row.incomeBreakdown?.[col.code] ?? 0;
+      entry[`inc_${col.code}`] = val;
+      totals[`inc_${col.code}`] = money(totals[`inc_${col.code}`] + val);
+    }
+    for (const col of STANDARD_DEDUCTION_COLUMNS) {
+      const val = row.deductionBreakdown?.[col.code] ?? 0;
+      entry[`ded_${col.code}`] = val;
+      totals[`ded_${col.code}`] = money(totals[`ded_${col.code}`] + val);
+    }
+    sheet.addRow(entry);
+  }
+
+  const totalRow = sheet.addRow({
+    code: "รวม",
+    name: `ทั้งหมด ${payroll.rows.length} คน`,
+    department: "",
+    ...totals,
+    workingDays: "",
+  });
+
+  finishSheet(sheet, periodTitle(payroll), columns.length);
+  totalRow.font = { bold: true };
+  formatColumns(sheet, ["otHours"], HOURS_FORMAT);
+  formatColumns(
+    sheet,
+    [
+      "netPay",
+      "incomeTotal",
+      "deductionTotal",
+      ...STANDARD_INCOME_COLUMNS.map((col) => `inc_${col.code}`),
+      ...STANDARD_DEDUCTION_COLUMNS.map((col) => `ded_${col.code}`),
+    ],
+    MONEY_FORMAT,
+  );
+}
+
 /** The payroll export: one summary sheet, the income/deduction lines, and the approved leave. */
 export function createPayrollWorkbook(payroll: Payroll) {
   const workbook = new ExcelJS.Workbook();
@@ -94,5 +173,14 @@ export function createPayrollWorkbook(payroll: Payroll) {
   addSummarySheet(workbook, payroll);
   addIncomeDeductionSheet(workbook, payroll);
   addLeaveSheet(workbook, payroll);
+  return workbook;
+}
+
+/** 16-column itemized period payroll sheet export matching the detailed calculation table. */
+export function createPayrollMatrixWorkbook(payroll: Payroll) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "HRM";
+  addMatrixSheet(workbook, payroll);
+  addSummarySheet(workbook, payroll);
   return workbook;
 }

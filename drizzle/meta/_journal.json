@@ -218,6 +218,27 @@
       "when": 1795417115962,
       "tag": "0030_role_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795435443344,
+      "tag": "0031_payroll_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795439180935,
+      "tag": "0032_payroll_period_overrides",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795440600000,
+      "tag": "0033_social_security_settings",
+      "breakpoints": true
     }
   ]
 }

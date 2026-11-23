@@ -282,9 +282,13 @@ function EmployeePayrollSettings({ form, updateForm, canManage }) {
             <SelectItem id="th">ไทย</SelectItem>
             <SelectItem id="en">อังกฤษ</SelectItem>
           </SelectField>
-          <label htmlFor="employee-do-not-print-payslip" className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:col-span-2">
+          <label htmlFor="employee-do-not-print-payslip" className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-foreground">
             <Checkbox id="employee-do-not-print-payslip" isSelected={payrollData.doNotPrintPayslip} isDisabled={!canManage} onChange={(checked) => updatePayrollField("doNotPrintPayslip", checked)} />
             ไม่พิมพ์ payslip
+          </label>
+          <label htmlFor="employee-sso-enabled" className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-foreground">
+            <Checkbox id="employee-sso-enabled" isSelected={payrollData.socialSecurityEnabled !== false} isDisabled={!canManage} onChange={(checked) => updatePayrollField("socialSecurityEnabled", checked)} />
+            หักประกันสังคมอัตโนมัติ (มาตรา 33)
           </label>
         </div>
       </section>

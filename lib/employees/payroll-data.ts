@@ -16,6 +16,7 @@ export type EmployeePayrollData = {
   taxCondition: "withhold" | "no_withholding";
   payslipLanguage: "th" | "en";
   doNotPrintPayslip: boolean;
+  socialSecurityEnabled: boolean;
   incomeItems: EmployeePayrollItem[];
   deductionItems: EmployeePayrollItem[];
 };
@@ -42,6 +43,7 @@ const DEFAULT_DEDUCTION_ITEMS: EmployeePayrollItem[] = [
   { code: "DDT004", label: "มาสาย", amount: 0, unit: "period", enabled: true },
   { code: "DDT005", label: "ขาดงาน", amount: 0, unit: "period", enabled: true },
   { code: "SYSWELFARE", label: "กองทุนสงเคราะห์ลูกจ้าง", amount: 0, unit: "period", enabled: false },
+  { code: "SYS001", label: "ประกันสังคม", amount: 0, unit: "period", enabled: false },
   { code: "SYS002", label: "ภาษี", amount: 0, unit: "period", enabled: false },
   { code: "DDT006", label: "กองทุนสำรองเลี้ยงชีพ", amount: 0, unit: "period", enabled: false },
   { code: "DDT009", label: "กองทุนกู้ยืม", amount: 0, unit: "period", enabled: false },
@@ -56,6 +58,7 @@ export function createDefaultEmployeePayrollData(): EmployeePayrollData {
     taxCondition: "withhold",
     payslipLanguage: "th",
     doNotPrintPayslip: false,
+    socialSecurityEnabled: true,
     incomeItems: DEFAULT_INCOME_ITEMS.map((item) => ({ ...item })),
     deductionItems: DEFAULT_DEDUCTION_ITEMS.map((item) => ({ ...item })),
   };
@@ -67,6 +70,7 @@ function normalizeItems(value: unknown, defaults: EmployeePayrollItem[]): Employ
     leave: "DDT003",
     late: "DDT004",
     absence: "DDT005",
+    social_security: "SYS001",
     tax: "SYS002",
     provident_fund: "DDT006",
     loan: "DDT009",
@@ -101,6 +105,7 @@ export function normalizeEmployeePayrollData(value: unknown): EmployeePayrollDat
     taxCondition: data.taxCondition === "no_withholding" ? "no_withholding" : defaults.taxCondition,
     payslipLanguage: data.payslipLanguage === "en" ? "en" : defaults.payslipLanguage,
     doNotPrintPayslip: typeof data.doNotPrintPayslip === "boolean" ? data.doNotPrintPayslip : defaults.doNotPrintPayslip,
+    socialSecurityEnabled: typeof data.socialSecurityEnabled === "boolean" ? data.socialSecurityEnabled : defaults.socialSecurityEnabled,
     incomeItems: normalizeItems(data.incomeItems, defaults.incomeItems),
     deductionItems: normalizeItems(data.deductionItems, defaults.deductionItems),
   };

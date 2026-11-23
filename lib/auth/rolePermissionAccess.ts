@@ -27,6 +27,10 @@ export function canManageOtRates(context: AccessContext): boolean {
   return hasAccess(context, "settings.ot_rates.manage");
 }
 
+export function canManageSocialSecurity(context: AccessContext): boolean {
+  return hasAccess(context, "settings.ot_rates.manage", "employees.compensation.manage", "salary_slips.export");
+}
+
 export function canViewCompanyOtData(context: AccessContext): boolean {
   return hasAccess(context, "ot.view_company", "ot.approve");
 }

@@ -23,6 +23,12 @@ import { sql } from "drizzle-orm";
 import type { WorkTrackingRecordStatus, WorkTrackingSession, WorkTrackingSubStatus } from "@/lib/work-tracking/types";
 import type { EmployeePayrollData } from "@/lib/employees/payroll-data";
 import type { Role } from "@/lib/auth/roles";
+import type {
+  PayrollEmployeeOverride,
+  PayrollPeriodSettings,
+  PayrollRow,
+  PayrollRunStatus,
+} from "@/lib/payroll/types";
 
 // Operational bot data stays separate from the HRM's employee and leave records.
 export const lineBotStates = pgTable("line_bot_states", {
@@ -119,6 +125,23 @@ export const otRateSettings = pgTable("ot_rate_settings", {
   check("ot_rate_settings_single_row", sql`${t.id} = 1`),
   check("ot_rate_settings_weekday_multiplier_valid", sql`${t.weekdayMultiplier} > 0 AND ${t.weekdayMultiplier} <= 10`),
   check("ot_rate_settings_holiday_multiplier_valid", sql`${t.holidayMultiplier} > 0 AND ${t.holidayMultiplier} <= 10`),
+]);
+
+export const socialSecurityRates = pgTable("social_security_rates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  effectiveFrom: date("effective_from").notNull().unique(),
+  label: varchar("label", { length: 120 }).notNull(),
+  employeeRatePercent: numeric("employee_rate_percent", { precision: 5, scale: 2, mode: "number" }).notNull().default(5),
+  employerRatePercent: numeric("employer_rate_percent", { precision: 5, scale: 2, mode: "number" }).notNull().default(5),
+  minWageBase: numeric("min_wage_base", { precision: 12, scale: 2, mode: "number" }).notNull().default(1650),
+  maxWageBase: numeric("max_wage_base", { precision: 12, scale: 2, mode: "number" }).notNull().default(17500),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("social_security_rates_employee_rate_valid", sql`${t.employeeRatePercent} >= 0 AND ${t.employeeRatePercent} <= 100`),
+  check("social_security_rates_employer_rate_valid", sql`${t.employerRatePercent} >= 0 AND ${t.employerRatePercent} <= 100`),
+  check("social_security_rates_wage_base_valid", sql`${t.minWageBase} >= 0 AND ${t.maxWageBase} >= ${t.minWageBase}`),
 ]);
 
 export const leaveTypes = pgTable("leave_types", {
@@ -660,5 +683,45 @@ export const workTrackingActivities = pgTable(
     check("work_tracking_activities_status_valid", sql`${t.status} IN ('in_progress', 'completed', 'delivered')`),
     check("work_tracking_activities_status_source_valid", sql`${t.statusSource} IN ('checker', 'line', 'tracking', 'default', 'hrm')`),
     check("work_tracking_activities_employee_code_length_valid", sql`${t.employeeCode} = '' OR char_length(${t.employeeCode}) = 4`),
+  ],
+);
+
+// ---------- payroll runs ----------
+
+export const payrollRuns = pgTable(
+  "payroll_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    year: integer("year").notNull(),
+    month: smallint("month").notNull(),
+    status: varchar("status", { length: 30 }).$type<PayrollRunStatus>().notNull().default("review"),
+    verifiedEmployeeIds: uuid("verified_employee_ids").array().notNull().default(sql`'{}'::uuid[]`),
+    overrides: jsonb("overrides").$type<Record<string, PayrollEmployeeOverride>>().notNull().default(sql`'{}'::jsonb`),
+    settings: jsonb("settings").$type<PayrollPeriodSettings>().notNull().default(sql`'{}'::jsonb`),
+    snapshot: jsonb("snapshot").$type<PayrollRow[] | null>(),
+    submittedByUserId: uuid("submitted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    submittedByName: varchar("submitted_by_name", { length: 255 }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    approvedByUserId: uuid("approved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    approvedByName: varchar("approved_by_name", { length: 255 }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    lockedByUserId: uuid("locked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    lockedByName: varchar("locked_by_name", { length: 255 }),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    paidByUserId: uuid("paid_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    paidByName: varchar("paid_by_name", { length: 255 }),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("payroll_runs_year_month_unique").on(t.year, t.month),
+    check("payroll_runs_year_valid", sql`${t.year} >= 1900 AND ${t.year} <= 2200`),
+    check("payroll_runs_month_valid", sql`${t.month} >= 1 AND ${t.month} <= 12`),
+    check(
+      "payroll_runs_status_valid",
+      sql`${t.status} IN ('review', 'pending_approval', 'approved', 'locked', 'paid')`,
+    ),
   ],
 );

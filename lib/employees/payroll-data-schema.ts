@@ -16,6 +16,7 @@ export const employeePayrollDataSchema = z.object({
   taxCondition: z.enum(["withhold", "no_withholding"]),
   payslipLanguage: z.enum(["th", "en"]),
   doNotPrintPayslip: z.boolean(),
+  socialSecurityEnabled: z.boolean().default(true),
   incomeItems: z.array(payrollItemSchema).max(50),
   deductionItems: z.array(payrollItemSchema).max(50),
 });

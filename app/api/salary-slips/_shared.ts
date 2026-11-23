@@ -3,11 +3,30 @@ import { z } from "zod";
 import { ApiAuthError, withApiAuth } from "@/lib/auth/dal";
 import { SlipError } from "@/lib/salary-slips/stateless";
 
+function isAllowedOrigin(request: NextRequest, origin: string): boolean {
+  if (origin === request.nextUrl.origin) return true;
+  let originUrl: URL;
+  try {
+    originUrl = new URL(origin);
+  } catch {
+    return false;
+  }
+  const forwardedHost = request.headers
+    .get("x-forwarded-host")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const hostHeader = request.headers.get("host")?.trim().toLowerCase();
+  const expectedHost = forwardedHost || hostHeader;
+  if (!expectedHost) return false;
+  return originUrl.host.toLowerCase() === expectedHost;
+}
+
 export function salaryRoute<Args extends unknown[]>(handler: (request: NextRequest, ...args: Args) => Promise<Response>) {
   return withApiAuth(async (request: NextRequest, ...args: Args) => {
     // Reject cross-origin mutations; API authentication alone does not prevent CSRF.
     const origin = request.headers.get("origin");
-    if (request.method !== "GET" && origin && origin !== request.nextUrl.origin) {
+    if (request.method !== "GET" && origin && !isAllowedOrigin(request, origin)) {
       return NextResponse.json({ error: "Origin ไม่ถูกต้อง" }, { status: 403 });
     }
     try {

@@ -46,6 +46,17 @@ export const SALARY_SLIP_PDF_BOX_LAYOUT = {
   paddingBottom: () => 4,
 };
 
+export const PAYROLL_SHEET_PDF_TABLE_LAYOUT = {
+  hLineWidth: () => 0.5,
+  vLineWidth: () => 0.5,
+  hLineColor: () => "#404040",
+  vLineColor: () => "#404040",
+  paddingLeft: () => 2,
+  paddingRight: () => 2,
+  paddingTop: () => 2,
+  paddingBottom: () => 2,
+};
+
 function configurePdfMake() {
   if (configured) return;
 
@@ -75,6 +86,7 @@ function configurePdfMake() {
     leaveGrid: LEAVE_PDF_TABLE_LAYOUT,
     salarySlipGrid: SALARY_SLIP_PDF_TABLE_LAYOUT,
     salarySlipBox: SALARY_SLIP_PDF_BOX_LAYOUT,
+    payrollSheetGrid: PAYROLL_SHEET_PDF_TABLE_LAYOUT,
   });
   configured = true;
 }

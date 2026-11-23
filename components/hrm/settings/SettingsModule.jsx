@@ -5,6 +5,7 @@ import {
   RiBuildingLine,
   RiCalendarTodoLine,
   RiMoneyDollarCircleLine,
+  RiShieldCheckLine,
   RiShieldUserLine,
   RiUserSettingsLine,
 } from "@remixicon/react";
@@ -12,9 +13,10 @@ import { Tab, TabList, TabPanel, Tabs } from "@/components/ui/tabs";
 import { ResourceTab } from "@/components/hrm/settings/ResourceTab";
 import UserPermissionsTab from "@/components/hrm/settings/UserPermissionsTab";
 import { OtRateSettingsTab } from "@/components/hrm/settings/OtRateSettingsTab";
+import { SocialSecuritySettingsTab } from "@/components/hrm/settings/SocialSecuritySettingsTab";
 import { PageHeader } from "@/components/hrm/PageHeader";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { canManageOtRates } from "@/lib/auth/rolePermissionAccess";
+import { canManageOtRates, canManageSocialSecurity } from "@/lib/auth/rolePermissionAccess";
 import {
   canManageDepartments,
   canManageEmploymentSettings,
@@ -61,6 +63,7 @@ export default function SettingsModule() {
   const user = useHrmRole() ?? {};
   const permissions = user.permissions ?? [];
   const showOtRates = canManageOtRates(user);
+  const showSocialSecurity = canManageSocialSecurity(user);
   const showDepartments = canManageDepartments(permissions);
   const showPositions = canManagePositions(permissions);
   const showEmploymentSettings = canManageEmploymentSettings(permissions);
@@ -70,15 +73,16 @@ export default function SettingsModule() {
     : showPositions ? "positions"
       : showEmploymentSettings ? "employment-statuses"
         : showOtRates ? "ot-rates"
-          : showLeaveTypes ? "leave-types"
-            : "user-permissions";
+          : showSocialSecurity ? "social-security"
+            : showLeaveTypes ? "leave-types"
+              : "user-permissions";
 
   return (
     <div className="hrm-page">
       <PageHeader
         eyebrow="ระบบ · ตั้งค่า"
         title="ตั้งค่าระบบ"
-        description="จัดการข้อมูลหลักที่ใช้ร่วมกันทั้งระบบ เช่น แผนก ตำแหน่ง สถานะและประเภทการจ้างงาน และประเภทการลา"
+        description="จัดการข้อมูลหลักที่ใช้ร่วมกันทั้งระบบ เช่น แผนก ตำแหน่ง เรท OT ประกันสังคม และประเภทการลา"
       />
       <Tabs defaultSelectedKey={defaultTab}>
         <TabList aria-label="หมวดหมู่การตั้งค่า" className="flex-wrap">
@@ -87,6 +91,7 @@ export default function SettingsModule() {
           {showEmploymentSettings ? <Tab id="employment-statuses" icon={RiShieldUserLine}>สถานะพนักงาน</Tab> : null}
           {showEmploymentSettings ? <Tab id="employment-types" icon={RiUserSettingsLine}>ประเภทการจ้างงาน</Tab> : null}
           {showOtRates ? <Tab id="ot-rates" icon={RiMoneyDollarCircleLine}>เรท OT</Tab> : null}
+          {showSocialSecurity ? <Tab id="social-security" icon={RiShieldCheckLine}>ประกันสังคม</Tab> : null}
           {showLeaveTypes ? <Tab id="leave-types" icon={RiCalendarTodoLine}>ประเภทการลา</Tab> : null}
           {showUserPermissions ? <Tab id="user-permissions" icon={RiShieldUserLine}>สิทธิ์ผู้ใช้</Tab> : null}
         </TabList>
@@ -146,6 +151,7 @@ export default function SettingsModule() {
           </TabPanel>
         </> : null}
         {showOtRates ? <TabPanel id="ot-rates"><OtRateSettingsTab /></TabPanel> : null}
+        {showSocialSecurity ? <TabPanel id="social-security"><SocialSecuritySettingsTab /></TabPanel> : null}
         {showLeaveTypes ? <TabPanel id="leave-types">
           <ResourceTab
             resourceKey="leave-types"

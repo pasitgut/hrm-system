@@ -14,6 +14,7 @@ export const db = testDb;
 export async function resetDb(): Promise<void> {
   await db.execute(sql`
     TRUNCATE TABLE
+      payroll_runs,
       users, role_permissions, overtime_requests, leave_requests,
       line_integration_jobs, line_bot_states, line_link_codes, line_calendar_events,
       asset_request_events, asset_request_reads, asset_agreement_signers,
