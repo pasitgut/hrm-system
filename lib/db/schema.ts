@@ -291,6 +291,19 @@ export const users = pgTable(
   (t) => [check("users_role_valid", sql`${t.role} IN ('employee', 'hr', 'executive')`)],
 );
 
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    role: varchar("role", { length: 20 }).$type<Role>().primaryKey(),
+    permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("role_permissions_role_valid", sql`${t.role} IN ('employee', 'hr', 'executive')`),
+    check("role_permissions_permissions_array", sql`jsonb_typeof(${t.permissions}) = 'array'`),
+  ],
+);
+
 export const employeeDocuments = pgTable(
   "employee_documents",
   {

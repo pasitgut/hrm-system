@@ -3,6 +3,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { hashPassword } from "@/lib/auth/password";
+import { getStoredPermissionsForRole } from "@/lib/auth/role-permissions";
 import { departments, employees, employmentStatuses, employmentTypes, positions, users } from "@/lib/db/schema";
 import { DEFAULT_OT_RATE_SETTINGS, getOtRateSettings } from "@/lib/settings/otRateSettings";
 import { createDefaultEmployeePayrollData, normalizeEmployeePayrollData, type EmployeePayrollData } from "@/lib/employees/payroll-data";
@@ -436,12 +437,14 @@ export async function createEmployee(input: unknown): Promise<EmployeeLifecycleO
   try {
     const passwordHash = await hashPassword(employeeCode);
     const employeeId = await db.transaction(async (tx) => {
+      const defaultEmployeePermissions = await getStoredPermissionsForRole("employee", tx);
       const [inserted] = await tx.insert(employees).values(values).returning({ id: employees.id });
       await tx.insert(users).values({
         employeeId: inserted.id,
         email: employeeEmail,
         passwordHash,
         role: "employee",
+        permissions: defaultEmployeePermissions,
         mustChangePassword: true,
       });
       return inserted.id;
@@ -466,6 +469,7 @@ const WRITABLE_STRING_FIELDS = ["prefix", "nickname", "citizenId", "firstNameEn"
 export async function updateEmployee(id: string, input: unknown): Promise<EmployeeLifecycleOutcome<EmployeeItemDto | null>> {
   const [existing] = await db.select({
     id: employees.id,
+    code: employees.code,
     startDate: employees.startDate,
     endDate: employees.endDate,
     deletedAt: employees.deletedAt,
@@ -587,13 +591,14 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
     lookupIds.managerId = managerIdValue;
   }
 
+  const checkLinkedAccount = requiresLinkedAccount || typeof values.email === "string";
   const [codeConflict, missingLookup, linkedAccountExists] = await Promise.all([
     typeof values.code === "string" ? findEmployeeCodeConflict(values.code, id) : Promise.resolve(null),
     missingEmployeeLookup(lookupIds),
-    requiresLinkedAccount ? hasRows(db.select({ id: users.id }).from(users).where(eq(users.employeeId, id)).limit(1)) : Promise.resolve(false),
+    checkLinkedAccount ? hasRows(db.select({ id: users.id }).from(users).where(eq(users.employeeId, id)).limit(1)) : Promise.resolve(false),
   ]);
 
-  if (linkedAccountExists) return lifecycleFailure("invalid", "Email is required for an employee with a login account");
+  if (requiresLinkedAccount && linkedAccountExists) return lifecycleFailure("invalid", "Email is required for an employee with a login account");
   if (codeConflict) return lifecycleFailure("conflict", codeConflict);
   if (missingLookup) return lifecycleFailure("invalid", `${missingLookup} does not exist`);
 
@@ -601,13 +606,33 @@ export async function updateEmployee(id: string, input: unknown): Promise<Employ
     return { ok: true, value: await fetchEmployeeItemById(id, true) };
   }
 
+  const newUserPasswordHash = typeof values.email === "string" && existing.deletedAt === null && !linkedAccountExists
+    ? await hashPassword(typeof values.code === "string" ? values.code : existing.code)
+    : null;
+
   const updatedAt = new Date();
   values.updatedAt = updatedAt;
   try {
     await db.transaction(async (tx) => {
       await tx.update(employees).set(values).where(eq(employees.id, id));
       if (typeof values.email === "string") {
-        await tx.update(users).set({ email: values.email, updatedAt }).where(eq(users.employeeId, id));
+        if (linkedAccountExists) {
+          await tx.update(users).set({ email: values.email, updatedAt }).where(eq(users.employeeId, id));
+        } else if (existing.deletedAt === null && newUserPasswordHash) {
+          const defaultEmployeePermissions = await getStoredPermissionsForRole("employee", tx);
+          await tx
+            .insert(users)
+            .values({
+              employeeId: id,
+              email: values.email,
+              passwordHash: newUserPasswordHash,
+              role: "employee",
+              permissions: defaultEmployeePermissions,
+              mustChangePassword: true,
+              isActive: true,
+            })
+            .onConflictDoNothing();
+        }
       }
     });
   } catch (error) {

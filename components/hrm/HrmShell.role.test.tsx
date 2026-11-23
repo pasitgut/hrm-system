@@ -144,5 +144,48 @@ describe("HrmShell", () => {
     );
     const importLink = screen.getByRole("link", { name: "นำเข้าข้อมูล" });
     expect(importLink).toHaveAttribute("href", "/settings/import");
+
+    const permissionsLink = screen.getByRole("link", { name: "สิทธิ์การเข้าถึง" });
+    expect(permissionsLink).toHaveAttribute("href", "/settings/permissions");
+
+    const adminDataLink = screen.getByRole("link", { name: "จัดการฐานข้อมูล" });
+    expect(adminDataLink).toHaveAttribute("href", "/settings/admin-data");
+  });
+
+  it("hides navigation links when page access markers deny those routes despite underlying permissions", () => {
+    render(
+      <HrmShell
+        user={hrUser}
+        permissions={[
+          ...permissionsForRole("hr"),
+          "salary_slips.view",
+          "page.ot.denied",
+          "page.payroll.denied",
+          "page.import.denied",
+          "page.admin_data.denied",
+        ]}
+      >
+        <div>content</div>
+      </HrmShell>,
+    );
+
+    expect(screen.queryByRole("link", { name: "เวลาล่วงเวลา" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "เงินเดือน" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "นำเข้าข้อมูล" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "จัดการฐานข้อมูล" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "สิทธิ์การเข้าถึง" })).toBeInTheDocument();
+  });
+
+  it("keeps admin database manager visible for built-in system admin even if page.admin_data.denied were present", () => {
+    render(
+      <HrmShell
+        user={{ ...hrUser, isSystemAdmin: true }}
+        permissions={[...permissionsForRole("hr"), "page.admin_data.denied"]}
+      >
+        <div>content</div>
+      </HrmShell>,
+    );
+
+    expect(screen.getByRole("link", { name: "จัดการฐานข้อมูล" })).toHaveAttribute("href", "/settings/admin-data");
   });
 });

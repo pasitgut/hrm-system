@@ -211,6 +211,13 @@
       "when": 1795271114234,
       "tag": "0029_line_hrm_bot",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795417115962,
+      "tag": "0030_role_permissions",
+      "breakpoints": true
     }
   ]
 }

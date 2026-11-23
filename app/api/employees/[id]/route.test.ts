@@ -126,6 +126,52 @@ describe("PATCH /api/employees/[id]", () => {
     });
   });
 
+  it("auto-provisions a user account when adding an email to an active employee without a login, while skipping former employees", async () => {
+    const { token } = await tokenFor("hr");
+    const activeNoUser = await createEmployee({ code: "7001", email: null });
+    const formerNoUser = await createEmployee({
+      code: "7002",
+      email: null,
+      endDate: "2026-01-10",
+      deletedAt: new Date(),
+    });
+
+    const activeRes = await PATCH(
+      employeeRequest(`http://localhost/api/employees/${activeNoUser.id}`, {
+        method: "PATCH",
+        token,
+        body: { email: "Active.New@Example.com" },
+      }),
+      ctx(activeNoUser.id),
+    );
+    expect(activeRes.status).toBe(200);
+
+    const [createdUser] = await db.select().from(users).where(eq(users.employeeId, activeNoUser.id));
+    expect(createdUser).toMatchObject({
+      employeeId: activeNoUser.id,
+      email: "active.new@example.com",
+      role: "employee",
+      mustChangePassword: true,
+      isActive: true,
+    });
+    await expect(authenticate("active.new@example.com", "7001")).resolves.toMatchObject({
+      id: createdUser.id,
+      employeeId: activeNoUser.id,
+    });
+
+    const formerRes = await PATCH(
+      employeeRequest(`http://localhost/api/employees/${formerNoUser.id}`, {
+        method: "PATCH",
+        token,
+        body: { email: "former.emp@example.com" },
+      }),
+      ctx(formerNoUser.id),
+    );
+    expect(formerRes.status).toBe(200);
+    const [formerUser] = await db.select().from(users).where(eq(users.employeeId, formerNoUser.id));
+    expect(formerUser).toBeUndefined();
+  });
+
   it("returns 400 for a managerId equal to the employee's own id", async () => {
     const { token } = await tokenFor("hr");
     const employee = await createEmployee();

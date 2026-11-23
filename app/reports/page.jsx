@@ -1,7 +1,7 @@
 import ReportsModule from "@/components/hrm/reports/ReportsModule";
-import { requirePermission } from "@/lib/auth/dal";
+import { requirePageAccess } from "@/lib/auth/dal";
 
 export default async function ReportsPage() {
-  await requirePermission("reports.view");
+  await requirePageAccess("reports");
   return <ReportsModule />;
 }

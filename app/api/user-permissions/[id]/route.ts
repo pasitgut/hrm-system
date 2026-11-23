@@ -1,10 +1,16 @@
 import { eq, sql } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
+import { jsonError } from "@/lib/api/response";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
-import { encodePermissionsForStorage, normalizePermissions, PERMISSIONS, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import {
+  extractDeniedPages,
+  isPageAccessKey,
+  normalizeDeniedPages,
+  type PageAccessKey,
+} from "@/lib/auth/page-access";
+import { encodePermissionsForStorage, hasPermission, normalizePermissions, PERMISSIONS, type PermissionKey } from "@/lib/auth/permissions";
 import { isRole, normalizeRole, type Role } from "@/lib/auth/roles";
 import { db } from "@/lib/db/client";
-import { jsonError } from "@/lib/api/response";
 import { users } from "@/lib/db/schema";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -35,8 +41,15 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
     if (!isRole(payload.role)) return jsonError(400, "role must be employee, hr, or executive");
     nextRole = payload.role;
   }
+  const hasDeniedPagesField = Object.prototype.hasOwnProperty.call(payload, "deniedPages");
+  let explicitDeniedPages: PageAccessKey[] | undefined;
+  if (hasDeniedPagesField) {
+    if (!Array.isArray(payload.deniedPages) || payload.deniedPages.some((page) => !isPageAccessKey(page))) {
+      return jsonError(400, "deniedPages contains an unknown page key");
+    }
+    explicitDeniedPages = normalizeDeniedPages(payload.deniedPages);
+  }
   const permissions = [...new Set(value)] as PermissionKey[];
-  const storedPermissions = encodePermissionsForStorage(permissions);
 
   const result = await db.transaction(async (tx) => {
     // Serialize permission-manager changes so two concurrent requests cannot
@@ -53,6 +66,9 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       && !permissions.includes("users.permissions.manage")
       && !activeAccounts.some((account) => account.id !== id && hasPermission(account.permissions, "users.permissions.manage"));
     if (removesLastManager) return { kind: "last-manager" as const };
+
+    const nextDeniedPages = explicitDeniedPages ?? extractDeniedPages(target.permissions);
+    const storedPermissions = encodePermissionsForStorage(permissions, nextDeniedPages);
 
     const [updated] = await tx
       .update(users)
@@ -73,6 +89,7 @@ export const PATCH = withApiAuth(async (request: NextRequest, context: RouteCont
       ...result.item,
       role: normalizeRole(result.item.role),
       permissions: normalizePermissions(result.item.permissions),
+      deniedPages: extractDeniedPages(result.item.permissions),
     },
   });
 });

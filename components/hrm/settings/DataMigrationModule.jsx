@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   RiAlertLine,
@@ -15,10 +15,70 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HrmDialog } from "@/components/hrm/HrmDialog";
 import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
-import { EXPECTED_SHEETS, MAX_MIGRATION_FILE_BYTES } from "@/lib/migration/constants";
+import {
+  EXPECTED_SHEETS,
+  MAX_MIGRATION_FILE_BYTES,
+  MIGRATION_SECTIONS,
+  SHEET_BY_SECTION,
+} from "@/lib/migration/constants";
 import { cn } from "@/lib/utils";
 
 const VERCEL_SERVERLESS_WARNING_BYTES = 4 * 1024 * 1024;
+
+const SECTION_META = {
+  employees: {
+    label: "ข้อมูลพนักงานและบัญชีผู้ใช้",
+    sheet: SHEET_BY_SECTION.employees,
+    modeText: "อัปเดตและเพิ่มใหม่ตามรหัสพนักงาน (เก็บรหัสผ่าน/สิทธิ์เดิม)",
+    href: "/employees",
+    linkLabel: "ดูทะเบียนพนักงาน",
+    fileSummary: (s) => `ในไฟล์: ${s.employeesTotal} คน (ปฏิบัติงาน ${s.employeesActive} · พ้นสภาพ ${s.employeesFormerStubs})`,
+    dbSummary: (c) => `ในระบบตอนนี้: ${c.employees} คน · ${c.users} บัญชี`,
+    confirmSummary: (s) =>
+      `ข้อมูลพนักงาน ${s.employeesTotal} คน (สร้างบัญชีใหม่เฉพาะคนที่ยังไม่มี ${s.usersProvisioned ?? 0} บัญชี)`,
+  },
+  overtime: {
+    label: "คำขอ OT",
+    sheet: SHEET_BY_SECTION.overtime,
+    modeText: "เขียนทับข้อมูล OT ทั้งหมดด้วยไฟล์ใหม่",
+    href: "/ot",
+    linkLabel: "ดูรายการ OT",
+    fileSummary: (s) => `ในไฟล์: ${s.overtimeRequests} รายการ`,
+    dbSummary: (c) => `ในระบบตอนนี้: ${c.overtime} รายการ`,
+    confirmSummary: (s) => `คำขอ OT ${s.overtimeRequests} รายการ`,
+  },
+  leave: {
+    label: "คำขอวันลา",
+    sheet: SHEET_BY_SECTION.leave,
+    modeText: "เขียนทับข้อมูลวันลาทั้งหมดด้วยไฟล์ใหม่",
+    href: "/leave",
+    linkLabel: "ดูรายการวันลา",
+    fileSummary: (s) => `ในไฟล์: ${s.leaveRequests} รายการ`,
+    dbSummary: (c) => `ในระบบตอนนี้: ${c.leave} รายการ`,
+    confirmSummary: (s) => `คำขอวันลา ${s.leaveRequests} รายการ`,
+  },
+  assets: {
+    label: "การยืมทรัพย์สินและสัญญา",
+    sheet: SHEET_BY_SECTION.assets,
+    modeText: "เขียนทับคำขอยืมทรัพย์สินและ Agreement (เก็บแม่แบบเดิมไว้)",
+    href: "/assets",
+    linkLabel: "ดูรายการทรัพย์สิน",
+    fileSummary: (s) => `ในไฟล์: ${s.assetRequests} รายการ (${s.assetAgreements} สัญญา)`,
+    dbSummary: (c) => `ในระบบตอนนี้: ${c.assets} รายการ`,
+    confirmSummary: (s) =>
+      `ยืมทรัพย์สิน ${s.assetRequests} รายการ (Agreement ${s.assetAgreements} ฉบับ / ลายเซ็น ${s.assetAgreementSigners} จุด)`,
+  },
+  workTracking: {
+    label: "ข้อมูลงาน (Work Tracking)",
+    sheet: SHEET_BY_SECTION.workTracking,
+    modeText: "เขียนทับข้อมูลงานใน work_tracking_records",
+    href: "/work-tracking",
+    linkLabel: "ดูระบบติดตามงาน",
+    fileSummary: (s) => `ในไฟล์: ${s.workTrackingRecords} รายการ`,
+    dbSummary: (c) => `ในระบบตอนนี้: ${c.workTracking} รายการ`,
+    confirmSummary: (s) => `ข้อมูลงาน ${s.workTrackingRecords} รายการ`,
+  },
+};
 
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
@@ -27,12 +87,15 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-async function postMigration(file, mode, confirmReplace = false) {
+async function postMigration(file, mode, { confirmReplace = false, sections = [] } = {}) {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("mode", mode);
   if (confirmReplace) {
     formData.append("confirmReplace", "true");
+  }
+  for (const section of sections) {
+    formData.append("sections", section);
   }
   const response = await fetch("/api/migration/sheets", {
     method: "POST",
@@ -45,9 +108,11 @@ async function postMigration(file, mode, confirmReplace = false) {
 export default function DataMigrationModule() {
   const fileInputId = useId();
   const confirmId = useId();
+  const sectionCheckboxPrefix = useId();
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [selectedSections, setSelectedSections] = useState([]);
   const [previewing, setPreviewing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -60,6 +125,7 @@ export default function DataMigrationModule() {
     event.currentTarget.value = "";
     setError("");
     setPreview(null);
+    setSelectedSections([]);
     setResult(null);
     setConfirmed(false);
 
@@ -96,10 +162,13 @@ export default function DataMigrationModule() {
       const { ok, payload } = await postMigration(selectedFile, "preview");
       if (!ok) {
         setPreview(null);
+        setSelectedSections([]);
         setError(payload.error || "ตรวจสอบไฟล์ไม่สำเร็จ");
         return;
       }
       setPreview(payload);
+      const available = Array.isArray(payload.availableSections) ? payload.availableSections : [];
+      setSelectedSections(available.length === 1 ? [...available] : []);
     } catch {
       setError("ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อตรวจสอบไฟล์ได้");
     } finally {
@@ -107,12 +176,62 @@ export default function DataMigrationModule() {
     }
   }
 
+  function toggleSection(section, checked) {
+    setConfirmed(false);
+    setError("");
+    setSelectedSections((current) => {
+      if (checked) {
+        return MIGRATION_SECTIONS.filter((item) => item === section || current.includes(item));
+      }
+      return current.filter((item) => item !== section);
+    });
+  }
+
+  function selectAllAvailable() {
+    const available = preview?.availableSections ?? [];
+    setSelectedSections(MIGRATION_SECTIONS.filter((section) => available.includes(section)));
+    setConfirmed(false);
+    setError("");
+  }
+
+  function clearSelectedSections() {
+    setSelectedSections([]);
+    setConfirmed(false);
+    setError("");
+  }
+
+  const availableSections = useMemo(() => preview?.availableSections ?? [], [preview]);
+
+  const activeBlockingErrors = useMemo(() => {
+    if (!preview) return [];
+    const next = [];
+    if (selectedSections.includes("employees")) {
+      next.push(...(preview.errors ?? []));
+    } else {
+      for (const section of ["overtime", "leave", "assets"]) {
+        if (!selectedSections.includes(section)) continue;
+        const missing = preview.missingDbEmployeeCodesBySection?.[section] ?? [];
+        if (missing.length > 0) {
+          next.push(
+            `[${SECTION_META[section].label}] พบรหัสพนักงานที่ยังไม่มีในระบบปัจจุบัน: ${missing.join(", ")} — กรุณาเพิ่มพนักงานก่อน หรือเลือกนำเข้า “${SECTION_META.employees.label}” ร่วมด้วย`,
+          );
+        }
+      }
+    }
+    return next;
+  }, [preview, selectedSections]);
+
   async function handleConfirmImport() {
-    if (!selectedFile || !preview || preview.errors?.length > 0 || !confirmed) return;
+    if (!selectedFile || !preview || selectedSections.length === 0 || activeBlockingErrors.length > 0 || !confirmed) {
+      return;
+    }
     setError("");
     setImporting(true);
     try {
-      const { ok, payload } = await postMigration(selectedFile, "import", true);
+      const { ok, payload } = await postMigration(selectedFile, "import", {
+        confirmReplace: true,
+        sections: selectedSections,
+      });
       setConfirmOpen(false);
       if (!ok) {
         if (Array.isArray(payload.errors) && payload.errors.length > 0) {
@@ -131,23 +250,25 @@ export default function DataMigrationModule() {
     }
   }
 
-  const blockingErrors = preview?.errors ?? [];
   const warnings = preview?.warnings ?? result?.warnings ?? [];
   const summary = preview?.summary;
+  const dbCounts = preview?.existingDbCounts;
+  const unselectedAvailable = availableSections.filter((s) => !selectedSections.includes(s));
+  const hasDestructiveSelected = selectedSections.some((s) => s !== "employees");
 
   return (
     <div className="hrm-page">
       <PageHeader
         eyebrow="ระบบ · นำเข้าข้อมูล"
         title="นำเข้าข้อมูลจาก Google Sheet"
-        description="อัปโหลดไฟล์ .xlsx ที่ส่งออกจาก Google Sheet เพื่อตรวจสอบและบันทึกข้อมูลทับใหม่ทั้งหมด (พนักงาน, ยืมทรัพย์สิน/Agreement, OT, วันลา และ Tracking Work)"
+        description="อัปโหลดไฟล์ .xlsx เพื่อเลือกนำเข้าเฉพาะส่วนที่ต้องการอัปเดต (เช่น เฉพาะ OT หรือเฉพาะวันลา) โดยคงข้อมูลส่วนอื่นที่ใช้งานอยู่ในระบบไว้ตามเดิม"
       />
 
       <section aria-labelledby="guide-heading" className="rounded-lg border border-border bg-card p-5">
         <SectionHeading
           id="guide-heading"
           title="ขั้นตอนการเตรียมไฟล์จาก Google Sheet"
-          description="ใช้ไฟล์ Excel (.xlsx) ที่ส่งออกจาก Google Sheet ต้นฉบับของ AppSheet โดยคงชื่อแท็บและคอลัมน์ตามโครงสร้างเดิมทั้ง 5 แท็บ"
+          description="ใช้ไฟล์ Excel (.xlsx) ที่มีครบทั้ง 5 แท็บ หรือไฟล์ที่มีเฉพาะแท็บที่ต้องการนำเข้าก็ได้"
         />
         <ol className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
           <li className="rounded-md border border-border bg-muted/40 p-3.5">
@@ -158,17 +279,17 @@ export default function DataMigrationModule() {
             </p>
           </li>
           <li className="rounded-md border border-border bg-muted/40 p-3.5">
-            <span className="text-xs font-medium text-muted-foreground">ขั้นที่ 2 · ตรวจชื่อแท็บ (5 แท็บ)</span>
-            <p className="mt-1 font-medium text-foreground">ต้องมีแท็บ “ข้อมูลพนักงาน”</p>
+            <span className="text-xs font-medium text-muted-foreground">ขั้นที่ 2 · ใช้ได้ทั้งไฟล์เต็มหรือเฉพาะแท็บ</span>
+            <p className="mt-1 font-medium text-foreground">ไม่ต้องมีแท็บพนักงานถ้าไม่ได้อัปเดตพนักงาน</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               แท็บที่รองรับ: {EXPECTED_SHEETS.join(", ")}
             </p>
           </li>
           <li className="rounded-md border border-border bg-muted/40 p-3.5">
-            <span className="text-xs font-medium text-muted-foreground">ขั้นที่ 3 · ตรวจสอบก่อนทับ</span>
-            <p className="mt-1 font-medium text-foreground">กู้คืนค่าผิดรูปและสรุปยอดก่อนเขียนทับ</p>
+            <span className="text-xs font-medium text-muted-foreground">ขั้นที่ 3 · เลือกเฉพาะส่วนที่ต้องการนำเข้า</span>
+            <p className="mt-1 font-medium text-foreground">ส่วนที่ไม่เลือกจะใช้ข้อมูลเดิมในระบบต่อไป</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              นำเข้า Agreement + ลายเซ็น และแก้เลขที่บ้านที่ Excel แปลงเป็นวันที่ให้โดยอัตโนมัติ
+              หากเลือกพนักงาน ระบบจะอัปเดตแบบ Upsert โดยเก็บรหัสผ่านและสิทธิ์ผู้ใช้เดิมไว้
             </p>
           </li>
         </ol>
@@ -178,7 +299,7 @@ export default function DataMigrationModule() {
         <SectionHeading
           id="upload-heading"
           title="อัปโหลดไฟล์ .xlsx"
-          description="เลือกไฟล์จาก Google Sheet เพื่อตรวจสอบโครงสร้างและจำนวนรายการทั้ง 5 ตาราง"
+          description="เลือกไฟล์จาก Google Sheet เพื่อตรวจสอบรายการและเลือกส่วนที่ต้องการนำเข้า"
         />
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -243,72 +364,114 @@ export default function DataMigrationModule() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <SectionHeading
               id="preview-heading"
-              title="ผลการตรวจสอบก่อนนำเข้า"
-              description={`ไฟล์: ${preview.fileName}`}
+              title="เลือกส่วนข้อมูลที่ต้องการนำเข้า"
+              description={`ไฟล์: ${preview.fileName} — เลือกได้เฉพาะแท็บที่ต้องการอัปเดต ส่วนอื่นจะคงข้อมูลปัจจุบันในระบบไว้`}
             />
-            <div className="flex flex-wrap gap-1.5">
-              {preview.sheetsFound.map((sheet) => (
-                <Badge key={sheet} variant="caption" className="border-status-success/30 bg-status-success/10 text-status-success">
-                  พบแท็บ: {sheet}
-                </Badge>
-              ))}
-              {preview.sheetsMissing.map((sheet) => (
-                <Badge key={sheet} variant="caption" className="border-status-warning/30 bg-status-warning/10 text-status-warning">
-                  ไม่พบแท็บ: {sheet}
-                </Badge>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              {availableSections.length > 1 ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={importing || selectedSections.length === availableSections.length}
+                    onClick={selectAllAvailable}
+                  >
+                    เลือกทั้งหมดที่มีในไฟล์
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={importing || selectedSections.length === 0}
+                    onClick={clearSelectedSections}
+                  >
+                    ล้างการเลือก
+                  </Button>
+                </>
+              ) : null}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border bg-background sm:grid-cols-3 lg:grid-cols-6">
-            <div className="border-b border-r border-border px-4 py-3 lg:border-b-0">
-              <p className="text-xs text-muted-foreground">พนักงานทั้งหมด</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.employeesTotal}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                ปฏิบัติงาน {summary.employeesActive} · พ้นสภาพ {summary.employeesFormerStubs}
-              </p>
-            </div>
-            <div className="border-b border-border px-4 py-3 sm:border-r lg:border-b-0">
-              <p className="text-xs text-muted-foreground">แผนก / ตำแหน่ง</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {summary.departments} <span className="text-sm font-normal text-muted-foreground">/</span> {summary.positions}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">สร้างอัตโนมัติตามข้อมูลในชีต</p>
-            </div>
-            <div className="border-b border-r border-border px-4 py-3 lg:border-b-0">
-              <p className="text-xs text-muted-foreground">คำขอ OT</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.overtimeRequests}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">รายการหลังตัดข้อมูลซ้ำ</p>
-            </div>
-            <div className="border-b border-border px-4 py-3 sm:border-b-0 sm:border-r">
-              <p className="text-xs text-muted-foreground">คำขอลา</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.leaveRequests}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">รายการหลังตัดข้อมูลซ้ำ</p>
-            </div>
-            <div className="border-r border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground">ยืมทรัพย์สิน</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.assetRequests}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {summary.assetItems} ชิ้น · {summary.assetAgreements} สัญญา · {summary.assetAgreementSigners} ลายเซ็น
-              </p>
-            </div>
-            <div className="px-4 py-3">
-              <p className="text-xs text-muted-foreground">ข้อมูลงาน (Tracking)</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">{summary.workTrackingRecords}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {summary.hasWorkSheet ? "นำเข้าทับ work_tracking_records" : "ไม่พบแท็บ — คงข้อมูลเดิมไว้"}
-              </p>
-            </div>
+          <div className="flex flex-wrap gap-1.5">
+            {preview.sheetsFound.map((sheet) => (
+              <Badge key={sheet} variant="caption" className="border-status-success/30 bg-status-success/10 text-status-success">
+                พบแท็บ: {sheet}
+              </Badge>
+            ))}
+            {preview.sheetsMissing.map((sheet) => (
+              <Badge key={sheet} variant="caption" className="border-border bg-muted text-muted-foreground">
+                ไม่มีแท็บ: {sheet}
+              </Badge>
+            ))}
           </div>
 
-          {blockingErrors.length > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {MIGRATION_SECTIONS.map((section) => {
+              const meta = SECTION_META[section];
+              const isAvailable = availableSections.includes(section);
+              const isSelected = selectedSections.includes(section);
+              const checkboxId = `${sectionCheckboxPrefix}-${section}`;
+
+              return (
+                <label
+                  key={section}
+                  htmlFor={checkboxId}
+                  className={cn(
+                    "flex min-h-28 flex-col justify-between gap-3 rounded-md border p-4 transition-colors",
+                    isAvailable ? "cursor-pointer" : "cursor-not-allowed bg-muted/30 opacity-60",
+                    isSelected
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-background hover:bg-muted/30",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2.5">
+                      <Checkbox
+                        id={checkboxId}
+                        className="mt-0.5"
+                        isSelected={isSelected}
+                        isDisabled={!isAvailable || importing}
+                        onChange={(checked) => toggleSection(section, checked)}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{meta.label}</p>
+                        <p className="text-xs text-muted-foreground">แท็บ: {meta.sheet}</p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant="caption"
+                      className={cn(
+                        "shrink-0",
+                        !isAvailable
+                          ? "border-border bg-muted text-muted-foreground"
+                          : isSelected
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : "border-border bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {!isAvailable ? "ไม่พบแท็บ" : isSelected ? "จะนำเข้าส่วนนี้" : "คงข้อมูลเดิม"}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1 text-xs tabular-nums">
+                    <p className="font-medium text-foreground">{meta.fileSummary(summary)}</p>
+                    {dbCounts ? <p className="text-muted-foreground">{meta.dbSummary(dbCounts)}</p> : null}
+                    <p className="text-muted-foreground">{meta.modeText}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          {activeBlockingErrors.length > 0 ? (
             <div role="alert" className="rounded-md border border-status-danger/30 bg-status-danger/10 p-4 space-y-2">
               <div className="flex items-center gap-2 font-medium text-sm text-status-danger">
                 <RiErrorWarningLine className="size-4 shrink-0" aria-hidden="true" />
-                พบข้อผิดพลาดที่ต้องแก้ไขในไฟล์ ({blockingErrors.length} รายการ)
+                พบข้อผิดพลาดสำหรับส่วนที่เลือก ({activeBlockingErrors.length} รายการ)
               </div>
               <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-foreground">
-                {blockingErrors.map((item, idx) => (
+                {activeBlockingErrors.map((item, idx) => (
                   <li key={`${idx}-${item}`}>{item}</li>
                 ))}
               </ul>
@@ -329,15 +492,31 @@ export default function DataMigrationModule() {
             </details>
           ) : null}
 
-          <div className="rounded-md border border-status-danger/30 bg-status-danger/5 p-4 space-y-3">
+          <div
+            className={cn(
+              "rounded-md border p-4 space-y-3",
+              hasDestructiveSelected
+                ? "border-status-danger/30 bg-status-danger/5"
+                : "border-border bg-muted/20",
+            )}
+          >
             <div className="space-y-1 text-sm">
-              <p className="font-semibold text-status-danger">คำเตือน: การนำเข้านี้จะลบข้อมูลเดิมทั้งหมดแล้วบันทึกข้อมูลใหม่ทับลงฐานข้อมูล</p>
+              <p className={cn("font-semibold", hasDestructiveSelected ? "text-status-danger" : "text-foreground")}>
+                สรุปผลกระทบก่อนบันทึก
+              </p>
               <ul className="list-disc space-y-0.5 pl-5 text-xs leading-5 text-muted-foreground">
                 <li>
-                  <strong>ข้อมูลที่ถูกลบและเขียนทับใหม่ทั้งหมด:</strong> พนักงาน, บัญชีผู้ใช้ในฐานข้อมูล (<code>users</code>), เอกสารพนักงาน, คำขอ OT, คำขอลา, คำขอยืมทรัพย์สิน (รวมสัญญา Agreement, ลายเซ็น และรูปแนบ), แผนก, ตำแหน่ง{summary.hasWorkSheet ? <> และข้อมูลงาน (<code>work_tracking_records</code>)</> : null}
+                  <strong>ส่วนที่จะนำเข้าจากไฟล์ใหม่ ({selectedSections.length} ส่วน):</strong>{" "}
+                  {selectedSections.length > 0
+                    ? selectedSections.map((s) => `${SECTION_META[s].label} (${SECTION_META[s].modeText})`).join(" · ")
+                    : "ยังไม่ได้เลือกส่วนที่ต้องการนำเข้า — กรุณาติ๊กเลือกอย่างน้อย 1 ส่วนด้านบน"}
                 </li>
                 <li>
-                  <strong>ข้อมูลที่ยังคงเก็บไว้ตามเดิม:</strong> บัญชีผู้ดูแลระบบกลาง (<code>admin</code>), แม่แบบข้อตกลงทรัพย์สิน, ประวัติ Webhook/กิจกรรม LINE, ประเภทการลา และค่าเรท OT กลาง{!summary.hasWorkSheet ? <> (รวมถึง <code>work_tracking_records</code> เดิมเนื่องจากไฟล์ไม่มีแท็บ “ข้อมูลงาน”)</> : null}
+                  <strong>ข้อมูลที่ยังคงเก็บไว้ตามเดิมในระบบ:</strong>{" "}
+                  {unselectedAvailable.length > 0 || preview.sheetsMissing.length > 0
+                    ? "ส่วนข้อมูลที่ไม่ได้เลือกทั้งหมด, "
+                    : ""}
+                  รหัสผ่าน/บทบาท/สิทธิ์ของบัญชี <code>users</code> ที่มีอยู่, บัญชีผู้ดูแลระบบกลาง (<code>admin</code>), แม่แบบข้อตกลงทรัพย์สิน, ประวัติ Webhook/กิจกรรม LINE, ประเภทการลา และค่าเรท OT กลาง
                 </li>
                 <li>
                   <strong>รูปภาพและลายเซ็นจาก ImgBB:</strong> ระบบจะย้ายมาเก็บใน Cloudinary อัตโนมัติเมื่อเปิดใช้งาน หรือสั่งย้ายทั้งหมดล่วงหน้าผ่าน <code>npm run db:migrate-imgbb-cloudinary</code>
@@ -351,19 +530,19 @@ export default function DataMigrationModule() {
                   id={confirmId}
                   isSelected={confirmed}
                   onChange={setConfirmed}
-                  isDisabled={importing || blockingErrors.length > 0}
+                  isDisabled={importing || selectedSections.length === 0 || activeBlockingErrors.length > 0}
                 />
-                <span>ฉันเข้าใจและยืนยันว่าจะลบข้อมูลเดิมทั้งหมดแล้วบันทึกข้อมูลจากไฟล์นี้ทับใหม่</span>
+                <span>ฉันตรวจสอบส่วนที่เลือกแล้ว และยืนยันการนำเข้าข้อมูลเฉพาะส่วนที่เลือก</span>
               </label>
 
               <Button
                 type="button"
-                variant="danger"
+                variant={hasDestructiveSelected ? "danger" : "primary"}
                 leadingIcon={RiUploadCloud2Line}
-                disabled={!confirmed || importing || blockingErrors.length > 0}
+                disabled={!confirmed || importing || selectedSections.length === 0 || activeBlockingErrors.length > 0}
                 onClick={() => setConfirmOpen(true)}
               >
-                {importing ? "กำลังบันทึกทับข้อมูล..." : "อัปโหลดและบันทึกทับข้อมูลทั้งหมด"}
+                {importing ? "กำลังบันทึกข้อมูล..." : `นำเข้าเฉพาะส่วนที่เลือก (${selectedSections.length})`}
               </Button>
             </div>
           </div>
@@ -375,18 +554,38 @@ export default function DataMigrationModule() {
           <div className="flex items-start gap-3">
             <RiCheckboxCircleLine className="mt-0.5 size-5 shrink-0 text-status-success" aria-hidden="true" />
             <div className="space-y-1">
-              <h2 className="text-base font-semibold text-foreground">นำเข้าข้อมูลทับฐานข้อมูลเรียบร้อยแล้ว</h2>
+              <h2 className="text-base font-semibold text-foreground">นำเข้าข้อมูลเฉพาะส่วนที่เลือกเรียบร้อยแล้ว</h2>
               <p className="text-xs text-muted-foreground">
-                ไฟล์ {result.fileName} — บันทึกพนักงาน {result.imported.employeesTotal} คน, แผนก {result.imported.departments}, ตำแหน่ง {result.imported.positions}, OT {result.imported.overtimeRequests} รายการ, วันลา {result.imported.leaveRequests} รายการ, ยืมทรัพย์สิน {result.imported.assetRequests} รายการ (Agreement {result.imported.assetAgreements} ฉบับ / ลายเซ็น {result.imported.assetAgreementSigners} จุด){result.imported.hasWorkSheet ? ` และข้อมูลงาน ${result.imported.workTrackingRecords} รายการ` : ""}
+                ไฟล์ {result.fileName} — นำเข้า {(result.imported.importedSections ?? []).map((s) => SECTION_META[s]?.label ?? s).join(", ")}
+                {(result.imported.importedSections ?? []).includes("employees")
+                  ? ` (พนักงาน: อัปเดต ${result.imported.employeesUpdated ?? 0} คน · เพิ่มใหม่ ${result.imported.employeesInserted ?? 0} คน · คงบัญชีเดิม ${result.imported.usersExistingKept ?? 0} บัญชี · สร้างบัญชีใหม่ ${result.imported.usersProvisioned ?? 0} บัญชี${(result.imported.usersSkippedNoEmail ?? 0) > 0 ? ` · ข้าม ${result.imported.usersSkippedNoEmail} คนที่ไม่มีอีเมลที่ถูกต้อง` : ""})`
+                  : ""}
+                {(result.imported.importedSections ?? []).includes("overtime")
+                  ? ` · OT ${result.imported.overtimeRequests} รายการ`
+                  : ""}
+                {(result.imported.importedSections ?? []).includes("leave")
+                  ? ` · วันลา ${result.imported.leaveRequests} รายการ`
+                  : ""}
+                {(result.imported.importedSections ?? []).includes("assets")
+                  ? ` · ยืมทรัพย์สิน ${result.imported.assetRequests} รายการ (Agreement ${result.imported.assetAgreements} ฉบับ)`
+                  : ""}
+                {(result.imported.importedSections ?? []).includes("workTracking")
+                  ? ` · ข้อมูลงาน ${result.imported.workTrackingRecords} รายการ`
+                  : ""}
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline"><Link href="/employees">ดูทะเบียนพนักงาน</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/ot">ดูรายการ OT</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/leave">ดูรายการวันลา</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/assets">ดูรายการทรัพย์สิน</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/work-tracking">ดูระบบติดตามงาน</Link></Button>
+            {(result.imported.importedSections ?? []).map((section) => (
+              <Button key={section} asChild size="sm" variant="outline">
+                <Link href={SECTION_META[section].href}>{SECTION_META[section].linkLabel}</Link>
+              </Button>
+            ))}
+            {(result.imported.importedSections ?? []).includes("employees") ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings">จัดการสิทธิ์ผู้ใช้</Link>
+              </Button>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -394,36 +593,39 @@ export default function DataMigrationModule() {
       <HrmDialog
         open={confirmOpen}
         onClose={() => { if (!importing) setConfirmOpen(false); }}
-        title="ยืนยันการบันทึกข้อมูลทับใหม่ทั้งหมด"
-        description="การดำเนินการนี้ไม่สามารถย้อนกลับได้ ข้อมูลพนักงาน คำขอ ยืมทรัพย์สิน/Agreement และประวัติที่เลือกไว้ในฐานข้อมูลจะถูกแทนที่ด้วยไฟล์ใหม่"
+        title="ยืนยันการนำเข้าข้อมูลเฉพาะส่วนที่เลือก"
+        description="ระบบจะนำเข้าเฉพาะส่วนที่คุณเลือกไว้ด้านล่าง ส่วนข้อมูลอื่นๆ ที่ไม่ได้เลือกจะยังคงเดิมในฐานข้อมูลทั้งหมด"
         footer={
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" disabled={importing} onClick={() => setConfirmOpen(false)}>
               ยกเลิก
             </Button>
-            <Button type="button" variant="danger" disabled={importing} onClick={handleConfirmImport}>
-              {importing ? "กำลังบันทึกข้อมูล..." : "ยืนยันบันทึกทับทั้งหมด"}
+            <Button
+              type="button"
+              variant={hasDestructiveSelected ? "danger" : "primary"}
+              disabled={importing}
+              onClick={handleConfirmImport}
+            >
+              {importing ? "กำลังบันทึกข้อมูล..." : "ยืนยันนำเข้าส่วนที่เลือก"}
             </Button>
           </div>
         }
       >
         <div className="space-y-2 py-2 text-sm text-muted-foreground">
           <p>ไฟล์ที่เลือก: <strong className="text-foreground">{selectedFile?.name}</strong></p>
-          {summary ? (
-            <p>
-              กำลังจะบันทึก: พนักงาน <strong className="text-foreground">{summary.employeesTotal}</strong> คน, คำขอ OT{" "}
-              <strong className="text-foreground">{summary.overtimeRequests}</strong> รายการ, คำขอลา{" "}
-              <strong className="text-foreground">{summary.leaveRequests}</strong> รายการ, ยืมทรัพย์สิน{" "}
-              <strong className="text-foreground">{summary.assetRequests}</strong> รายการ (Agreement{" "}
-              <strong className="text-foreground">{summary.assetAgreements}</strong> ฉบับ / ลายเซ็น{" "}
-              <strong className="text-foreground">{summary.assetAgreementSigners}</strong> จุด)
-              {summary.hasWorkSheet ? (
-                <>
-                  {" "}และข้อมูลงาน <strong className="text-foreground">{summary.workTrackingRecords}</strong> รายการ
-                </>
-              ) : null}
-            </p>
+          {summary && selectedSections.length > 0 ? (
+            <ul className="list-disc space-y-1 pl-5 text-xs leading-5">
+              {selectedSections.map((section) => (
+                <li key={section}>
+                  <strong className="text-foreground">{SECTION_META[section].label}:</strong>{" "}
+                  {SECTION_META[section].confirmSummary(summary)} ({SECTION_META[section].modeText})
+                </li>
+              ))}
+            </ul>
           ) : null}
+          <p className="text-xs text-muted-foreground">
+            ข้อมูลส่วนที่ไม่ได้เลือก รวมถึงรหัสผ่านและสิทธิ์บัญชีผู้ใช้เดิมจะไม่ถูกเปลี่ยนแปลง
+          </p>
         </div>
       </HrmDialog>
     </div>

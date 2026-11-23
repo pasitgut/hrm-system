@@ -1,9 +1,24 @@
+import { count, eq } from "drizzle-orm";
 import { NextResponse, type NextRequest } from "next/server";
 import { requireApiPermission, withApiAuth } from "@/lib/auth/dal";
+import { canAccessPage } from "@/lib/auth/page-access";
 import { classifyDatabaseError } from "@/lib/db/auto-migrate";
+import { db } from "@/lib/db/client";
+import {
+  assetRequests,
+  departments,
+  employees,
+  leaveRequests,
+  overtimeRequests,
+  users,
+  workTrackingRecords,
+} from "@/lib/db/schema";
 import {
   MAX_MIGRATION_FILE_BYTES,
+  MIGRATION_SECTIONS,
   parseAppSheetWorkbook,
+  parseMigrationSections,
+  SHEET_BY_SECTION,
   SheetMigrationError,
 } from "@/lib/migration/appsheet";
 import { replaceDatabaseFromSheetMigration } from "@/lib/migration/import-db";
@@ -16,7 +31,10 @@ function jsonError(status: number, error: string, extra?: Record<string, unknown
 }
 
 export const POST = withApiAuth(async (request: NextRequest) => {
-  await requireApiPermission(request, "users.permissions.manage");
+  const user = await requireApiPermission(request, "users.permissions.manage");
+  if (!canAccessPage(user.permissions, "import")) {
+    return jsonError(403, "Forbidden");
+  }
 
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_MIGRATION_FILE_BYTES) {
@@ -48,29 +66,92 @@ export const POST = withApiAuth(async (request: NextRequest) => {
   const confirmReplace = form.get("confirmReplace") === "true";
 
   if (mode === "import" && !confirmReplace) {
-    return jsonError(400, "กรุณายืนยันการลบและบันทึกข้อมูลทับใหม่ทั้งหมดก่อนนำเข้า");
+    return jsonError(400, "กรุณายืนยันข้อมูลส่วนที่เลือกก่อนนำเข้า");
+  }
+
+  const rawSections = form.getAll("sections");
+  const { sections: selectedSections, invalid: invalidSections } = parseMigrationSections(rawSections);
+  if (invalidSections.length > 0) {
+    return jsonError(400, "ส่วนข้อมูลที่เลือกไม่ถูกต้อง");
+  }
+  if (mode === "import" && selectedSections.length === 0) {
+    return jsonError(400, "กรุณาเลือกอย่างน้อย 1 ส่วนที่ต้องการนำเข้า");
   }
 
   try {
+    const existingEmployeeRows = await db
+      .select({
+        code: employees.code,
+        firstName: employees.firstName,
+        lastName: employees.lastName,
+        email: employees.email,
+        department: departments.name,
+        deletedAt: employees.deletedAt,
+      })
+      .from(employees)
+      .leftJoin(departments, eq(employees.departmentId, departments.id));
+
+    const existingEmployees = existingEmployeeRows.map((row) => ({
+      code: row.code,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      email: row.email,
+      department: row.department,
+      isFormer: row.deletedAt !== null,
+    }));
+
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await parseAppSheetWorkbook(buffer);
+    const parsed = await parseAppSheetWorkbook(buffer, { existingEmployees });
+    const availableSections = MIGRATION_SECTIONS.filter((section) =>
+      parsed.sheetsFound.includes(SHEET_BY_SECTION[section]),
+    );
 
     if (mode === "preview") {
+      const [empCount, userCount, otCount, leaveCount, assetCount, workCount] = await Promise.all([
+        db.select({ value: count() }).from(employees),
+        db.select({ value: count() }).from(users),
+        db.select({ value: count() }).from(overtimeRequests),
+        db.select({ value: count() }).from(leaveRequests),
+        db.select({ value: count() }).from(assetRequests),
+        db.select({ value: count() }).from(workTrackingRecords),
+      ]);
+
+      const existingCodeSet = new Set(existingEmployeeRows.map((row) => row.code));
+      const formerStubCodeSet = new Set(
+        parsed.data.employees.filter((emp) => emp.isFormerStub).map((emp) => emp.code),
+      );
+      const missingCodesFor = (codes: string[]) =>
+        [...new Set(codes)].filter((code) => !existingCodeSet.has(code) && !formerStubCodeSet.has(code)).sort();
+
       return NextResponse.json(
         {
           mode: "preview",
           fileName: file.name,
           sheetsFound: parsed.sheetsFound,
           sheetsMissing: parsed.sheetsMissing,
+          availableSections,
           summary: parsed.summary,
           warnings: parsed.warnings,
           errors: parsed.errors,
+          existingDbCounts: {
+            employees: Number(empCount[0]?.value ?? 0),
+            users: Number(userCount[0]?.value ?? 0),
+            overtime: Number(otCount[0]?.value ?? 0),
+            leave: Number(leaveCount[0]?.value ?? 0),
+            assets: Number(assetCount[0]?.value ?? 0),
+            workTracking: Number(workCount[0]?.value ?? 0),
+          },
+          missingDbEmployeeCodesBySection: {
+            overtime: missingCodesFor(parsed.data.overtime.map((row) => row.employeeCode)),
+            leave: missingCodesFor(parsed.data.leave.map((row) => row.employeeCode)),
+            assets: missingCodesFor(parsed.data.assets.map((row) => row.employeeCode)),
+          },
         },
         { headers: { "Cache-Control": "private, no-store" } },
       );
     }
 
-    if (parsed.errors.length > 0) {
+    if (selectedSections.includes("employees") && parsed.errors.length > 0) {
       return jsonError(400, "พบข้อผิดพลาดในไฟล์ ไม่สามารถนำเข้าได้", {
         errors: parsed.errors,
         warnings: parsed.warnings,
@@ -78,13 +159,16 @@ export const POST = withApiAuth(async (request: NextRequest) => {
       });
     }
 
-    const imported = await replaceDatabaseFromSheetMigration(parsed);
+    const imported = await replaceDatabaseFromSheetMigration(parsed, {
+      sections: selectedSections,
+    });
     return NextResponse.json(
       {
         mode: "import",
         fileName: file.name,
         sheetsFound: parsed.sheetsFound,
         sheetsMissing: parsed.sheetsMissing,
+        selectedSections,
         imported,
         warnings: parsed.warnings,
       },

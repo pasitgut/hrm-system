@@ -1,5 +1,5 @@
 import PayrollModule from "@/components/hrm/payroll/PayrollModule";
-import { requirePermission } from "@/lib/auth/dal";
+import { requirePageAccess } from "@/lib/auth/dal";
 
 export const metadata = {
   title: "สลิปเงินเดือน | HRM",
@@ -7,7 +7,6 @@ export const metadata = {
 };
 
 export default async function PayrollPage() {
-  await requirePermission("salary_slips.view");
-  const user = await requirePermission("employees.compensation.view");
+  const user = await requirePageAccess("payroll");
   return <PayrollModule permissions={user.permissions} />;
 }

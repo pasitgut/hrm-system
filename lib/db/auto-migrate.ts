@@ -2,6 +2,9 @@ import path from "node:path";
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { encodePermissionsForStorage } from "@/lib/auth/permissions";
+import { provisionMissingUserAccounts } from "@/lib/auth/provision-users";
+import { ROLE_DEFAULT_PERMISSIONS, USER_ROLES } from "@/lib/auth/roles";
 import { resolvePostgresOptions } from "@/lib/db/connection";
 import * as schema from "@/lib/db/schema";
 
@@ -219,6 +222,16 @@ export async function ensureCoreLookupData(
     .insert(schema.otRateSettings)
     .values({ id: 1, weekdayMultiplier: 1.5, holidayMultiplier: 3 })
     .onConflictDoNothing();
+
+  await database
+    .insert(schema.rolePermissions)
+    .values(
+      USER_ROLES.map((role) => ({
+        role,
+        permissions: encodePermissionsForStorage(ROLE_DEFAULT_PERMISSIONS[role]),
+      })),
+    )
+    .onConflictDoNothing();
 }
 
 export function resolveMigrationConnectionString(explicit?: string): string {
@@ -247,6 +260,10 @@ export async function runDatabaseMigrations(explicitConnectionString?: string): 
     const migrationDb = drizzle(client, { schema });
     await migrate(migrationDb, { migrationsFolder: path.resolve(process.cwd(), "drizzle") });
     await ensureCoreLookupData(migrationDb);
+    const provisioned = await provisionMissingUserAccounts(migrationDb);
+    if (provisioned.createdCount > 0) {
+      console.log(`Auto-provisioned ${provisioned.createdCount} missing user account(s) for active employees.`);
+    }
   } finally {
     await client.end({ timeout: 5 }).catch(() => undefined);
   }

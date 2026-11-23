@@ -13,28 +13,21 @@ import { Button } from "@/components/ui/button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
 import { LeaveSummaryView } from "@/components/hrm/leave/LeaveSummaryView";
 import { PageHeader, SectionHeading } from "@/components/hrm/PageHeader";
-import {
-  canApproveAnything,
-  canManageOwnOtRequests,
-  canViewCompanyLeave,
-  canViewCompanyOt,
-  canViewOwnLeaveRequests,
-  canViewOwnOtRequests,
-  canViewReports,
-} from "@/lib/auth/permissions";
+import { canAccessPage } from "@/lib/auth/page-access";
+import { canManageOwnOtRequests } from "@/lib/auth/permissions";
 
 function QuickLinks({ permissions }) {
   const items = [
-    ...(canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions)
+    ...(canAccessPage(permissions, "leave")
       ? [{ label: "จัดการคำขอลา", description: "ยื่นคำขอและตรวจสอบสิทธิ์วันลา", icon: RiCalendarTodoLine, href: "/leave" }]
       : []),
-    ...(canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions)
+    ...(canAccessPage(permissions, "ot")
       ? [{ label: "จัดการคำขอ OT", description: "ยื่นคำขอและดูชั่วโมงที่อนุมัติ", icon: RiTimerLine, href: "/ot" }]
       : []),
-    ...(canViewReports(permissions)
+    ...(canAccessPage(permissions, "reports")
       ? [{ label: "ดูรายงาน", description: "กำหนดช่วงเวลาและรูปแบบรายงาน", icon: RiFileChartLine, href: "/reports" }]
       : []),
-    ...(canApproveAnything(permissions)
+    ...(canAccessPage(permissions, "approvals")
       ? [{ label: "คิวอนุมัติ", description: "พิจารณาคำขอลาและ OT ของทีม", icon: RiUserSharedLine, href: "/approvals" }]
       : []),
   ];
@@ -62,6 +55,10 @@ function QuickLinks({ permissions }) {
 export default function OverviewPage() {
   const router = useRouter();
   const { permissions = [], employeeId } = useHrmRole();
+  const canOpenReports = canAccessPage(permissions, "reports");
+  const canOpenOt = canAccessPage(permissions, "ot");
+  const canOpenLeave = canAccessPage(permissions, "leave");
+  const canRequestOt = canOpenOt && canManageOwnOtRequests(permissions);
 
   return (
     <div className="hrm-page">
@@ -69,14 +66,14 @@ export default function OverviewPage() {
         eyebrow="HRM · พื้นที่ทำงาน"
         title="ภาพรวม"
         description="ติดตามสิทธิ์วันลาและไปยังงานที่ต้องทำได้จากจุดเดียว"
-        actions={canViewReports(permissions) || canManageOwnOtRequests(permissions) ? (
+        actions={canOpenReports || canRequestOt ? (
           <>
-            {canViewReports(permissions) ? (
+            {canOpenReports ? (
               <Button variant="outline" leadingIcon={RiFileChartLine} onClick={() => router.push("/reports")}>
                 ดูรายงาน
               </Button>
             ) : null}
-            {canManageOwnOtRequests(permissions) ? (
+            {canRequestOt ? (
               <Button leadingIcon={RiTimerLine} onClick={() => router.push("/ot")}>
                 ยื่นคำขอ OT
               </Button>
@@ -85,7 +82,7 @@ export default function OverviewPage() {
         ) : null}
       />
 
-      {employeeId && (canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions)) ? (
+      {employeeId && canOpenLeave ? (
         <section aria-labelledby="overview-leave-heading" className="min-w-0">
           <SectionHeading
             id="overview-leave-heading"

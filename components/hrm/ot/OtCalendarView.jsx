@@ -199,7 +199,7 @@ function OtWeekGrid({ dates, itemsByDate, loading }) {
   );
 }
 
-export function OtCalendarView({ refreshKey = 0 }) {
+export function OtCalendarView({ refreshKey = 0, eyebrow = "ตารางเวลาทำงาน", title = "ปฏิทิน OT" }) {
   const [cursorDate, setCursorDate] = useState(() => currentDateInBangkok());
   const [view, setView] = useState("monthly");
   const month = cursorDate.slice(0, 7);
@@ -313,8 +313,8 @@ export function OtCalendarView({ refreshKey = 0 }) {
       <Tabs selectedKey={view} onSelectionChange={changeView}>
         <div className="relative z-10 flex flex-col gap-3 border-b border-border px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">ตารางเวลาทำงาน</p>
-            <h2 id="ot-calendar-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">ปฏิทิน OT</h2>
+            <p className="text-xs font-semibold leading-4 uppercase tracking-[0.08em] text-muted-foreground">{eyebrow}</p>
+            <h2 id="ot-calendar-heading" className="mt-1 text-base font-semibold leading-6 text-foreground sm:text-lg">{title}</h2>
           </div>
           <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between lg:justify-end">
             <TabList aria-label="เลือกมุมมองปฏิทิน OT" className="w-fit">

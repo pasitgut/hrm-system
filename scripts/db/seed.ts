@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, sqlClient } from "@/lib/db/client";
+import { encodePermissionsForStorage } from "@/lib/auth/permissions";
+import { ROLE_DEFAULT_PERMISSIONS, USER_ROLES } from "@/lib/auth/roles";
 import {
   departments,
   employmentStatuses,
@@ -7,6 +9,7 @@ import {
   leaveTypes,
   positions,
   requestStatuses,
+  rolePermissions,
 } from "@/lib/db/schema";
 import { getAdminConfig } from "@/lib/auth/admin";
 import { assertSafeToRewriteData } from "./guard";
@@ -16,7 +19,7 @@ async function main() {
   console.log("Resetting database...");
   await db.execute(sql`
     TRUNCATE TABLE
-      users, overtime_requests, leave_requests,
+      users, role_permissions, overtime_requests, leave_requests,
       asset_agreement_signers, asset_agreements, asset_agreement_templates,
       asset_request_events, asset_request_reads, asset_request_attachments,
       asset_request_items, asset_requests,
@@ -73,6 +76,13 @@ async function main() {
     { code: "birthday", name: "ลาวันเกิด", annualQuotaDays: 1 },
     { code: "vacation", name: "ลาพักร้อน", annualQuotaDays: 6 },
   ]);
+
+  await db.insert(rolePermissions).values(
+    USER_ROLES.map((role) => ({
+      role,
+      permissions: encodePermissionsForStorage(ROLE_DEFAULT_PERMISSIONS[role]),
+    })),
+  );
 
   const admin = getAdminConfig();
   console.log("\nSeed complete.");

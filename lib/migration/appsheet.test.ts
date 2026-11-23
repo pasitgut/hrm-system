@@ -343,6 +343,8 @@ describe("lib/migration/appsheet", () => {
       employeesActive: 2,
       employeesFormerStubs: 2,
       employeesTotal: 4,
+      usersProvisioned: 2,
+      usersSkippedNoEmail: 0,
       departments: 2,
       positions: 3,
       overtimeRequests: 2,
@@ -507,11 +509,72 @@ describe("lib/migration/appsheet", () => {
     expect(parsed.errors[0]).toContain("kitti@example.com");
   });
 
-  it("throws a 400 SheetMigrationError when the required employee sheet is missing", async () => {
+  it("throws a 400 SheetMigrationError when no supported sheet exists in the workbook", async () => {
     const wb = new ExcelJS.Workbook();
     wb.addWorksheet("OtherSheet");
     const buffer = Buffer.from(await wb.xlsx.writeBuffer());
 
     await expect(parseAppSheetWorkbook(buffer)).rejects.toThrow(SheetMigrationError);
+  });
+
+  it("parses an OT-only workbook without an employees sheet when existingEmployees are supplied", async () => {
+    const wb = new ExcelJS.Workbook();
+    const ot = wb.addWorksheet(SHEET_OVERTIME);
+    ot.addRow(["วันที่", "เวลาเริ่ม", "เวลาเลิก", "col3", "ชื่อพนักงาน", "หมายเหตุ", "สถานะ", "col7", "อนุมัติโดย", "ความเห็นหัวหน้า"]);
+    ot.addRow(["20/11/2026", "18:00", "20:30", null, "กิตติ ทดสอบ", "งานเร่งด่วน", "อนุมัติแล้ว", null, "มานี อนุมัติ", "โอเค"]);
+
+    const parsed = await parseAppSheetWorkbook(Buffer.from(await wb.xlsx.writeBuffer()), {
+      existingEmployees: [
+        { code: "2633", firstName: "กิตติ", lastName: "ทดสอบ", email: "kitti@example.com", department: "Engineering", isFormer: false },
+        { code: "1904", firstName: "มานี", lastName: "อนุมัติ", email: "manee@example.com", department: "People", isFormer: false },
+      ],
+    });
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.sheetsFound).toEqual([SHEET_OVERTIME]);
+    expect(parsed.data.overtime).toHaveLength(1);
+    expect(parsed.data.overtime[0]).toMatchObject({
+      employeeCode: "2633",
+      employeeName: "กิตติ ทดสอบ",
+      status: "approved",
+      reason: "งานเร่งด่วน",
+      decidedByCode: "1904",
+      decisionNote: "โอเค",
+    });
+    // Existing DB-only employees must not leak into parsed.data.employees or summary counts
+    expect(parsed.data.employees).toEqual([]);
+    expect(parsed.summary.employeesTotal).toBe(0);
+    expect(parsed.summary.usersProvisioned).toBe(0);
+  });
+
+  it("counts active employees without valid emails as skipped users with warnings while ignoring former employees", async () => {
+    const wb = new ExcelJS.Workbook();
+    const emp = wb.addWorksheet(SHEET_EMPLOYEES);
+    const makeRow = (name: string, code: string, email: string | null, status: string) => {
+      const row = new Array(20).fill(null);
+      row[0] = name;
+      row[1] = code;
+      row[4] = email;
+      row[8] = new Date("2025-01-01T00:00:00Z");
+      row[19] = status;
+      return row;
+    };
+    emp.addRow(makeRow("ชื่อพนักงาน", "รหัสพนักงาน", "อีเมล", "สถานะ"));
+    emp.addRow(makeRow("มีเมล ถูกต้อง", "1001", "valid@example.com", "ปฏิบัติงาน"));
+    emp.addRow(makeRow("ไม่มี เมล", "1002", null, "ปฏิบัติงาน"));
+    emp.addRow(makeRow("เมล ผิดรูป", "1003", "not-an-email", "ปฏิบัติงาน"));
+    emp.addRow(makeRow("พ้นสภาพ ไม่มีเมล", "1004", null, "พ้นสภาพ"));
+
+    const parsed = await parseAppSheetWorkbook(Buffer.from(await wb.xlsx.writeBuffer()));
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.summary.employeesActive).toBe(3);
+    expect(parsed.summary.employeesFormerStubs).toBe(1);
+    expect(parsed.summary.usersProvisioned).toBe(1);
+    expect(parsed.summary.usersSkippedNoEmail).toBe(2);
+    expect(parsed.warnings.filter((w) => w.startsWith("[users]"))).toHaveLength(2);
+    expect(parsed.warnings.some((w) => w.includes("1002") && w.includes("ไม่มีอีเมล"))).toBe(true);
+    expect(parsed.warnings.some((w) => w.includes("1003") && w.includes("รูปแบบไม่ถูกต้อง"))).toBe(true);
+    expect(parsed.warnings.some((w) => w.includes("1004"))).toBe(false);
   });
 });

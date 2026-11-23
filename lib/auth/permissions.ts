@@ -94,10 +94,42 @@ export function normalizePermissions(permissions: unknown): PermissionKey[] {
   return PERMISSIONS.map(({ key }) => key).filter((key) => granted.has(key));
 }
 
-export function encodePermissionsForStorage(permissions: readonly PermissionKey[]): string[] {
+const KNOWN_PERMISSION_SET = new Set<string>(PERMISSIONS.map(({ key }) => key));
+
+export function haveSamePermissionSet(a: unknown, b: unknown): boolean {
+  const listA = Array.isArray(a) ? a.filter((key): key is string => typeof key === "string" && KNOWN_PERMISSION_SET.has(key)) : [];
+  const listB = Array.isArray(b) ? b.filter((key): key is string => typeof key === "string" && KNOWN_PERMISSION_SET.has(key)) : [];
+  const setA = new Set(listA);
+  const setB = new Set(listB);
+  if (setA.size !== setB.size) return false;
+  for (const key of setA) {
+    if (!setB.has(key)) return false;
+  }
+  return true;
+}
+
+export function encodePermissionsForStorage(
+  permissions: readonly PermissionKey[],
+  deniedPages: readonly string[] = [],
+): string[] {
   const encoded: string[] = [...new Set(permissions)];
   for (const { permission, disabledMarker } of DEFAULT_GRANTS) {
     if (!encoded.includes(permission)) encoded.push(disabledMarker);
+  }
+  const addedPageMarkers = new Set<string>();
+  for (const entry of deniedPages) {
+    if (typeof entry !== "string") continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const marker = trimmed.startsWith("page.") && trimmed.endsWith(".denied")
+      ? trimmed
+      : /^[a-z_]+$/.test(trimmed)
+        ? `page.${trimmed}.denied`
+        : null;
+    if (marker && !addedPageMarkers.has(marker)) {
+      addedPageMarkers.add(marker);
+      encoded.push(marker);
+    }
   }
   return encoded;
 }

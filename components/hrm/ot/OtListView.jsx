@@ -169,6 +169,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
 
   const showEmployeeColumn = canViewCompanyOtData(user);
   const canManageOwnRequests = canManageOwnOtRequests(user.permissions);
+  const showActionsColumn = canManageOwnRequests;
 
   function handleEdit(item) {
     onEdit?.(item);
@@ -226,7 +227,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
                 {showEmployeeColumn ? <th className="px-3 py-3">พนักงาน</th> : null}
                 <th className="px-3 py-3">รายละเอียดงานที่ทำ</th>
                 <th className="px-3 py-3">สถานะ</th>
-                <th className="px-3 py-3">การดำเนินการ</th>
+                {showActionsColumn ? <th className="px-3 py-3">การดำเนินการ</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -235,7 +236,7 @@ export function OtListView({ items: itemsProp, refreshKey = 0, onEdit = () => {}
                   key={item.id}
                   item={item}
                   showEmployeeColumn={showEmployeeColumn}
-                  showActionsColumn
+                  showActionsColumn={showActionsColumn}
                   canManage={canManageOwnRequests && item.employeeId === employeeId && item.statusCode === "pending"}
                   onEdit={handleEdit}
                   onCancel={requestCancel}

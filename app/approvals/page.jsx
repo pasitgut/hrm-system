@@ -1,7 +1,7 @@
 import ApprovalModule from "@/components/hrm/approvals/ApprovalModule";
-import { requireAnyPermission } from "@/lib/auth/dal";
+import { requirePageAccess } from "@/lib/auth/dal";
 
 export default async function ApprovalsPage() {
-  await requireAnyPermission("ot.approve", "leave.approve", "assets.requests.manage");
+  await requirePageAccess("approvals");
   return <ApprovalModule />;
 }

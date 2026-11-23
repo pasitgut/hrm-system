@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RiCheckLine, RiCloseLine } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/badge";
+import { canAccessPage } from "@/lib/auth/page-access";
 import { canApproveOtData } from "@/lib/auth/rolePermissionAccess";
 import { overtimeTypeLabel, statusColor } from "@/components/hrm/ot/otStatus";
 import { cn } from "@/lib/utils";
@@ -45,8 +46,17 @@ function OtRequest({ item, canApprove, busy, onDecision }) {
   );
 }
 
-export function OtRequestPanel({ refreshKey = 0, role, permissions, onUpdated = () => {} }) {
+export function OtRequestPanel({
+  refreshKey = 0,
+  role = undefined,
+  permissions = undefined,
+  title = undefined,
+  description = undefined,
+  canViewCompany = false,
+  onUpdated = () => {},
+}) {
   const isApprover = canApproveOtData({ role, permissions });
+  const canOpenApprovalsPage = isApprover && (!Array.isArray(permissions) || canAccessPage(permissions, "approvals"));
   const [items, setItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("pending");
   const [loading, setLoading] = useState(true);
@@ -104,7 +114,14 @@ export function OtRequestPanel({ refreshKey = 0, role, permissions, onUpdated = 
     }
   }
 
-  const heading = isApprover ? "คำขอ OT" : "คำขอ OT ล่าสุด";
+  const heading = title || (isApprover ? "คำขอ OT" : "คำขอ OT ล่าสุด");
+  const subheading = description || (
+    isApprover
+      ? "ตรวจสอบและบันทึกผลคำขอจากพนักงาน"
+      : canViewCompany
+        ? "ติดตามรายการคำขอ OT ล่าสุดของบริษัท"
+        : "ติดตามสถานะคำขอและผลการพิจารณา"
+  );
   const count = isApprover ? items.filter((item) => item.statusCode === statusFilter).length : items.filter((item) => item.statusCode !== "cancelled").length;
   const emptyMessage = isApprover
     ? { pending: "ไม่มีคำขอ OT ที่รอจัดการ", approved: "ยังไม่มีคำขอ OT ที่อนุมัติแล้ว", rejected: "ยังไม่มีคำขอ OT ที่ไม่อนุมัติ" }[statusFilter]
@@ -119,10 +136,10 @@ export function OtRequestPanel({ refreshKey = 0, role, permissions, onUpdated = 
             <Chip variant="caption" color={isApprover && statusFilter === "pending" && count ? "orange" : "gray"}>{count} รายการ</Chip>
           </div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {isApprover ? "ตรวจสอบและบันทึกผลคำขอจากพนักงาน" : "ติดตามสถานะคำขอและผลการพิจารณา"}
+            {subheading}
           </p>
         </div>
-        {isApprover ? <Button asChild variant="outline" className="min-h-10"><Link href="/approvals">ดูทั้งหมด</Link></Button> : null}
+        {canOpenApprovalsPage ? <Button asChild variant="outline" className="min-h-10"><Link href="/approvals">ดูทั้งหมด</Link></Button> : null}
       </div>
 
       {isApprover ? (

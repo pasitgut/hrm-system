@@ -4,8 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { getSystemAdminPermissions, isSystemAdminUserId } from "@/lib/auth/admin";
+import { getSystemAdminPermissions, isSystemAdminSession, isSystemAdminUserId } from "@/lib/auth/admin";
 import { hasAnyPermission, hasPermission, type PermissionKey } from "@/lib/auth/permissions";
+import { canAccessPage, type PageAccessKey } from "@/lib/auth/page-access";
 import { normalizeRole, type Role } from "@/lib/auth/roles";
 import {
   readSessionCookie,
@@ -73,6 +74,20 @@ export async function requireAnyPermission(...permissions: PermissionKey[]): Pro
   return user;
 }
 
+export async function requirePageAccess(pageKey: PageAccessKey): Promise<SessionPayload> {
+  const user = await requireUser();
+  if (!canAccessPage(user.permissions, pageKey)) redirect("/");
+  return user;
+}
+
+export async function requireAdminDataPage(): Promise<SessionPayload> {
+  const user = await requireUser();
+  if (!isSystemAdminSession(user) && !canAccessPage(user.permissions, "admin_data")) {
+    redirect("/");
+  }
+  return user;
+}
+
 // --- Route Handlers: throw a typed error, never redirect ---
 
 export class ApiAuthError extends Error {
@@ -103,6 +118,14 @@ export async function requireApiPermission(request: NextRequest, permission: Per
 export async function requireApiAnyPermission(request: NextRequest, ...permissions: PermissionKey[]): Promise<SessionPayload> {
   const user = await requireApiUser(request);
   if (!hasAnyPermission(user.permissions, ...permissions)) throw new ApiAuthError(403, "Forbidden");
+  return user;
+}
+
+export async function requireAdminDataApiUser(request: NextRequest): Promise<SessionPayload> {
+  const user = await requireApiUser(request);
+  if (!isSystemAdminSession(user) && !canAccessPage(user.permissions, "admin_data")) {
+    throw new ApiAuthError(403, "Forbidden");
+  }
   return user;
 }
 

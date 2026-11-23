@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   RiCalendarTodoLine,
   RiDashboardLine,
+  RiDatabase2Line,
   RiArchiveLine,
   RiFileChartLine,
   RiFileTextLine,
@@ -15,6 +16,7 @@ import {
   RiMenu2Line,
   RiSettings4Line,
   RiShieldCheckLine,
+  RiShieldUserLine,
   RiSidebarFoldLine,
   RiSidebarUnfoldLine,
   RiSunLine,
@@ -27,23 +29,9 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cx } from "@/utils/cx";
 import {
-  hasPermission,
-  canViewEmployeeDocuments,
-  canApproveAnything,
-  canManageAssetTemplates,
-  canManageLeaveQuotas,
   canManageUserPermissions,
-  canOpenSettings,
-  canViewCompanyAssetRequests,
-  canViewCompanyLeave,
-  canViewCompanyOt,
-  canViewEmployeeProfiles,
-  canViewOwnAssetRequests,
-  canViewOwnLeaveRequests,
-  canViewOwnOtRequests,
-  canViewReports,
-  canViewWorkTracking,
 } from "@/lib/auth/permissions";
+import { canAccessPage } from "@/lib/auth/page-access";
 import { logoutAction } from "@/app/login/actions";
 import { getRoleShortLabel, normalizeRole } from "@/lib/auth/roles";
 import { DEFAULT_INTEGRATION_STATUS } from "@/lib/integrations/constants";
@@ -218,37 +206,45 @@ export default function HrmShell({
           : pathname === "/documents" ? "documents"
             : pathname === "/approvals" ? "approvals"
               : pathname === "/reports" ? "reports"
-                : pathname.startsWith("/settings/import") ? "import"
-                  : pathname === "/settings" ? "settings"
-                    : "overview";
+                : pathname.startsWith("/settings/permissions") ? "permissions"
+                  : pathname.startsWith("/settings/admin-data") ? "admin_data"
+                    : pathname.startsWith("/settings/import") ? "import"
+                      : pathname === "/settings" ? "settings"
+                        : "overview";
   const groups = useMemo(() => {
     const nextGroups = baseGroups.map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.key === "employees") return canViewEmployeeProfiles(permissions);
-        if (item.key === "work") return canViewWorkTracking(permissions);
-        if (item.key === "ot") return canViewOwnOtRequests(permissions) || canViewCompanyOt(permissions);
-        if (item.key === "leave") return canViewOwnLeaveRequests(permissions) || canViewCompanyLeave(permissions) || canManageLeaveQuotas(permissions);
-        if (item.key === "assets") return canViewOwnAssetRequests(permissions) || canViewCompanyAssetRequests(permissions) || canManageAssetTemplates(permissions);
-        if (item.key === "payroll") return hasPermission(permissions, "salary_slips.view") && hasPermission(permissions, "employees.compensation.view");
-        if (item.key === "reports") return canViewReports(permissions);
+        if (item.key === "employees") return canAccessPage(permissions, "employees");
+        if (item.key === "work") return canAccessPage(permissions, "work");
+        if (item.key === "ot") return canAccessPage(permissions, "ot");
+        if (item.key === "leave") return canAccessPage(permissions, "leave");
+        if (item.key === "assets") return canAccessPage(permissions, "assets");
+        if (item.key === "payroll") return canAccessPage(permissions, "payroll");
+        if (item.key === "reports") return canAccessPage(permissions, "reports");
         return true;
       }),
     }));
     const workGroup = nextGroups.find((group) => group.label === "การทำงาน");
-    if (canViewEmployeeDocuments(permissions)) {
+    if (canAccessPage(permissions, "documents")) {
       workGroup?.items.splice(1, 0, { key: "documents", label: "เอกสาร", icon: RiFileTextLine, href: "/documents" });
     }
-    if (canApproveAnything(permissions)) {
+    if (canAccessPage(permissions, "approvals")) {
       workGroup?.items.push({ key: "approvals", label: "รออนุมัติ", icon: RiShieldCheckLine, href: "/approvals" });
     }
     const visibleGroups = nextGroups.filter((group) => group.items.length > 0);
     const systemItems = [];
-    if (canOpenSettings(permissions)) {
+    if (canAccessPage(permissions, "settings")) {
       systemItems.push({ key: "settings", label: "ตั้งค่า", icon: RiSettings4Line, href: "/settings" });
     }
     if (canManageUserPermissions(permissions)) {
+      systemItems.push({ key: "permissions", label: "สิทธิ์การเข้าถึง", icon: RiShieldUserLine, href: "/settings/permissions" });
+    }
+    if (canAccessPage(permissions, "import")) {
       systemItems.push({ key: "import", label: "นำเข้าข้อมูล", icon: RiUploadCloud2Line, href: "/settings/import" });
+    }
+    if (user?.isSystemAdmin || canAccessPage(permissions, "admin_data")) {
+      systemItems.push({ key: "admin_data", label: "จัดการฐานข้อมูล", icon: RiDatabase2Line, href: "/settings/admin-data" });
     }
     if (systemItems.length > 0) {
       visibleGroups.push({
@@ -257,7 +253,7 @@ export default function HrmShell({
       });
     }
     return visibleGroups;
-  }, [permissions]);
+  }, [permissions, user?.isSystemAdmin]);
   const userRole = normalizeRole(user?.role);
   const roleContextValue = useMemo(
     () => (user ? {

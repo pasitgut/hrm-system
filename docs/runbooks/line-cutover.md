@@ -3,9 +3,9 @@
 ## Before deployment
 
 1. Review the feature branch, [integration map](../integrations/line-hrm-map.md), and [pending work](../line-bot-pending.md).
-2. Keep LINE_BOT_ENABLED=false until migration 0028 and environment configuration are ready. Take a restricted-access database/Sheets backup and rehearse restoring it.
+2. Keep LINE_BOT_ENABLED=false until migration 0029 and environment configuration are ready. Take a restricted-access database/Sheets backup and rehearse restoring it.
 3. Use the existing HRM deployment pipeline. Run `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` against a disposable test DB first.
-4. Apply migration 0028 with `npm run db:migrate` using the intended Direct/Session Pooler connection. Do not run seeds/resetDb against production. Verify RLS is enabled and browser roles cannot read the four operational tables.
+4. Apply migration 0029 with `npm run db:migrate` using the intended Direct/Session Pooler connection. Do not run seeds/resetDb against production. Verify RLS is enabled and browser roles cannot read the four operational tables.
 5. Configure the variables listed in .env.example using the hosting secret store. The Calendar Service Account must be shared onto the target calendar. Do not reuse personal Drive refresh-token credentials.
 6. Configure an authenticated scheduler to POST `/api/internal/integrations/retry` every five minutes. Use Supabase Vault if using pg_cron/pg_net. Configure an HTTP timeout that allows the endpoint to finish, and disable production scheduler URLs on restored/staging databases.
 

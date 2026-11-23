@@ -13,7 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { useHrmRole } from "@/components/hrm/HrmShell";
-import { canManageEmployeeCompensation, canViewCompanyOtData } from "@/lib/auth/rolePermissionAccess";
+import {
+  canManageEmployeeCompensation,
+  canViewCompanyOtData,
+  canViewEmployeeCompensation,
+} from "@/lib/auth/rolePermissionAccess";
+import { normalizeRole } from "@/lib/auth/roles";
 import { currentMonthInBangkok, formatMonthLabel, shiftMonth } from "@/components/hrm/ot/otStatus";
 
 function formatMoney(value) {
@@ -77,10 +82,13 @@ function IndividualSummary({ month, onMonthChange, summary, loading, error, back
   );
 }
 
-export function OtSummaryView({ refreshKey = 0 }) {
+export function OtSummaryView({ refreshKey = 0, mode = undefined }) {
   const user = useHrmRole() ?? {};
+  const effectiveRole = mode || (user.isSystemAdmin ? "hr" : normalizeRole(user.role));
+  const isExecutiveMode = effectiveRole === "executive";
   const isCompanyCapable = canViewCompanyOtData(user);
-  const canViewCompensation = canManageEmployeeCompensation(user);
+  const canViewCompensation = canViewEmployeeCompensation(user);
+  const canViewPayrollFormula = canManageEmployeeCompensation(user);
   const [month, setMonth] = useState(() => currentMonthInBangkok());
   const [drillEmployeeId, setDrillEmployeeId] = useState(null);
   const [individualSummary, setIndividualSummary] = useState(null);
@@ -148,7 +156,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
           {canViewCompensation ? (
             <SummaryCard
               icon={RiMoneyDollarCircleLine}
-              label="ยอด OT ที่ต้องจ่าย"
+              label={isExecutiveMode ? "ยอดงบประมาณ OT ที่อนุมัติ" : "ยอด OT ที่ต้องจ่าย"}
               value={companySummary.totalApprovedPay == null ? "ข้อมูลไม่ครบ" : formatMoney(companySummary.totalApprovedPay)}
               helper={companySummary.missingPayInfoCount ? "ข้อมูลเงินเดือน/ประเภทวันยังไม่ครบ " + companySummary.missingPayInfoCount + " คน" : "เฉพาะรายการที่อนุมัติแล้ว"}
             />
@@ -158,14 +166,16 @@ export function OtSummaryView({ refreshKey = 0 }) {
       ) : null}
       <section className="overflow-hidden border-y border-border bg-card">
         <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[920px] text-left">
+          <table className={`w-full text-left ${canViewPayrollFormula ? "min-w-[920px]" : "min-w-[680px]"}`}>
             <thead className="bg-muted">
               <tr className="text-xs font-semibold leading-4 text-muted-foreground">
                 <th className="px-3 py-3">พนักงาน</th>
-                {canViewCompensation ? <th className="px-3 py-3 text-right">ฐานเงินเดือน</th> : null}
-                {canViewCompensation ? <th className="min-w-56 px-3 py-3">เรท OT</th> : null}
+                {canViewPayrollFormula ? <th className="px-3 py-3 text-right">ฐานเงินเดือน</th> : null}
+                {canViewPayrollFormula ? <th className="min-w-56 px-3 py-3">เรท OT</th> : null}
                 <th className="px-3 py-3">ชั่วโมง OT ที่อนุมัติ</th>
-                {canViewCompensation ? <th className="px-3 py-3 text-right">เงินที่ต้องจ่าย</th> : null}
+                {canViewCompensation ? (
+                  <th className="px-3 py-3 text-right">{isExecutiveMode ? "ยอดค่า OT ที่อนุมัติ" : "เงินที่ต้องจ่าย"}</th>
+                ) : null}
                 <th className="px-3 py-3">รอดำเนินการ</th>
                 <th className="px-3 py-3">ไม่อนุมัติ</th>
                 <th className="px-3 py-3">จำนวนคำขอ</th>
@@ -179,8 +189,8 @@ export function OtSummaryView({ refreshKey = 0 }) {
                       {row.employeeName} <span className="text-muted-foreground">({row.employeeCode})</span>
                     </button>
                   </td>
-                  {canViewCompensation ? <td className="whitespace-nowrap px-3 py-3 text-right text-xs tabular-nums text-foreground">{formatMoney(row.baseSalary)}</td> : null}
-                  {canViewCompensation ? (
+                  {canViewPayrollFormula ? <td className="whitespace-nowrap px-3 py-3 text-right text-xs tabular-nums text-foreground">{formatMoney(row.baseSalary)}</td> : null}
+                  {canViewPayrollFormula ? (
                     <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">
                       <span className="block">ธรรมดา {formatMultiplier(row.otWeekdayMultiplier)} · {formatHourlyMoney(row.weekdayRatePerHour)}</span>
                       <span className="block">วันหยุด {formatMultiplier(row.otHolidayMultiplier)} · {formatHourlyMoney(row.holidayRatePerHour)}</span>
@@ -197,9 +207,9 @@ export function OtSummaryView({ refreshKey = 0 }) {
                       {row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}
                     </td>
                   ) : null}
-                  <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.pendingHours} ชม.</td>
-                  <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.rejectedHours} ชม.</td>
-                  <td className="px-3 py-3 text-xs leading-5 text-muted-foreground">{row.requestCount}</td>
+                  <td className="px-3 py-3 text-xs leading-5 tabular-nums text-muted-foreground">{row.pendingHours} ชม.</td>
+                  <td className="px-3 py-3 text-xs leading-5 tabular-nums text-muted-foreground">{row.rejectedHours} ชม.</td>
+                  <td className="px-3 py-3 text-xs leading-5 tabular-nums text-muted-foreground">{row.requestCount}</td>
                 </tr>
               ))}
             </tbody>
@@ -215,7 +225,7 @@ export function OtSummaryView({ refreshKey = 0 }) {
             >
               <strong className="block text-sm font-medium leading-5 text-foreground">{row.employeeName}</strong>
               <span className="text-xs leading-4 text-muted-foreground">{row.employeeCode}</span>
-              {canViewCompensation ? (
+              {canViewPayrollFormula ? (
                 <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border pt-3 text-xs leading-4">
                   <span className="text-muted-foreground">ฐานเงินเดือน</span>
                   <span className="text-right tabular-nums text-foreground">{formatMoney(row.baseSalary)}</span>
@@ -227,6 +237,16 @@ export function OtSummaryView({ refreshKey = 0 }) {
                   <strong className="text-right tabular-nums text-foreground">{row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}</strong>
                   <span className="col-span-2 text-[11px] leading-4 text-muted-foreground">
                     ธรรมดา {row.weekdayApprovedHours} ชม. · วันหยุด {row.holidayApprovedHours} ชม.
+                  </span>
+                </div>
+              ) : canViewCompensation ? (
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border pt-3 text-xs leading-4">
+                  <span className="text-muted-foreground">OT ที่อนุมัติ</span>
+                  <span className="text-right tabular-nums text-foreground">{row.approvedHours} ชม.</span>
+                  <span className="text-muted-foreground">ยอดค่า OT ที่อนุมัติ</span>
+                  <strong className="text-right tabular-nums text-foreground">{row.approvedPay == null ? "ตรวจสอบข้อมูล" : formatMoney(row.approvedPay)}</strong>
+                  <span className="col-span-2 text-[11px] leading-4 text-muted-foreground">
+                    ธรรมดา {row.weekdayApprovedHours} ชม. · วันหยุด {row.holidayApprovedHours} ชม. · รอ {row.pendingHours} ชม.
                   </span>
                 </div>
               ) : (
@@ -242,7 +262,13 @@ export function OtSummaryView({ refreshKey = 0 }) {
         {!loading && byEmployee.length === 0 ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">ไม่มีข้อมูล OT ในงวดนี้</p> : null}
         {loading ? <p className="p-10 text-center text-xs leading-5 text-muted-foreground">กำลังโหลดข้อมูล...</p> : null}
       </section>
-      {canViewCompensation ? <p className="text-xs leading-5 text-muted-foreground">คำนวณจากเงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน × เรท OT × ชั่วโมงที่อนุมัติแล้ว</p> : null}
+      <p className="text-xs leading-5 text-muted-foreground">
+        {canViewPayrollFormula
+          ? "คำนวณจากเงินเดือน ÷ 30 ÷ ชั่วโมงทำงานปกติต่อวัน × เรท OT × ชั่วโมงที่อนุมัติแล้ว · คลิกชื่อพนักงานเพื่อดูสรุป OT รายบุคคล"
+          : isExecutiveMode && canViewCompensation
+            ? "สรุปจากรายการ OT ที่อนุมัติแล้วรายงวด · คลิกชื่อพนักงานเพื่อดูสรุป OT รายบุคคล"
+            : "คลิกชื่อพนักงานเพื่อดูสรุป OT รายบุคคล"}
+      </p>
     </div>
   );
 }

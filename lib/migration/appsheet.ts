@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import ExcelJS from "exceljs";
+import { isValidProvisionEmail } from "@/lib/auth/provision-users";
 import {
   agreementParticipantForSignatureBox,
   nextAgreementStatus,
@@ -11,12 +12,17 @@ import {
 } from "@/asset-borrowing/domain/asset";
 import {
   EXPECTED_SHEETS,
+  isMigrationSection,
   MAX_MIGRATION_FILE_BYTES,
+  MIGRATION_SECTIONS,
+  parseMigrationSections,
   SHEET_ASSETS,
+  SHEET_BY_SECTION,
   SHEET_EMPLOYEES,
   SHEET_LEAVE,
   SHEET_OVERTIME,
   SHEET_WORK,
+  type MigrationSection,
 } from "@/lib/migration/constants";
 import type {
   WorkTrackingRecordStatus,
@@ -26,12 +32,17 @@ import type {
 
 export {
   EXPECTED_SHEETS,
+  isMigrationSection,
   MAX_MIGRATION_FILE_BYTES,
+  MIGRATION_SECTIONS,
+  parseMigrationSections,
   SHEET_ASSETS,
+  SHEET_BY_SECTION,
   SHEET_EMPLOYEES,
   SHEET_LEAVE,
   SHEET_OVERTIME,
   SHEET_WORK,
+  type MigrationSection,
 };
 
 export const UUID_NAMESPACE = "6f1c2a54-3b0e-4f0b-9a52-7a3f0d1e5c10";
@@ -306,6 +317,8 @@ export type SheetMigrationSummary = {
   employeesActive: number;
   employeesFormerStubs: number;
   employeesTotal: number;
+  usersProvisioned: number;
+  usersSkippedNoEmail: number;
   departments: number;
   positions: number;
   overtimeRequests: number;
@@ -1721,7 +1734,23 @@ function buildWorkTrackingRecords(rows: SheetRowEntry[], warnings: string[]): Pa
   return [...recordsByKey.values()];
 }
 
-export async function parseAppSheetWorkbook(buffer: Buffer): Promise<ParsedSheetMigration> {
+export type ExistingEmployeeRef = {
+  code: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  department: string | null;
+  isFormer: boolean;
+};
+
+export type ParseWorkbookOptions = {
+  existingEmployees?: ExistingEmployeeRef[];
+};
+
+export async function parseAppSheetWorkbook(
+  buffer: Buffer,
+  options: ParseWorkbookOptions = {},
+): Promise<ParsedSheetMigration> {
   if (!buffer || buffer.byteLength === 0) {
     throw new SheetMigrationError("ไฟล์ว่างเปล่า กรุณาเลือกไฟล์ .xlsx ใหม่", 400);
   }
@@ -1744,15 +1773,6 @@ export async function parseAppSheetWorkbook(buffer: Buffer): Promise<ParsedSheet
     }
   }
 
-  const employeeSheet = sheetByName.get(SHEET_EMPLOYEES);
-  if (!employeeSheet) {
-    const foundNames = workbook.worksheets.map((ws) => ws.name).join(", ") || "ไม่มีแท็บ";
-    throw new SheetMigrationError(
-      `ไม่พบแท็บ "${SHEET_EMPLOYEES}" ในไฟล์ (แท็บที่พบ: ${foundNames})`,
-      400,
-    );
-  }
-
   const sheetsFound: string[] = [];
   const sheetsMissing: string[] = [];
   const warnings: string[] = [];
@@ -1766,24 +1786,62 @@ export async function parseAppSheetWorkbook(buffer: Buffer): Promise<ParsedSheet
     }
   }
 
-  const employeesByCode = buildEmployeesFromRows(readWorksheetRows(employeeSheet), warnings, errors);
-  const findApprover = makeApproverFinder(employeesByCode);
+  if (sheetsFound.length === 0) {
+    const foundNames = workbook.worksheets.map((ws) => ws.name).join(", ") || "ไม่มีแท็บ";
+    throw new SheetMigrationError(
+      `ไม่พบแท็บที่รองรับสำหรับการนำเข้าในไฟล์ (แท็บที่พบ: ${foundNames})`,
+      400,
+    );
+  }
+
+  const employeeSheet = sheetByName.get(SHEET_EMPLOYEES);
+  const sheetEmployeesByCode = employeeSheet
+    ? buildEmployeesFromRows(readWorksheetRows(employeeSheet), warnings, errors)
+    : new Map<string, ParsedEmployee>();
+
+  const lookupEmployeesByCode = new Map<string, ParsedEmployee>(sheetEmployeesByCode);
+  const dbOnlyCodes = new Set<string>();
+  for (const ref of options.existingEmployees ?? []) {
+    if (lookupEmployeesByCode.has(ref.code)) continue;
+    dbOnlyCodes.add(ref.code);
+    const fullName = `${ref.firstName} ${ref.lastName}`.trim();
+    lookupEmployeesByCode.set(ref.code, {
+      code: ref.code,
+      name: fullName,
+      prefix: null,
+      firstName: ref.firstName,
+      lastName: ref.lastName,
+      startDate: "2020-01-01",
+      email: ref.email ? ref.email.trim().toLowerCase() : null,
+      phone: null,
+      avatarUrl: null,
+      lineUid: null,
+      birthDate: null,
+      weeklyHolidays: [],
+      department: ref.department,
+      position: null,
+      employmentTypeCode: null,
+      isFormerStub: ref.isFormer,
+    });
+  }
+
+  const findApprover = makeApproverFinder(lookupEmployeesByCode);
 
   const otSheet = sheetByName.get(SHEET_OVERTIME);
-  const rawOt = otSheet ? buildOvertimeRows(readWorksheetRows(otSheet), employeesByCode, findApprover, warnings) : [];
+  const rawOt = otSheet ? buildOvertimeRows(readWorksheetRows(otSheet), lookupEmployeesByCode, findApprover, warnings) : [];
 
   const leaveSheet = sheetByName.get(SHEET_LEAVE);
-  const leave = leaveSheet ? buildLeaveRequests(readWorksheetRows(leaveSheet), employeesByCode, findApprover, warnings) : [];
+  const leave = leaveSheet ? buildLeaveRequests(readWorksheetRows(leaveSheet), lookupEmployeesByCode, findApprover, warnings) : [];
 
-  const overtime = finalizeOvertimeAndFormerEmployees(rawOt, leave, employeesByCode, warnings);
+  const overtime = finalizeOvertimeAndFormerEmployees(rawOt, leave, lookupEmployeesByCode, warnings);
 
   const assetSheet = sheetByName.get(SHEET_ASSETS);
-  const assets = assetSheet ? buildAssets(readWorksheetRows(assetSheet), employeesByCode, findApprover, warnings) : [];
+  const assets = assetSheet ? buildAssets(readWorksheetRows(assetSheet), lookupEmployeesByCode, findApprover, warnings) : [];
 
   const workSheet = sheetByName.get(SHEET_WORK);
   const workTracking = workSheet ? buildWorkTrackingRecords(readWorksheetRows(workSheet), warnings) : [];
 
-  const employeeList = [...employeesByCode.values()];
+  const employeeList = [...lookupEmployeesByCode.values()].filter((emp) => !dbOnlyCodes.has(emp.code));
   const departmentsSet = new Set<string>();
   const positionsSet = new Set<string>();
   for (const e of employeeList) {
@@ -1800,6 +1858,25 @@ export async function parseAppSheetWorkbook(buffer: Buffer): Promise<ParsedSheet
 
   const employeesFormerStubs = employeeList.filter((e) => e.isFormerStub).length;
   const employeesActive = employeeList.length - employeesFormerStubs;
+  let usersProvisioned = 0;
+  let usersSkippedNoEmail = 0;
+  for (const emp of employeeList) {
+    if (emp.isFormerStub) continue;
+    if (isValidProvisionEmail(emp.email)) {
+      usersProvisioned += 1;
+    } else {
+      usersSkippedNoEmail += 1;
+      if (!emp.email) {
+        warnings.push(
+          `[users] รหัส ${emp.code} (${emp.name}): ไม่มีอีเมล — นำเข้าเฉพาะประวัติพนักงาน ยังไม่สร้างบัญชีผู้ใช้ (เติมอีเมลภายหลังแล้วกดสร้างบัญชีได้ในหน้าตั้งค่า)`,
+        );
+      } else {
+        warnings.push(
+          `[users] รหัส ${emp.code} (${emp.name}): อีเมล "${emp.email}" รูปแบบไม่ถูกต้อง — นำเข้าเฉพาะประวัติพนักงาน ยังไม่สร้างบัญชีผู้ใช้`,
+        );
+      }
+    }
+  }
   const assetItems = assets.reduce((sum, item) => sum + item.items.length, 0);
   const assetAgreements = assets.filter((item) => item.agreement !== null).length;
   const assetAgreementSigners = assets.reduce((sum, item) => sum + (item.agreement?.signers.length ?? 0), 0);
@@ -1822,6 +1899,8 @@ export async function parseAppSheetWorkbook(buffer: Buffer): Promise<ParsedSheet
       employeesActive,
       employeesFormerStubs,
       employeesTotal: employeeList.length,
+      usersProvisioned,
+      usersSkippedNoEmail,
       departments: departments.length,
       positions: positions.length,
       overtimeRequests: overtime.length,
